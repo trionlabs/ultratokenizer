@@ -42,6 +42,7 @@ next-env.d.ts
 # Private planning, agent context and exploratory work stay local.
 CONTEXT.md
 **/CONTEXT.md
+CONTEXT-MAP.md
 AGENTS.md
 **/AGENTS.md
 .agents/
@@ -77,7 +78,12 @@ AGENTS.override.md
 .clinerules
 .roorules
 .mcp.json
+.mcp/
 mcp.json
+skills-lock.json
+.skills-lock.json
+.codexignore
+.cursorindexingignore
 /.github/copilot-instructions.md
 /.github/instructions/
 /.github/prompts/
@@ -88,6 +94,8 @@ mcp.json
 /context/
 /contexts/
 /docs/BLUEPRINT.md
+/docs/agents/
+/docs/adr/
 /docs/plans/
 /docs/research/
 
