@@ -1,0 +1,2 @@
+# Preserve signed fixture bytes; text normalization invalidates the signature.
+*.pdf binary

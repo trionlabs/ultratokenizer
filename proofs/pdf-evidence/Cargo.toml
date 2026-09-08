@@ -1,0 +1,19 @@
+[package]
+name = "ultratokenizer-pdf-evidence"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+signature-validator = { git = "https://github.com/privacy-ethereum/zkpdf", rev = "dd6f3ac69ccb5be3d2ef0130bb8e33b2f52d1e18" }
+rsa = "=0.9.10"
+sha2.workspace = true
+serde.workspace = true
+hex.workspace = true
+
+[dev-dependencies]
+serde_json = "=1.0.149"
+
+[lints]
+workspace = true
