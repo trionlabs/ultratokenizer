@@ -1,0 +1,111 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/.vinext/
+/out/
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# local environment
+.env*
+
+# deployment and generated files
+.vercel
+next-env.d.ts
+/dist/
+/.wrangler/
+/outputs/
+/work/
+
+*.tsbuildinfo
+
+# Private planning, agent context and exploratory work stay local.
+CONTEXT.md
+**/CONTEXT.md
+AGENTS.md
+**/AGENTS.md
+.agents/
+.codex/
+.openai/
+.claude/
+.cursor/
+.gemini/
+.copilot/
+.windsurf/
+.aider*
+.continue/
+.cline/
+.roo/
+.kiro/
+.opencode/
+.ai/
+.llm/
+.junie/
+.trae/
+.claude.json
+.claude.local.json
+opencode.json
+opencode.jsonc
+CLAUDE.md
+CLAUDE.local.md
+GEMINI.md
+SKILL.md
+AGENTS.override.md
+.cursorrules
+.cursorignore
+.windsurfrules
+.clinerules
+.roorules
+.mcp.json
+mcp.json
+/.github/copilot-instructions.md
+/.github/instructions/
+/.github/prompts/
+/.github/agents/
+/.github/skills/
+/.github/chatmodes/
+/.scratch/
+/context/
+/contexts/
+/docs/BLUEPRINT.md
+/docs/plans/
+/docs/research/
+
+# Local credentials, editor state and private exports.
+.dev.vars*
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+.npmrc
+.netrc
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+*.swo
+*.bundle
+
+# Reproducible standalone preview output.
+/public/ultratokenizer-blueprint.html
