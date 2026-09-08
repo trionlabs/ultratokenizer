@@ -1,0 +1,135 @@
+:root {
+  font-family: Arial, Helvetica, sans-serif;
+  color: #eef3e9;
+  background: #101715;
+  font-synthesis: none;
+  --gold: #c5ec83;
+  --line: #405549;
+  --panel: #18271f;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+select {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+  color: inherit;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 2px solid #c5ec83;
+  outline-offset: 4px;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+svg {
+  flex-shrink: 0;
+}
+p {
+  line-height: 1.6;
+}
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 78px;
+  padding: 16px max(5%, calc((100% - 1350px) /2));
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.5rem;
+  font-weight: 500;
+  letter-spacing: -0.05em;
+}
+.brand svg,
+.brand-dot {
+  color: #c5ec83;
+}
+.product-label {
+  font-size: 0.875rem;
+  color: #aebfae;
+  margin-left: auto;
+}
+.motion-toggle[data-slot='button'] {
+  font-size: 0.875rem;
+  color: #cad9bd;
+  padding: 8px 12px;
+  min-height: 40px;
+  background: transparent;
+  border: 1px solid #4b6245;
+  border-radius: 5px;
+}
+.blueprint-app main {
+  max-width: 1350px;
+  margin: auto;
+  padding: 0 5%;
+}
+.blueprint-app footer {
+  max-width: 1350px;
+  margin: 18px auto 0;
+  padding: 24px 5%;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--line);
+  font-size: 0.875rem;
+  color: #aebea6;
+}
+.blueprint-app footer a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #dae9c5;
+}
+@media (max-width: 700px) {
+  .product-label {
+    display: none;
+  }
+  .topbar {
+    gap: 14px;
+    padding: 16px 5%;
+  }
+  .brand {
+    font-size: 1.2rem;
+  }
+  .motion-toggle[data-slot='button'] {
+    font-size: 0.8rem;
+    min-height: 44px;
+  }
+  .blueprint-app main {
+    padding: 0 4%;
+  }
+  .blueprint-app footer {
+    flex-direction: column;
+  }
+}
+@media (max-width: 360px) {
+  .topbar {
+    flex-wrap: wrap;
+  }
+}

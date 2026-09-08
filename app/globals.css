@@ -1,0 +1,18 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+@import './base.css';
+@import './blueprint.css';
+@theme inline {
+  --font-sans: Arial, Helvetica, sans-serif;
+  --color-background: #101715;
+  --color-foreground: #eeeae0;
+  --color-muted: #1e2924;
+  --color-muted-foreground: #a8b4ac;
+  --color-primary: #d9b76e;
+  --color-primary-foreground: #162119;
+  --color-border: #344039;
+  --color-ring: #d9b76e;
+  --radius-lg: 8px;
+  --radius-md: 6px;
+}
