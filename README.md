@@ -78,7 +78,7 @@ npm run check:evidence
 npm run check:parity
 ```
 
-`check` validates repository hygiene, root formatting/lint/types, domain, audit, Svelte and worker modules. Rust and Solidity have explicit checks and separate CI jobs. Contracts pin Solidity 0.8.30 and CI pins Foundry 1.8.1. Native Rust uses 1.96.0; SP1 has a separate locked toolchain described under `proofs/`. Browser worker integration is documented under `apps/web/`. CI configuration does not establish that a remote CI run occurred.
+`check` validates repository hygiene, root formatting/lint/types, domain, audit, Svelte and worker modules. Linting first asks the worker module to generate its binding types, so a fresh checkout does not depend on ignored development output. Rust and Solidity have explicit checks and separate CI jobs. Contracts pin Solidity 0.8.30 and CI pins Foundry 1.8.1. Native Rust uses 1.96.0; SP1 has a separate locked toolchain described under `proofs/`. Browser worker integration is documented under `apps/web/`. CI configuration does not establish that a remote CI run occurred.
 
 `build:workers` performs a local deployment dry run. `build:web` produces static files. Neither deploys a service. The root `build` generates the architecture explorer and standalone HTML map. Production proving, real HTS acceptance, infrastructure recovery and independent security review have separate release gates; they are not replaced by local test doubles.
 

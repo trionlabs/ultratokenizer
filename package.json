@@ -11,7 +11,7 @@
     "build:web": "npm --prefix apps/web run build",
     "build": "npm run build:html && vinext build",
     "start": "wrangler dev --config dist/server/wrangler.json",
-    "lint": "oxlint",
+    "lint": "npm --prefix workers/issuance run types && oxlint",
     "format": "oxfmt",
     "build:html": "node scripts/build-html.mjs",
     "typecheck": "tsc --noEmit",
