@@ -25,6 +25,27 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
       - run: npm ci
+      - run: npm --prefix apps/web ci
       - run: npm run check
       - run: npm run build
+      - run: npm run build:web
+
+  native-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: proofs
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install the validated native Rust toolchain
+        run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt --component clippy
+      - run: cargo +1.96.0 fmt --all -- --check
+      - run: cargo +1.96.0 test --locked -p ultratokenizer-pdf-evidence
+      - run: cargo +1.96.0 clippy --locked -p ultratokenizer-pdf-evidence --all-targets -- -D warnings

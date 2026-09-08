@@ -7,6 +7,8 @@
   },
   "scripts": {
     "dev": "vinext dev",
+    "dev:web": "npm --prefix apps/web run dev",
+    "build:web": "npm --prefix apps/web run build",
     "build": "npm run build:html && vinext build",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",
@@ -15,7 +17,10 @@
     "typecheck": "tsc --noEmit",
     "format:check": "oxfmt --check",
     "check:hygiene": "node scripts/check-hygiene.mjs",
-    "check": "npm run check:hygiene && npm run format:check && npm run lint && npm run typecheck"
+    "check:blueprint": "npm run check:hygiene && npm run format:check && npm run lint && npm run typecheck",
+    "check:domain": "npm --prefix packages/domain test",
+    "check:web": "npm --prefix apps/web run format:check && npm --prefix apps/web run check && npm --prefix apps/web test",
+    "check": "npm run check:blueprint && npm run check:domain && npm run check:web"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

@@ -23,6 +23,7 @@
     "typeCheck": true
   },
   "ignorePatterns": [
+    "apps/web/**",
     ".next/**",
     ".vinext/**",
     "out/**",
