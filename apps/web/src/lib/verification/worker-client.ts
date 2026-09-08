@@ -1,0 +1,116 @@
+import {
+  checkPayloadSize,
+  VerificationError,
+  VERIFICATION_TIMEOUT_MS,
+  type ReceiptVerifier,
+  type ReceiptVerification,
+  type VerificationRequest,
+  type VerificationReply,
+  type VerificationErrorCode,
+} from './contracts.ts';
+
+/** Internal seam supports the real browser Worker and deterministic lifecycle tests. */
+export interface WorkerPort {
+  postMessage(message: VerificationRequest): void;
+  terminate(): void;
+  onmessage: ((event: MessageEvent<unknown>) => void) | null;
+  onerror: ((event: ErrorEvent) => void) | null;
+  onmessageerror: ((event: MessageEvent<unknown>) => void) | null;
+}
+
+export function createWorkerVerifier(
+  createWorker: () => WorkerPort,
+  timeoutMs = VERIFICATION_TIMEOUT_MS,
+): ReceiptVerifier {
+  let nextId = 0;
+  let disposed = false;
+  let cancel: (() => void) | undefined;
+  return {
+    verify(text, options = {}) {
+      cancel?.();
+      if (disposed) return Promise.reject(new VerificationError('unavailable'));
+      if (options.signal?.aborted)
+        return Promise.reject(new VerificationError('cancelled'));
+      try {
+        checkPayloadSize(text);
+      } catch (error) {
+        return Promise.reject(error);
+      }
+      return new Promise<ReceiptVerification>((resolve, reject) => {
+        let worker: WorkerPort;
+        try {
+          worker = createWorker();
+        } catch {
+          reject(new VerificationError('unavailable'));
+          return;
+        }
+        const id = ++nextId;
+        let settled = false;
+        const abort = () => finish('cancelled');
+        const timer = setTimeout(() => finish('timeout'), timeoutMs);
+        function finish(
+          code?: VerificationErrorCode,
+          result?: ReceiptVerification,
+        ) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          options.signal?.removeEventListener('abort', abort);
+          worker.onmessage = worker.onerror = worker.onmessageerror = null;
+          worker.terminate();
+          if (cancel === abort) cancel = undefined;
+          if (code) reject(new VerificationError(code));
+          else resolve(result!);
+        }
+        cancel = abort;
+        options.signal?.addEventListener('abort', abort, { once: true });
+        worker.onmessage = (event) => {
+          const reply = event.data as Partial<VerificationReply> | null;
+          if (!reply || typeof reply !== 'object') {
+            finish('failed');
+            return;
+          }
+          if (reply.id !== id) return; // Correlate even if a superseded worker was already posting.
+          if (reply.ok === false) {
+            finish(
+              ['invalid_receipt', 'digest_mismatch', 'too_large'].includes(
+                reply.code ?? '',
+              )
+                ? reply.code
+                : 'failed',
+            );
+          } else if (
+            reply.ok === true &&
+            reply.result?.execution === 'dedicated-worker' &&
+            reply.result.requestIntegrity === 'consistent' &&
+            reply.result.receipt?.format ===
+              'ultratokenizer.sample-receipt.v1' &&
+            reply.result.receipt.mode === 'simulation' &&
+            [
+              reply.result.evidence,
+              reply.result.issuer,
+              reply.result.proof,
+              reply.result.chain,
+            ].every((level) => level === 'not-verified')
+          ) {
+            finish(undefined, reply.result);
+          } else finish('failed');
+        };
+        worker.onerror = (event) => {
+          event.preventDefault();
+          finish('failed');
+        };
+        worker.onmessageerror = () => finish('failed');
+        try {
+          worker.postMessage({ type: 'verify-sample-v1', id, text });
+        } catch {
+          finish('unavailable');
+        }
+      });
+    },
+    dispose() {
+      disposed = true;
+      cancel?.();
+    },
+  };
+}

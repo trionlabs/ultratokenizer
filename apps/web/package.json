@@ -12,6 +12,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "node --experimental-strip-types --test test/*.test.mjs",
+    "test:browser": "node test/worker-browser.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
@@ -19,6 +20,7 @@
     "viem": "2.56.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@sveltejs/adapter-static": "3.0.10",
     "@sveltejs/kit": "2.70.3",
     "@sveltejs/vite-plugin-svelte": "7.3.0",

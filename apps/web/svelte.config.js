@@ -3,5 +3,26 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
 export default {
   preprocess: vitePreprocess(),
-  kit: { adapter: adapter() },
+  kit: {
+    adapter: adapter(),
+    csp: {
+      // Prerendered HTML receives hashes for SvelteKit's hydration script.
+      mode: 'hash',
+      directives: {
+        'default-src': ['self'],
+        'script-src': ['self'],
+        'script-src-attr': ['none'],
+        // Orbit uses reactive CSS custom properties and Svelte-managed styles.
+        'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
+        'font-src': ['self', 'https://fonts.gstatic.com'],
+        'img-src': ['self', 'data:'],
+        'connect-src': ['self'],
+        'worker-src': ['self'],
+        'object-src': ['none'],
+        'frame-src': ['none'],
+        'base-uri': ['none'],
+        'form-action': ['none'],
+      },
+    },
+  },
 };

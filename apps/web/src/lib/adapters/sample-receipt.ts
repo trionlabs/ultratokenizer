@@ -6,7 +6,8 @@ import {
 import type { Journey } from '../domain/journey';
 import { sampleRequest } from './sample-request';
 
-export const MAX_RECEIPT_BYTES = 64 * 1024;
+import { MAX_RECEIPT_BYTES } from '../verification/contracts';
+export { MAX_RECEIPT_BYTES };
 const format = 'ultratokenizer.sample-receipt.v1';
 const unavailable = {
   evidence: 'not-connected',
