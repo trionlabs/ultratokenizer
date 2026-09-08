@@ -1,0 +1,19 @@
+{
+  "name": "@ultratokenizer/audit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "ultratokenizer-audit": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json && node scripts/build.mjs",
+    "test": "npm run build && node --test dist/test/*.test.js"
+  }
+}

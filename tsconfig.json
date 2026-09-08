@@ -29,7 +29,9 @@
   "exclude": [
     "node_modules",
     "apps/web",
+    "workers",
     "packages/domain",
+    "packages/audit",
     "dist",
     "work",
     ".scratch",
