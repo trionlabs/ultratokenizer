@@ -24,6 +24,9 @@
   },
   "ignorePatterns": [
     "apps/web/**",
+    "workers/issuance/node_modules/**",
+    "workers/issuance/build/**",
+    "workers/issuance/worker-configuration.d.ts",
     ".next/**",
     ".vinext/**",
     "out/**",

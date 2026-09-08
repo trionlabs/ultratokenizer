@@ -1,0 +1,28 @@
+{
+  "name": "@ultratokenizer/issuance-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "wrangler dev --config wrangler.jsonc --local",
+    "types": "wrangler types --config wrangler.jsonc --env-interface IssuanceEnv --include-runtime false --strict-vars false",
+    "check": "npm run types && tsc --noEmit",
+    "build": "wrangler deploy --config wrangler.jsonc --dry-run --outdir build",
+    "test": "node --experimental-strip-types --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "jose": "6.2.12",
+    "viem": "2.56.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260908.1",
+    "@types/node": "22.19.19",
+    "esbuild": "0.28.2",
+    "miniflare": "5.20260908.0-alpha",
+    "typescript": "5.9.3",
+    "wrangler": "4.130.0"
+  }
+}

@@ -5,6 +5,10 @@
   "sortPackageJson": false,
   "ignorePatterns": [
     "apps/web/**",
+    "workers/issuance/node_modules/**",
+    "workers/issuance/build/**",
+    "workers/issuance/worker-configuration.d.ts",
+    "workers/issuance/package-lock.json",
     "package-lock.json",
     "pnpm-lock.yaml",
     "yarn.lock",
