@@ -62,7 +62,7 @@ export default function ModuleBlueprint({
       : scenario === 'missing-audit'
         ? 'Missing evidence cannot pass an audit.'
         : scenario === 'today'
-          ? 'The target architecture is defined. Real integrations are pending.'
+          ? 'Modules are locally tested. Deployment acceptance is pending.'
           : active?.title;
   const description =
     scenario === 'revoked'
@@ -76,7 +76,7 @@ export default function ModuleBlueprint({
       : scenario === 'missing-audit'
         ? 'Audit: incomplete evidence'
         : scenario === 'today'
-          ? 'Integration pending'
+          ? 'Local implementation · acceptance pending'
           : active?.verdict === 'stop'
             ? 'Issuance rejected'
             : active?.verdict === 'blind'
@@ -134,15 +134,15 @@ export default function ModuleBlueprint({
     <section className="ub" aria-label="Ultratokenizer module blueprint">
       <div className="ub-heading">
         <div>
-          <span className="ub-kicker">ARCHITECTURE BLUEPRINT</span>
-          <h2>8 modules. One issuance decision.</h2>
+          <span className="ub-kicker">IMPLEMENTATION MAP</span>
+          <h2>8 boundaries. Distinct execution runtimes.</h2>
           <p>
             Select a module to inspect its inputs, state ownership and
             acceptance criteria.
           </p>
         </div>
         <span className="ub-status">
-          <span /> Proposed design · not integrated
+          <span /> Local validation · integrations pending
         </span>
       </div>
       <div className="ub-journey">
@@ -207,7 +207,7 @@ export default function ModuleBlueprint({
         <div className="ub-map" aria-label="Module map with trust boundaries">
           <div className="ub-zone-title">
             <span>01 / USER CONTROL</span>
-            <span>Raw documents stay off-chain</span>
+            <span>PDFs stay in the local proving process</span>
           </div>
           {node('client', true)}
           <div className="ub-connector">
@@ -257,12 +257,14 @@ export default function ModuleBlueprint({
           </div>
           <div className="ub-connector">
             <ArrowDown size={18} />
-            <span>Consume capacity + ATS mint · one chain transaction</span>
+            <span>Consume claim + reservation · atomic HTS mint adapter</span>
           </div>
           {node('token', true)}
           <div className="ub-connector">
             <ArrowDown size={18} />
-            <span>Proof + permit + versions + all supply changes</span>
+            <span>
+              Public receipt · signatures · separately verified chain evidence
+            </span>
           </div>
           <div className="ub-zone-title">
             <span>03 / INDEPENDENT VERIFICATION</span>
@@ -277,7 +279,7 @@ export default function ModuleBlueprint({
         >
           <div className="ub-inspector-top">
             <span>MODULE {current.number} / 08</span>
-            <span>Proposed responsibility</span>
+            <span>Implementation & trust boundary</span>
           </div>
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
@@ -314,11 +316,11 @@ export default function ModuleBlueprint({
               )}
               {selected === 'evidence' && (
                 <div className="ub-adapter-note">
-                  <strong>zkPDF first · zkEmail conditional</strong>
+                  <strong>Restricted signed PDF claim profile</strong>
                   <p>
-                    Add an email adapter only for a real institutional DKIM
-                    approval flow. A DKIM key registry or blueprint catalog does
-                    not establish issuer authority.
+                    The implemented claim profile uses a fixed synthetic gold
+                    capsule. It does not support arbitrary bank statements. The
+                    separate signature-only guest cannot authorize issuance.
                   </p>
                 </div>
               )}
@@ -332,7 +334,7 @@ export default function ModuleBlueprint({
               <div className="ub-current">
                 <strong>Implemented today</strong>
                 <p>{current.current}</p>
-                <span>Proposed implementation path</span>
+                <span>Source references</span>
                 <code>{current.plannedPath}</code>
               </div>
             </motion.div>
@@ -381,7 +383,7 @@ export default function ModuleBlueprint({
           <strong>{title}</strong>
           <p>{description}</p>
           <small>
-            Design scenario · no real verification or chain transaction
+            Scenario explanation · no live verification or transaction
           </small>
         </output>
       </section>
@@ -406,11 +408,12 @@ export default function ModuleBlueprint({
       </section>
       <section className="ub-plan">
         <div className="ub-section-title">
-          <span className="ub-kicker">BUILD ORDER</span>
-          <h3>8 modules do not need 8 services.</h3>
+          <span className="ub-kicker">ACCEPTANCE GATES</span>
+          <h3>Separate runtimes, explicit responsibilities.</h3>
           <p>
-            Start with one interface, a separate prover process, one institution
-            bridge, contracts and an independent audit tool.
+            The browser receipt worker, local Rust prover, authenticated API
+            Worker, per-request SQLite object, contracts and standalone auditor
+            have different responsibilities and trust boundaries.
           </p>
         </div>
         <div className="ub-phases">
@@ -429,24 +432,25 @@ export default function ModuleBlueprint({
       </section>
       <div className="ub-footnote">
         <p>
-          Self-sovereign target: user control of documents, keys and disclosure.
-          Institutional issuance and reserve authority remain explicit. Minted
-          amount, wallet and transaction time are public in this MVP.
+          Private PDFs and full signed source capacity stay local. Issued
+          amount, recipient, request identifiers and on-chain reservation
+          capacity are public. One claim is single-use within a gate;
+          institutional snapshots do not establish exclusive physical reserves.
         </p>
         <div>
           <a
-            href="https://docs.tokenization-studio.hedera.com/ats/user-guides/roles-and-permissions/"
+            href="https://docs.hedera.com/hedera/core-concepts/smart-contracts/system-smart-contracts"
             target="_blank"
             rel="noreferrer"
           >
-            ATS permissions ↗
+            Hedera system contracts ↗
           </a>
           <a
-            href="https://docs.zk.email/architecture/security-considerations"
+            href="https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/"
             target="_blank"
             rel="noreferrer"
           >
-            ZK Email trust boundary ↗
+            SQLite Durable Objects ↗
           </a>
           <a
             href="https://github.com/privacy-ethereum/zkpdf"

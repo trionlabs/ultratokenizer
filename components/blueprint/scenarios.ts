@@ -7,7 +7,7 @@ export type CaseId =
   | 'dishonest'
   | 'bypass'
   | 'delivery';
-// Illustrative outcomes, not results from a proof engine or a deployed contract.
+// Interactive explanations of implementation and trust boundaries, not live results.
 export const cases: {
   id: CaseId;
   label: string;
@@ -18,65 +18,65 @@ export const cases: {
   {
     id: 'today',
     label: 'Current implementation',
-    title: 'Real integrations are pending.',
+    title: 'Modules are locally tested; deployment acceptance is pending.',
     detail:
-      'This is an interactive architecture blueprint. The prover, institution bridge, registries, ATS integration and independent auditor are proposed modules.',
+      'The Svelte preview and receipt Web Worker, canonical domain/permit, verified local core proof, Solidity HTS gate, authenticated API/SQLite alarms and portable auditor exist. They are not a connected deployed product. The ZK wrapper, live institution and native Hedera acceptance remain pending.',
     verdict: 'open',
   },
   {
     id: 'happy',
-    label: 'All conditions satisfied',
-    title: 'The proposed gate allows issuance.',
+    label: 'All gate conditions satisfied',
+    title: 'The gate has one atomic issuance path.',
     detail:
-      'Assume the real proof, bound permit, live authority, eligibility and sufficient capacity all pass. This example does not establish physical reserve truth.',
+      'Local tests exercise matching signatures, proof outputs, live authority and capacity with test doubles. In a configured deployment, the actual pinned proof verifier and HTS must also succeed. One claim is consumed even when the request uses less than its private capacity.',
     verdict: 'pass',
   },
   {
     id: 'no-reserve',
-    label: 'Valid document, no reservation',
-    title: 'A valid document cannot authorize issuance alone.',
+    label: 'Valid document, no issuer reservation',
+    title: 'Document authenticity cannot authorize minting.',
     detail:
-      'The institution has not allocated usable capacity. Approval remains pending; the issuance gate cannot mint.',
+      'The gate also requires a live recipient/token-bound reservation and a distinct issuer permit. A login token, holder signature, successful browser check or observed transaction cannot replace either requirement.',
     verdict: 'stop',
   },
   {
     id: 'mismatch',
-    label: 'Valid evidence, different request',
-    title: 'Two valid records are not enough.',
+    label: 'Proof or permit binds a different request',
+    title: 'Changed request fields invalidate the combined authorization.',
     detail:
-      'The proof and permit refer to different requests. The gate must compare the bound amount, recipient, token, chain and claim commitment.',
+      'The Rust guest, canonical TypeScript and Solidity bind the same EIP-712 request, including chain/gate, amount, recipient, token, claim and versions. Matching standalone signatures are insufficient when their request digests differ.',
     verdict: 'stop',
   },
   {
     id: 'duplicate',
-    label: 'Reuse an exhausted reservation',
-    title: 'A new document cannot renew capacity.',
+    label: 'Reuse a claim or exceed a reservation',
+    title: 'New nonces cannot renew consumed claim authority.',
     detail:
-      'The example reservation has already been consumed. A new PDF, permit nonce or wallet must not create additional capacity.',
+      'The same authenticated source/issuer/claim ID is single-use within the gate, even after a smaller issuance or changed wallet, document export or policy. Separately, a reservation cannot exceed its cumulative capacity. This does not establish uniqueness across deployments or new institutional claim IDs.',
     verdict: 'stop',
   },
   {
     id: 'dishonest',
-    label: 'Institution lies about reserves',
-    title: 'Checks may pass while physical gold is missing.',
+    label: 'Institution signs a false reserve claim',
+    title: 'Cryptographic checks cannot inspect a vault.',
     detail:
-      'An authorized institution can sign a false reserve statement. Cryptographic verification cannot inspect a vault; reserve accountability remains outside the proof.',
+      'An accepted signer can attest false capacity or assign multiple claim IDs to the same asset. The private-capacity predicate and single-use gate do not turn snapshots into exclusive reserves. Custody records and independent institutional accountability remain necessary.',
     verdict: 'blind',
   },
   {
     id: 'bypass',
-    label: 'Admin bypasses the proof gate',
-    title: 'An alternative issuer can defeat the gate.',
+    label: 'Governance approves a harmful configuration',
+    title: 'The governor remains a trust boundary.',
     detail:
-      'If a role grant or upgrade permits another mint path, a correct proof gate is insufficient. Constrain those powers and reconcile every supply change in the auditor.',
+      'The implemented adapter creates its own token with a sole supply key and exposes only gate-authorized minting. That closes an alternate adapter mint route, but governance can still admit a dishonest issuer, source or verifier. Code hashes do not establish honest policy or safe proxy state.',
     verdict: 'blind',
   },
   {
     id: 'delivery',
-    label: 'Tokens burned, delivery missing',
-    title: 'Burning does not complete delivery.',
+    label: 'Successful mint mistaken for redemption rights',
+    title: 'Token issuance does not establish gold delivery.',
     detail:
-      'After a burn, missing delivery remains an open institutional obligation. Never mark it delivered or automatically reopen issuance capacity.',
+      'The implemented HTS adapter handles creation, mint and transfer. ATS controls, redemption/burn operations, legal instrument fit and physical delivery are not implemented or established. Neither a confirmed tracking status nor a consistent audit receipt fills those gaps.',
     verdict: 'blind',
   },
 ];
