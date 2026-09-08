@@ -1,5 +1,12 @@
 [workspace]
-members = ["pdf-evidence", "pdf-guest", "pdf-runner"]
+members = [
+  "pdf-evidence",
+  "pdf-guest",
+  "pdf-runner",
+  "claim-evidence",
+  "claim-guest",
+  "claim-runner",
+]
 default-members = ["pdf-evidence"]
 resolver = "2"
 

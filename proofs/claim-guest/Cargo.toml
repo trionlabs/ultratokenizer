@@ -1,0 +1,19 @@
+[package]
+name = "ultratokenizer-claim-guest"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "ultratokenizer-claim-guest"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+sp1-zkvm = "=6.2.4"
+ultratokenizer-claim-evidence = { path = "../claim-evidence" }
+
+[lints]
+workspace = true

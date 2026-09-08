@@ -15,18 +15,10 @@ def openssl(*args: str) -> bytes:
     return result.stdout
 
 
-def main() -> None:
-    destination = Path(__file__).resolve().parents[1] / "pdf-evidence" / "fixtures"
-    destination.mkdir(parents=True, exist_ok=True)
+def create_fixture(content: bytes, capsule: bytes = b"") -> tuple[bytes, dict]:
+    """Sign a synthetic PDF. The optional fixed capsule is covered by the signature."""
     placeholder = b"[0000000000 0000000000 0000000000 0000000000]"
     signature_space = 8192
-    content = (
-        b"BT /F1 12 Tf 40 760 Td (Ultratokenizer synthetic statement) Tj "
-        b"0 -20 Td (Asset: GOLD) Tj 0 -20 Td (Unit: MILLIGRAM) Tj "
-        b"0 -20 Td (Balance: 10000) Tj "
-        b"0 -20 Td (Holder: Synthetic Holder) Tj "
-        b"0 -20 Td (StatementDate: 2026-09-08) Tj ET"
-    )
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R /AcroForm 6 0 R >>",
         b"<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
@@ -40,7 +32,7 @@ def main() -> None:
         b"<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /adbe.pkcs7.detached "
         b"/ByteRange " + placeholder + b" /Contents <" + b"0" * (signature_space * 2) + b"> >>",
     ]
-    pdf = bytearray(b"%PDF-1.7\n")
+    pdf = bytearray(b"%PDF-1.7\n" + capsule)
     offsets = [0]
     for index, body in enumerate(objects, 1):
         offsets.append(len(pdf))
@@ -86,6 +78,20 @@ def main() -> None:
         "fileSha256": hashlib.sha256(pdf).hexdigest(),
         "publicValues": (1).to_bytes(32, "big").hex() + fingerprint + signed_digest,
     }
+    return bytes(pdf), metadata
+
+
+def main() -> None:
+    destination = Path(__file__).resolve().parents[1] / "pdf-evidence" / "fixtures"
+    destination.mkdir(parents=True, exist_ok=True)
+    content = (
+        b"BT /F1 12 Tf 40 760 Td (Ultratokenizer synthetic statement) Tj "
+        b"0 -20 Td (Asset: GOLD) Tj 0 -20 Td (Unit: MILLIGRAM) Tj "
+        b"0 -20 Td (Balance: 10000) Tj "
+        b"0 -20 Td (Holder: Synthetic Holder) Tj "
+        b"0 -20 Td (StatementDate: 2026-09-08) Tj ET"
+    )
+    pdf, metadata = create_fixture(content)
     (destination / "statement.synthetic.pdf").write_bytes(pdf)
     (destination / "statement.synthetic.json").write_text(json.dumps(metadata, indent=2) + "\n")
     print("Created a synthetic signed PDF and public verification metadata. No private key retained.")

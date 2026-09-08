@@ -2,3 +2,6 @@
 /elf/
 /.env*
 /fixtures/private/
+__pycache__/
+*.py[cod]
+*.core.proof

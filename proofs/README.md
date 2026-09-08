@@ -2,17 +2,20 @@
 
 This workspace implements the first evidence boundary for Ultratokenizer: authenticate a PDF's signed bytes against an explicitly supplied signer fingerprint. It contains a native Rust library, an SP1 guest and a local execution runner.
 
-It does not yet extract a gold balance, bind an issuance request, validate holder identity, issue tokens or generate a Groth16 proof. Execution success is labeled `zkProof: false`.
+The signature-only modules do not interpret balances or bind an issuance request. The separate [synthetic gold claim profile](claim-evidence/README.md) authenticates a fixed versioned capsule, derives claim identity and binds the full EIP-712 request. It does not support real bank statements or establish asset backing. Execution success is labeled `zkProof: false`; local proving is an explicit separate command.
 
 ## Modules
 
-| Module         | Responsibility                                                                                            |
-| -------------- | --------------------------------------------------------------------------------------------------------- |
-| `pdf-evidence` | Strict signature coverage, RSA-SHA256 verification, approved-signer matching and minimal public output.   |
-| `pdf-guest`    | Execute the same evidence check inside SP1 and commit its output only on success.                         |
-| `pdf-runner`   | Run the compiled guest locally, compare its output with native verification and exercise rejection cases. |
+| Module           | Responsibility                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| `pdf-evidence`   | Strict signature coverage, RSA-SHA256 verification, approved-signer matching and minimal public output.      |
+| `pdf-guest`      | Execute the same evidence check inside SP1 and commit its output only on success.                            |
+| `pdf-runner`     | Run the compiled guest locally, compare its output with native verification and exercise rejection cases.    |
+| `claim-evidence` | Authenticate the synthetic capsule, derive claim identifiers and recompute the full issuance request digest. |
+| `claim-guest`    | Execute the bounded request-bound claim program, with a distinct 224-byte output.                            |
+| `claim-runner`   | Execute, generate local CPU proofs and independently verify them with pinned program identity.               |
 
-The TypeScript request module remains in `packages/domain`. The evidence output is not yet connected to its EIP-712 request digest.
+The TypeScript request module remains in `packages/domain`. The claim profile independently recomputes its EIP-712 digest; the signature-only output does not bind requests.
 
 ## Supported profile
 
