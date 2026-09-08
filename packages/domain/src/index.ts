@@ -12,3 +12,10 @@ export {
   getIssuanceRequestDigest,
   getIssuanceRequestTypedData,
 } from './request-digest.js';
+export {
+  getIssuerPermitDigest,
+  getIssuerPermitTypedData,
+  parseIssuerPermit,
+} from './issuer-permit.js';
+export type { IssuerPermit } from './issuer-permit.js';
+export { ISSUED_EVENT_ABI } from './issued-event.js';

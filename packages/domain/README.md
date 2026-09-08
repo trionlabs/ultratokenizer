@@ -1,10 +1,10 @@
 # Domain module
 
-Validates issuance requests and produces deterministic EIP-712 signing data. This module has no network calls, wallet storage, document processing, proof generation or mint authority.
+Validates issuance requests and distinct issuer permits, produces deterministic EIP-712 signing data, and owns the shared issuance event ABI. This module has no network calls, wallet storage, document processing, proof generation or mint authority.
 
 ## Run
 
-Install dependencies from the repository root with `npm ci`, then:
+Install dependencies from the repository root with `npm ci --no-audit`, then:
 
 ```sh
 npm --prefix packages/domain test
@@ -25,13 +25,17 @@ The output distinguishes request validation from evidence verification, issuer a
 
 Import the public API from `src/index.ts` in TypeScript or the generated `dist/domain/src/index.js` in Node.
 
-| Function                                  | Result                                                                                     |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `parseIssuanceRequest(input)`             | Validated, normalized and frozen request; throws `RequestValidationError` on invalid input |
-| `serializeIssuanceRequest(input)`         | Stable JSON for storage and export; not a signing format                                   |
-| `getIssuanceRequestTypedData(input)`      | EIP-712 domain, type definitions and message for a signer                                  |
-| `getIssuanceRequestDigest(input)`         | 32-byte EIP-712 digest of the complete request                                             |
-| `assertIssuanceRequestActive(input, now)` | Validated request only when `now < validUntil`; `now` is a bigint in Unix seconds          |
+| Function                                    | Result                                                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `parseIssuanceRequest(input)`               | Validated, normalized and frozen request; throws `RequestValidationError` on invalid input |
+| `serializeIssuanceRequest(input)`           | Stable JSON for storage and export; not a signing format                                   |
+| `getIssuanceRequestTypedData(input)`        | EIP-712 domain, type definitions and message for a signer                                  |
+| `getIssuanceRequestDigest(input)`           | 32-byte EIP-712 digest of the complete request                                             |
+| `assertIssuanceRequestActive(input, now)`   | Validated request only when `now < validUntil`; `now` is a bigint in Unix seconds          |
+| `parseIssuerPermit(input)`                  | Validated, normalized and frozen issuer permit                                             |
+| `getIssuerPermitTypedData(request, permit)` | Distinct issuer signing data bound to the complete request and its issuer                  |
+| `getIssuerPermitDigest(request, permit)`    | EIP-712 digest of the bound issuer permit                                                  |
+| `ISSUED_EVENT_ABI`                          | Frozen gate event definition shared by the audit package and chain observer                |
 
 Parsing and hashing intentionally allow expired requests so historical audit remains possible. Call the expiry check explicitly for current execution. Contracts must use the chain's timestamp and live state at issuance.
 
@@ -70,10 +74,12 @@ This is a pinned protocol regression fixture, not independent evidence of a depl
 
 ## Trust boundary
 
+An issuer permit contains `requestDigest`, `issuerId`, positive uint64 `keyVersion`, uint256 `nonce`, and positive uint64 `validUntil`, all represented as strings. Its primary type is `IssuerPermit`; its chain and gate domain come from the request. The digest helpers reject a different request digest or issuer, and a permit that expires after its request. They allow historical hashing and do not establish current key authorization. Holder signatures and issuer signatures serve different roles and cannot substitute for each other.
+
 The digest binds the request contents. It does not establish that a source document is authentic, a signer is an authorized issuer, a reservation exists, a claim identifier was correctly derived, or mint capacity is available. Signatures still require signer and authority verification. Nonces still require persistent consumption checks.
 
-The module accepts a supplied `claimUsageId`; source-derived uniqueness must be established by the evidence/prover integration. The holder must approve all bound fields, and both proof and permit must reference the same request. Later contracts must check the active chain, gate, registry state, authority, expiry and atomic consume-and-mint behavior.
+The module accepts a supplied `claimUsageId`; source-derived uniqueness must be established by the evidence/prover integration. The holder must approve all bound fields, and both proof and permit must reference the same request. The issuance gate separately checks the active chain, gate, registry state, authority, expiry and atomic consume-and-mint behavior. See [the contract module](../../contracts/README.md) for its implementation and deployment limits.
 
-Tests cover malformed inputs, integer and checksum boundaries, canonical ordering, digest binding, actual EOA signature tampering, expiry and historical hashing. They do not test smart-contract wallets, proof verification, issuer registries or blockchain execution.
+Tests cover malformed inputs, integer and checksum boundaries, canonical ordering, request and permit binding, actual EOA signature tampering, expiry and historical hashing. Other modules test Solidity parity, shared event ABI and request hashing inside Rust. Domain tests alone do not establish smart-contract wallet, proof, registry or blockchain acceptance.
 
 The implementation uses [EIP-712](https://eips.ethereum.org/EIPS/eip-712) through [viem's typed-data hashing](https://viem.sh/docs/utilities/hashTypedData). EIP-712 itself does not provide replay protection. This module's source, tests and documentation were created with Codex assistance and have not received an independent security audit.
