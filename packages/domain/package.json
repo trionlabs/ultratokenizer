@@ -1,0 +1,11 @@
+{
+  "name": "@ultratokenizer/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "test": "npm run build && node --test ../../dist/domain/test/*.test.js",
+    "demo": "npm run build && node ../../dist/domain/examples/inspect-request.js"
+  }
+}
