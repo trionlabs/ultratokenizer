@@ -16,8 +16,8 @@ import {
 } from './helpers.mjs';
 
 void test(
-  'real durable runtime preserves ownership, idempotency and pending transaction recovery across restart',
-  { timeout: 45_000 },
+  'real durable runtime preserves ownership, idempotency and pending or rejected transaction recovery across restart',
+  { timeout: 60_000 },
   async () => {
     const dir = await mkdtemp(join(tmpdir(), 'ultratokenizer-durable-'));
     const domain = await bundleModule('../../../packages/domain/src/index.ts');
@@ -432,6 +432,118 @@ void test(
           .status,
         409,
       );
+
+      // A complete but incorrect RPC observation can be repaired later. Rechecking
+      // that same hash must be explicit, rate limited and durable across restart.
+      const third = domain.module.parseIssuanceRequest({
+        ...request,
+        requestId: `0x${'92'.repeat(32)}`,
+        nonce: '2',
+      });
+      const thirdId = domain.module.getIssuanceRequestDigest(third);
+      const thirdSignature = await account.signTypedData(
+        domain.module.getIssuanceRequestTypedData(third),
+      );
+      const rejectedHash = `0x${'77'.repeat(32)}`;
+      rpc = rpcFixture(third, thirdId, observer.module.issuanceEvent);
+      rpc.values.eth_getTransactionReceipt.transactionHash = rejectedHash;
+      rpc.values.eth_getTransactionByHash.hash = rejectedHash;
+      rpc.values.eth_getTransactionReceipt.logs[0].transactionHash =
+        rejectedHash;
+      const correctedLogs = rpc.values.eth_getTransactionReceipt.logs;
+      rpc.values.eth_getTransactionReceipt.logs = [];
+      assert.equal(
+        (
+          await call('/v1/requests', {
+            method: 'POST',
+            body: { request: third, holderSignature: thirdSignature },
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (
+          await call(`/v1/requests/${thirdId}/transactions`, {
+            method: 'POST',
+            body: { transactionHash: rejectedHash },
+          })
+        ).status,
+        202,
+      );
+      let thirdState;
+      const rejectedBy = Date.now() + 4_000;
+      do {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        thirdState = await (await call(`/v1/requests/${thirdId}`)).json();
+      } while (thirdState.status !== 'rejected' && Date.now() < rejectedBy);
+      assert.equal(thirdState.status, 'rejected');
+      assert.equal(thirdState.observation.reason, 'issuance_mismatch');
+      assert.equal(thirdState.transactionHash, rejectedHash);
+      rpc.values.eth_getTransactionReceipt.logs = correctedLogs;
+      const readsBeforeReconcile = observedMethods.length;
+      const sameHash = await call(`/v1/requests/${thirdId}/transactions`, {
+        method: 'POST',
+        body: { transactionHash: rejectedHash },
+      });
+      assert.equal(sameHash.status, 202);
+      assert.equal((await sameHash.json()).status, 'rejected');
+      assert.equal(observedMethods.length, readsBeforeReconcile);
+      assert.equal(
+        (
+          await call(`/v1/requests/${thirdId}/reconcile`, {
+            method: 'POST',
+            subject: 'other-holder',
+          })
+        ).status,
+        404,
+      );
+      assert.equal(
+        (await call(`/v1/requests/${thirdId}/reconcile`, { method: 'POST' }))
+          .status,
+        429,
+      );
+      const thirdStorage = await mf.unsafeGetDurableObjectStorage(
+        'issuance-test',
+        'IssuanceCoordinator',
+        { name: thirdId },
+      );
+      const rejectedCheckpoint = JSON.parse(
+        (await thirdStorage.exec('SELECT state FROM requests'))[0].state,
+      );
+      rejectedCheckpoint.updatedAt -= 61_000;
+      await thirdStorage.exec(
+        'UPDATE requests SET state = ? WHERE singleton = 1',
+        JSON.stringify(rejectedCheckpoint),
+      );
+      await mf.dispose();
+      mf = new Miniflare(convertV4MiniflareOptions(options));
+      await mf.ready;
+      const resumed = await call(`/v1/requests/${thirdId}/reconcile`, {
+        method: 'POST',
+      });
+      assert.equal(resumed.status, 202, await resumed.clone().text());
+      const resumedState = await resumed.json();
+      assert.equal(resumedState.status, 'submitted');
+      assert.equal(resumedState.transactionHash, rejectedHash);
+      assert.equal(resumedState.attempts, 0);
+      const reobservedBy = Date.now() + 4_000;
+      do {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        thirdState = await (await call(`/v1/requests/${thirdId}`)).json();
+      } while (thirdState.status !== 'confirmed' && Date.now() < reobservedBy);
+      assert.equal(thirdState.status, 'confirmed');
+      assert.equal(thirdState.transactionHash, rejectedHash);
+      assert.deepEqual(thirdState.priorTransactionHashes, []);
+      const restoredStorage = await mf.unsafeGetDurableObjectStorage(
+        'issuance-test',
+        'IssuanceCoordinator',
+        { name: thirdId },
+      );
+      const reobservedEvents = await restoredStorage.exec(
+        'SELECT sequence, status FROM events ORDER BY sequence',
+      );
+      assert.ok(reobservedEvents.some((event) => event.status === 'rejected'));
+      assert.equal(reobservedEvents.at(-1).status, 'confirmed');
       assert.ok(
         observedMethods.every((method) => !method.startsWith('eth_send')),
       );

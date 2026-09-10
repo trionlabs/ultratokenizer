@@ -214,7 +214,7 @@ export class IssuanceCoordinator extends DurableObject<IssuanceEnv> {
     return publicState(next);
   }
 
-  /** Restart read-only observation after an outage. Never resubmit or release backing. */
+  /** Recheck an exhausted or rejected observation. Never resubmit or release backing. */
   async reconcile(ownerId: string): Promise<PublicRequestState> {
     const state = this.owned(ownerId);
     if (
@@ -223,7 +223,10 @@ export class IssuanceCoordinator extends DurableObject<IssuanceEnv> {
       state.status === 'confirmed'
     )
       return this.inspect(ownerId);
-    if (state.status !== 'attention_required' || !state.transactionHash)
+    if (
+      (state.status !== 'attention_required' && state.status !== 'rejected') ||
+      !state.transactionHash
+    )
       throw new WorkerError('conflict');
     const now = Date.now();
     if (now - state.updatedAt < 60_000) throw new WorkerError('rate_limited');

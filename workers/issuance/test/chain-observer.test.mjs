@@ -263,6 +263,49 @@ void test('a relayer may call internally when the exact pinned gate emits the ma
   );
 });
 
+void test('bounded relayer receipts remain observable beyond 256 total logs', async () => {
+  for (const count of [256, 257]) {
+    const rpc = rpcFixture(request, digest, issuanceEvent);
+    const receipt = rpc.values.eth_getTransactionReceipt;
+    const issuance = receipt.logs[0];
+    receipt.to = request.token;
+    rpc.values.eth_getTransactionByHash.to = request.token;
+    receipt.logs = Array.from({ length: count - 1 }, (_, index) => ({
+      ...issuance,
+      address: request.token,
+      topics: [`0x${'99'.repeat(32)}`],
+      data: '0x',
+      logIndex: `0x${index.toString(16)}`,
+    }));
+    issuance.logIndex = `0x${(count - 1).toString(16)}`;
+    receipt.logs.push(issuance);
+    assert.ok(Buffer.byteLength(JSON.stringify(receipt)) < 512 * 1024);
+    const result = await observeIssuance(
+      request,
+      hash,
+      chainConfig,
+      rpc.fetcher,
+    );
+    assert.equal(result.outcome, 'confirmed', `${count} logs`);
+    assert.equal(result.logIndex, String(count - 1));
+    assert.ok(rpc.calls.every((call) => !call.method.startsWith('eth_send')));
+  }
+});
+
+void test('large unrelated log data cannot bypass the receipt response byte limit', async () => {
+  const rpc = rpcFixture(request, digest, issuanceEvent);
+  const receipt = rpc.values.eth_getTransactionReceipt;
+  receipt.logs.unshift({
+    ...receipt.logs[0],
+    address: request.token,
+    data: `0x${'ff'.repeat(512 * 1024)}`,
+  });
+  assert.deepEqual(
+    await observeIssuance(request, hash, chainConfig, rpc.fetcher),
+    { outcome: 'pending', reason: 'rpc_unavailable' },
+  );
+});
+
 void test('wrong contracts, bytecode, successful transactions without issuance, and duplicates reject', async () => {
   for (const mutate of [
     (rpc) => {

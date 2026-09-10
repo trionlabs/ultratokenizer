@@ -55,13 +55,13 @@ Use `.dev.vars` locally; it is ignored. Keep production and staging bindings, ke
 
 All `/v1/` operations require a bearer access token. Browser requests must use the exact allowed origin. JSON responses are not cached. Rate limits apply before JWT verification by edge IP and afterward by authenticated subject. Edge limits are abuse controls, not transactional quotas or issuer capacity.
 
-| Method and path                          | Input                                          | Result                                                           |
-| ---------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------- |
-| `POST /v1/requests`                      | `{ request, holderSignature }`, at most 16 KiB | Idempotent canonical request registration                        |
-| `GET /v1/requests/:digest`               | None                                           | Subject-owned tracking state                                     |
-| `POST /v1/requests/:digest/transactions` | `{ transactionHash }`, at most 256 bytes       | Observe a wallet-submitted transaction                           |
-| `POST /v1/requests/:digest/reconcile`    | None                                           | Restart observation after exhausted retries; one-minute cooldown |
-| `POST /v1/requests/:digest/cancel`       | None                                           | Stop tracking before a transaction is attached                   |
+| Method and path                          | Input                                          | Result                                                            |
+| ---------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------- |
+| `POST /v1/requests`                      | `{ request, holderSignature }`, at most 16 KiB | Idempotent canonical request registration                         |
+| `GET /v1/requests/:digest`               | None                                           | Subject-owned tracking state                                      |
+| `POST /v1/requests/:digest/transactions` | `{ transactionHash }`, at most 256 bytes       | Observe a wallet-submitted transaction                            |
+| `POST /v1/requests/:digest/reconcile`    | None                                           | Recheck an exhausted or rejected observation; one-minute cooldown |
+| `POST /v1/requests/:digest/cancel`       | None                                           | Stop tracking before a transaction is attached                    |
 
 `tracking_cancelled` does not revoke an already signed request. On-chain expiry, issuer revocation and reservation controls remain authoritative. An attached transaction cannot be cancelled through this interface. Attaching the same hash is idempotent. A different hash is accepted only after it independently confirms this exact request; until then the original reference and recovery process remain intact. Prior confirmed-reference corrections are preserved. No API operation broadcasts a transaction.
 
@@ -69,9 +69,9 @@ All `/v1/` operations require a bearer access token. Browser requests must use t
 
 Each alarm persists a unique lease and a future recovery alarm before external I/O. Completion checks the lease and revision again, so a delayed observer cannot overwrite newer state. Alarm scheduling, state and transition history share a storage transaction. Requests survive eviction or process restart. Provider calls have deadlines, streamed responses are bounded, and HTTP redirects are rejected without following them.
 
-Observation retries use exponential delay up to five minutes. After 24 attempts, `attention_required` preserves the transaction and uncertainty. Authenticated `reconcile` starts another observation cycle after a one-minute cooldown. No retry assumes that a missing receipt means a failed transaction, frees reserve capacity, or submits another mint.
+Observation retries use exponential delay up to five minutes. After 24 attempts, `attention_required` preserves the transaction and uncertainty. Authenticated `reconcile` starts another observation cycle after a one-minute cooldown for either `attention_required` or `rejected`. This permits explicit rechecking after a provider or deployment-configuration correction. It preserves the transaction hash and recent transition history; the last observation remains visible until the next check replaces it. Attaching the same hash alone remains idempotent. No retry assumes that a missing receipt means a failed transaction, frees reserve capacity, or submits another mint.
 
-`confirmed` means a successful transaction contains exactly one matching `Issued` event from the configured gate, whose runtime code hash and canonical block were checked through the configured RPC. Internal gate calls by relayers are supported. This result still depends on RPC honesty and the reviewed gate deployment. It is not independent proof verification, historical registry verification, complete token-supply reconciliation or physical reserve assurance. Use the portable audit module for separately reported cryptographic checks.
+`confirmed` means a successful transaction contains exactly one matching `Issued` event from the configured gate, whose runtime code hash and canonical block were checked through the configured RPC. Internal gate calls by relayers are supported, including receipts with more than 256 logs. The 512 KiB RPC response limit bounds processing; only logs at the pinned Gate address undergo ABI decoding. This result still depends on RPC honesty and the reviewed gate deployment. It is not independent proof verification, historical registry verification, complete token-supply reconciliation or physical reserve assurance. Use the portable audit module for separately reported cryptographic checks.
 
 ## Release and operations gates
 

@@ -110,8 +110,7 @@ export async function observeIssuance(
       !isRecord(receipt) ||
       receipt.transactionHash !== hash ||
       !isHash(receipt.blockHash) ||
-      !Array.isArray(receipt.logs) ||
-      receipt.logs.length > 256
+      !Array.isArray(receipt.logs)
     )
       throw new Error('Invalid receipt.');
     const blockNumber = quantity(receipt.blockNumber);
@@ -191,6 +190,8 @@ export async function observeIssuance(
 
     const digest = getIssuanceRequestDigest(request);
     const matches: Extract<Observation, { outcome: 'confirmed' }>[] = [];
+    // The RPC response byte limit bounds this scan. A relayer may emit many
+    // unrelated logs, so only Gate-address candidates need ABI validation.
     for (const log of receipt.logs) {
       if (
         !isRecord(log) ||
