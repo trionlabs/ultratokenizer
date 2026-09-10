@@ -16,7 +16,7 @@
     "build:html": "node scripts/build-html.mjs",
     "typecheck": "tsc --noEmit",
     "format:check": "oxfmt --check",
-    "check:hygiene": "node scripts/check-hygiene.mjs",
+    "check:hygiene": "node --test scripts/test-hygiene.mjs && node scripts/check-hygiene.mjs",
     "check:blueprint": "npm run check:hygiene && npm run format:check && npm run lint && npm run typecheck",
     "check:domain": "npm --prefix packages/domain test",
     "check:audit": "npm --prefix packages/audit test",
