@@ -10,4 +10,6 @@ __pycache__/
 *.sp1-network-quote.json
 *.sp1-network-staging.jsonl
 *.sp1-network-submission.json
+*.sp1-network-budget.jsonl
+*.sp1-network-request.jsonl
 *.sp1-network-proof

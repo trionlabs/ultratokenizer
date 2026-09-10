@@ -5,7 +5,7 @@ is separate from the evidence workspace, so enabling the SP1 network stack canno
 the reviewed guest build. It accepts only the integrity-sealed, embedded synthetic V2 fixture. It
 has no command that accepts an arbitrary document or witness.
 
-The binary exposes three operations:
+The staging operations are:
 
 - `quote` verifies the requester address from `NETWORK_PRIVATE_KEY` and reads current Groth16 auction
   parameters, PROVE balance and program-registration state. It performs no upload or proof request.
@@ -68,6 +68,17 @@ Preparation, quote, staging, submission and proof artifacts use mandatory ignore
 journals are created with mode `0600` on Unix. Never commit `.env` files, requester keys, witnesses,
 journals, artifact URIs or proof artifacts.
 
-A future paid submission command must require a fresh quote, its exact hash, an exact single-request
-PROVE cap and a total-attempt PROVE cap. It must issue one RPC submission only and recover ambiguous
-responses by request/nonce lookup without automatic resubmission. No such command exists yet.
+The paid operations are `init-budget`, `prepare-request`, `submit-request` and `recover-request`.
+They require explicit positive single-request and cumulative PROVE-wei caps, an existing completed
+stage, and a fresh quote with its exact file hash. Preparation is offline. Submission records the
+intent, exact EIP-191-signed protobuf, and dispatch attempt durably before one raw auction RPC call.
+Once signing starts, reopening the journal cannot sign, refresh the nonce, or submit again.
+Unsigned recovery checks request fields plus the recorded sender, nonce and signature; neither a
+timeout nor an empty search releases the conservative cumulative budget. See the
+[paid request procedure](PAID_REQUEST.md) for the exact settings, commands, and failure boundaries.
+
+This package has offline transport and persistence tests; those tests do not demonstrate an actual
+paid request or a genuine proof. Recovery can record that a proof artifact is available but does not
+download or verify it. A separate bounded retrieval and independent SDK/EVM verification step is
+still required. The only admitted remote candidate remains the original synthetic V2 program in the
+shared request schema; a different Linux build is not admitted by these commands.

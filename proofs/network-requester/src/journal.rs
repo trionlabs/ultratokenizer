@@ -119,7 +119,14 @@ pub fn read(path: &Path) -> Result<Vec<StageEvent>, &'static str> {
     if bytes.len() > MAX_STAGING_JOURNAL_BYTES {
         return Err("Staging journal exceeds its size limit.");
     }
-    let text = std::str::from_utf8(&bytes).map_err(|_| "Staging journal is not UTF-8.")?;
+    parse(&bytes)
+}
+
+pub fn parse(bytes: &[u8]) -> Result<Vec<StageEvent>, &'static str> {
+    if bytes.len() > MAX_STAGING_JOURNAL_BYTES {
+        return Err("Staging journal exceeds its size limit.");
+    }
+    let text = std::str::from_utf8(bytes).map_err(|_| "Staging journal is not UTF-8.")?;
     let events: Result<Vec<_>, _> = text.lines().map(serde_json::from_str).collect();
     let events = events.map_err(|_| "Staging journal contains an invalid event.")?;
     if events.is_empty() {

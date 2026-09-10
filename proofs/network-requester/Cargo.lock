@@ -7190,6 +7190,7 @@ dependencies = [
 name = "ultratokenizer-network-requester"
 version = "0.1.0"
 dependencies = [
+ "alloy-primitives",
  "bincode",
  "hex",
  "prost",

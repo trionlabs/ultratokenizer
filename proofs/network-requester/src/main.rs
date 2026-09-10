@@ -2,6 +2,10 @@
 
 mod direct;
 mod journal;
+mod paid;
+mod paid_journal;
+mod paid_rpc;
+mod paid_state;
 mod stage;
 
 use serde::Serialize;
@@ -153,13 +157,10 @@ async fn quote(args: &[String]) -> Result<(), &'static str> {
         sp1_sdk::network::get_default_rpc_url_for_mode(NetworkMode::Mainnet),
         NetworkMode::Mainnet,
     );
-    let params = match client.get_proof_request_params(ProofMode::Groth16).await {
-        Ok(params) => params,
-        Err(error) => {
-            eprintln!("Succinct Groth16 parameter read failed: {error}");
-            return Err("Unable to read current Groth16 auction parameters.");
-        }
-    };
+    let params = client
+        .get_proof_request_params(ProofMode::Groth16)
+        .await
+        .map_err(|_| "Unable to read current Groth16 auction parameters.")?;
     let GetProofRequestParamsResponse::Auction(params) = params else {
         return Err("Succinct mainnet did not return auction parameters.");
     };
@@ -266,8 +267,30 @@ async fn run() -> Result<(), &'static str> {
         Some("inspect-stage") => Err(
             "Usage: network-requester inspect-stage <staging-journal>",
         ),
+        Some("init-budget") if args.len() == 5 => paid::init_budget(&args),
+        Some("init-budget") => Err(
+            "Usage: network-requester init-budget <expected-requester> <single-cap-wei> <total-cap-wei> <new-budget-journal>",
+        ),
+        Some("prepare-request") if args.len() == 7 => paid::prepare(&args),
+        Some("prepare-request") => Err(
+            "Usage: network-requester prepare-request <preparation> <quote> <completed-stage> <reviewed-settings> <existing-budget> <new-request-journal>",
+        ),
+        Some("submit-request") if args.len() == 3 => {
+            initialize_tls()?;
+            paid::submit(&args).await
+        }
+        Some("submit-request") => Err(
+            "Usage: network-requester submit-request <prepared-request-journal> <existing-budget-journal>",
+        ),
+        Some("recover-request") if args.len() == 2 => {
+            initialize_tls()?;
+            paid::recover(&args).await
+        }
+        Some("recover-request") => Err(
+            "Usage: network-requester recover-request <existing-request-journal>",
+        ),
         _ => Err(
-            "Available commands are quote, stage and inspect-stage. Paid proof submission is unavailable before explicit budgets are approved.",
+            "Available commands: quote, stage, inspect-stage, init-budget, prepare-request, submit-request, recover-request. Paid submission requires an explicitly reviewed budget and fresh exact quote.",
         ),
     }
 }
