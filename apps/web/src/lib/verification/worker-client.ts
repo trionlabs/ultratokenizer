@@ -1,5 +1,6 @@
 import {
   checkPayloadSize,
+  checkRpcUrl,
   VerificationError,
   VERIFICATION_TIMEOUT_MS,
   type ReceiptVerifier,
@@ -26,13 +27,14 @@ export function createWorkerVerifier(
   let disposed = false;
   let cancel: (() => void) | undefined;
   return {
-    verify(text, options = {}) {
+    verify(text, options) {
       cancel?.();
       if (disposed) return Promise.reject(new VerificationError('unavailable'));
       if (options.signal?.aborted)
         return Promise.reject(new VerificationError('cancelled'));
       try {
-        checkPayloadSize(text);
+        checkPayloadSize(text, options.policyText);
+        checkRpcUrl(options.rpcUrl);
       } catch (error) {
         return Promise.reject(error);
       }
@@ -73,25 +75,30 @@ export function createWorkerVerifier(
           if (reply.id !== id) return; // Correlate even if a superseded worker was already posting.
           if (reply.ok === false) {
             finish(
-              ['invalid_receipt', 'digest_mismatch', 'too_large'].includes(
-                reply.code ?? '',
-              )
+              [
+                'invalid_receipt',
+                'invalid_policy',
+                'invalid_rpc',
+                'too_large',
+              ].includes(reply.code ?? '')
                 ? reply.code
                 : 'failed',
             );
           } else if (
             reply.ok === true &&
             reply.result?.execution === 'dedicated-worker' &&
-            reply.result.requestIntegrity === 'consistent' &&
             reply.result.receipt?.format ===
-              'ultratokenizer.sample-receipt.v1' &&
-            reply.result.receipt.mode === 'simulation' &&
-            [
-              reply.result.evidence,
-              reply.result.issuer,
-              reply.result.proof,
-              reply.result.chain,
-            ].every((level) => level === 'not-verified')
+              'ultratokenizer.issuance-receipt.v1' &&
+            reply.result.report?.format === 'ultratokenizer.audit-report.v1' &&
+            reply.result.report.complete === false &&
+            ['invalid', 'incomplete'].includes(reply.result.report.status) &&
+            Array.isArray(reply.result.report.checks) &&
+            reply.result.report.checks.every((check) =>
+              ['verified', 'failed', 'unverified'].includes(check.status),
+            ) &&
+            Array.isArray(reply.result.report.missingEvidence) &&
+            Array.isArray(reply.result.report.limitations) &&
+            reply.result.mode === (options.rpcUrl ? 'rpc' : 'offline')
           ) {
             finish(undefined, reply.result);
           } else finish('failed');
@@ -102,7 +109,13 @@ export function createWorkerVerifier(
         };
         worker.onmessageerror = () => finish('failed');
         try {
-          worker.postMessage({ type: 'verify-sample-v1', id, text });
+          worker.postMessage({
+            type: 'verify-issuance-v1',
+            id,
+            text,
+            policyText: options.policyText,
+            ...(options.rpcUrl ? { rpcUrl: options.rpcUrl } : {}),
+          });
         } catch {
           finish('unavailable');
         }

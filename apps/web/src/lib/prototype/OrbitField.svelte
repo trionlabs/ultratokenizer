@@ -1,6 +1,10 @@
 <script lang="ts">
-  import type { Stage } from '../domain/journey';
-  let { stage }: { stage: Stage } = $props();
+  let {
+    stage,
+  }: {
+    stage:
+      'document' | 'review' | 'authorization' | 'proof' | 'mint' | 'receipt';
+  } = $props();
 </script>
 
 <!-- Decorative optics follow the visible stage, never proof validity. -->

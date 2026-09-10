@@ -13,6 +13,7 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "node --experimental-strip-types --test test/*.test.mjs",
     "test:browser": "node test/worker-browser.mjs",
+    "test:browser:backends": "node test/backend-browser.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

@@ -1,8 +1,6 @@
 <script lang="ts">
   import '../styles.css';
-  import '../play.css';
-  import '../orbit.css';
-  import '../discoveries.css';
+  import '../issuance.css';
   let { children } = $props();
 </script>
 

@@ -9,7 +9,7 @@ export default defineConfig({
     fs: {
       allow: [
         searchForWorkspaceRoot(process.cwd()),
-        fileURLToPath(new URL('../../packages/domain', import.meta.url)),
+        fileURLToPath(new URL('../../packages', import.meta.url)),
       ],
     },
   },

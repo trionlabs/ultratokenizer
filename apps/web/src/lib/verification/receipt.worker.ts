@@ -1,6 +1,13 @@
-import { verifySampleReceipt } from '../adapters/sample-receipt';
+import {
+  auditIssuanceReceipt,
+  parseIssuanceReceipt,
+  parseAuditPolicy,
+  createRpcProofVerifier,
+  AuditInputError,
+} from '../../../../../packages/audit/src/index.js';
 import {
   checkPayloadSize,
+  checkRpcUrl,
   VerificationError,
   type VerificationRequest,
   type VerificationReply,
@@ -10,41 +17,56 @@ const scope = globalThis as unknown as {
   onmessage: (event: MessageEvent<unknown>) => void;
   postMessage(reply: VerificationReply): void;
 };
-scope.onmessage = ({ data }) => {
+scope.onmessage = async ({ data }) => {
   const input = data as Partial<VerificationRequest> | null;
   if (
     !input ||
-    input.type !== 'verify-sample-v1' ||
+    input.type !== 'verify-issuance-v1' ||
     !Number.isSafeInteger(input.id) ||
     input.id! < 1
   )
     return;
   const id = input.id!;
   try {
-    checkPayloadSize(input.text!);
-    const receipt = verifySampleReceipt(input.text!);
+    checkPayloadSize(input.text!, input.policyText!);
+    checkRpcUrl(input.rpcUrl);
+    const policy = parseAuditPolicy(input.policyText);
+    const receipt = parseIssuanceReceipt(input.text!);
+    const report = await auditIssuanceReceipt(
+      input.text!,
+      policy,
+      input.rpcUrl
+        ? {
+            proofVerifier: createRpcProofVerifier({
+              policy,
+              rpcUrl: input.rpcUrl,
+            }),
+          }
+        : {},
+    );
     scope.postMessage({
       id,
       ok: true,
       result: {
         receipt,
+        report,
         execution: 'dedicated-worker',
-        requestIntegrity: 'consistent',
-        evidence: 'not-verified',
-        issuer: 'not-verified',
-        proof: 'not-verified',
-        chain: 'not-verified',
+        mode: input.rpcUrl ? 'rpc' : 'offline',
       },
     });
   } catch (error) {
-    // Never send parser internals, stack traces or input values back to the view.
     const code =
-      error instanceof VerificationError
-        ? 'too_large'
-        : error instanceof Error &&
-            error.message.startsWith('Request digest mismatch.')
-          ? 'digest_mismatch'
-          : 'invalid_receipt';
+      error instanceof VerificationError &&
+      (error.code === 'too_large' ||
+        error.code === 'invalid_rpc' ||
+        error.code === 'invalid_policy' ||
+        error.code === 'invalid_receipt')
+        ? error.code
+        : error instanceof AuditInputError && error.code === 'invalid_policy'
+          ? 'invalid_policy'
+          : error instanceof AuditInputError && error.code === 'too_large'
+            ? 'too_large'
+            : 'invalid_receipt';
     scope.postMessage({ id, ok: false, code });
   }
 };

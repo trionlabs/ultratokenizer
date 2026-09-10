@@ -1,6 +1,8 @@
 # Ultratokenizer web
 
-An isolated SvelteKit product preview with holder, issuer and audit interactions. It runs separately from the root architecture explorer.
+A static SvelteKit issuance workspace and independent receipt verifier. The Orbit visual direction is retained; the former runtime sample journeys and simulated completion states are removed.
+
+Run from the repository root:
 
 ```sh
 npm ci
@@ -8,42 +10,43 @@ npm --prefix apps/web ci
 npm --prefix apps/web run dev
 ```
 
-Run these commands from the repository root. The web app imports the canonical domain source, whose dependencies are installed at the root.
+## Issuance
 
-Open the local URL printed by Vite. Three temporary interface directions share the same journey:
+The `/` route imports an independent deployment configuration and a separate `ultratokenizer.issuance-bundle.v1` public bundle. Deployment v1 means native HTS; v2 explicitly selects native HTS or the complete admitted ATS profile. Their strict schemas and actual wallet/RPC implementation belong to [packages/issuance](../../packages/issuance/src/index.ts). Deployment files are bounded to64 KiB before reading and imports alone do not call the configured RPC. No deployment, recipient, quantity, proof or successful outcome is supplied by default.
 
-- `/?variant=A`: Orbit, with a document at the center of a spatial journey.
-- `/?variant=B`: Workbench, with a transformation chamber beside its controls.
-- `/?variant=C`: Passport, with a paper folio and a perforated progress stub.
+The amount is fixed by the canonical request, public values and permit bindings. There is no issuance amount editor: a complete 1 g claim issues exactly 1 g, once. The selected wallet must authorize that bound recipient. Every step is explicit: connect, validate the proof/permit and deployment pins, sign typed data, simulate current execution, submit the actual transaction, and reconcile its receipt and exact Gate event. Preflight success is never presented as a submitted or confirmed transaction.
 
-The development-only bottom switcher cycles between designs and updates the URL. Arrow keys also work outside controls and dialogs. Reload preserves the design, while the sample journey resets. The switcher is omitted from production builds.
+The current accepted source is profile 2's synthetic signed capsule, restricted by the shared client to test deployments. Real cryptography does not make this real bank evidence, asset backing, custody or a redemption promise. This UI imports public proof artifacts; it neither reads private PDF/email evidence nor generates proofs. Actual local proof generation is a separate [proof runner workflow](../../proofs/README.md).
 
-Choose **Try a sample**, adjust the gold amount, accept public disclosure, then switch to the test issuer. All three issuer seals must be selected before simulated approval. The remaining steps explicitly simulate proof and mint outcomes. The eye button opens request, privacy, audit and failure details. Motion follows the operating system's reduced-motion preference.
+The full quantity, recipient and request data become public at onchain reservation/submission, even before successful issuance. Validation also sends the public proof to the explicitly configured RPC. The page never asks for a private document or private key.
 
-Orbit's **Discoveries** opens three optional learning challenges. Catch an edited sample, recover a rejected proof, and complete a sample before recalculating its request digest. Collected stamps survive journey resets but disappear on refresh. They never unlock issuance actions. Completion has a brief visual flourish that is removed with reduced motion.
+`src/lib/application/issuance-session.ts` owns presentation orchestration. Missing configuration/provider and rejected checks leave subsequent actions unavailable. Wallet account/network changes invalidate unsubmitted checks and signatures. Once a hash exists, its captured request/signature/client survive wallet changes; unresolved transactions block replacement and can be reconciled again. Session data is in memory: keep the page open for unresolved transactions, preserve the hash, and save confirmed receipts before leaving. A reload does not restore an unfinished session.
 
-The independent `/verify/` route is a read-only static workspace: it requires no app backend, account or wallet and never changes the sample journey. It supports the same v1 sample format, with request consistency and four unverified evidence levels shown separately. The hosting server must still supply the page and worker assets; no offline cache is installed.
+A transport error during a send can leave the broadcast outcome unknown even without a returned hash. The workspace blocks automatic retry. For issuance, a hash recovered from wallet activity can be checked against the captured request and exact Gate event. Starting again requires the user to inspect wallet activity and explicitly confirm that nothing was sent; this also clears preflight checks and the signature. Transfer and HTS association both retain the original client and frozen action, sender, token,
+chain, nonce and exact transfer fields before sending. Recovered hashes are checked against that
+intent before replacing a reference. Wrong or unavailable candidates preserve uncertainty; a
+matching success or authenticated revert records its actual outcome. Account, provider and form
+changes cannot rewrite the attempted action. Preparation failures do not claim a broadcast.
 
-The audit panel can save a completed sample receipt as JSON and check a saved receipt after a fresh start. Imports stay in the browser, are limited to 64 KB, and are validated against a strict simulation schema. Recalculation checks whether the canonical request matches its saved EIP-712 digest. This establishes internal consistency only: a modified request with a freshly calculated digest can also match, and no issuer, proof or chain authenticity is established.
+The token panel uses the imported backend configuration. Native HTS exposes association for the connected wallet; ATS omits that action and the session and client both reject it before sending anything. Balance and transfer use the shared ERC-20 methods. Transfer quantities can divide the issued amount into whole milligrams. ENS is optional only for transfers: an explicit Ethereum mainnet RPC resolves the intended Hedera coin type, displays the full resulting address and resolver-default fallback boundary, then freezes that address for the transfer. Changing the input clears the resolution. ENS never changes an imported issuance recipient or grants source/issuer authority.
 
-## Boundaries
+The currently integrated signing and receipt flow requires EOA signatures. Arbitrary native Ed25519 accounts and contract-wallet issuance are not promised by the UI.
 
-- `src/lib/application/preview-session.ts` owns session orchestration, role changes, errors, learning announcements and exact-journey guards for asynchronous receipt checks.
-- `src/lib/components/PreviewWorkspace.svelte` wires presentation and focus to that module; `PreviewInspector.svelte` owns dialog navigation. Routes compose these modules without duplicating business logic.
-- `src/lib/domain/journey.ts` owns presentation transitions, exact gram-to-milligram conversion and invalidation when a request changes.
-- `src/lib/adapters/sample-request.ts` creates synthetic requests using `packages/domain` and calculates their real EIP-712 digest. Identifiers and addresses are fixtures, not deployed resources.
-- `src/lib/adapters/sample-receipt.ts` owns the unchanged sample v1 export schema, bounded JSON validation and digest recalculation.
-- `src/lib/verification` exposes the typed `ReceiptVerifier` interface. The browser adapter posts bounded UTF-8 text to a dedicated Worker, which performs parsing, schema validation and digest verification. A new request cancels the old one; correlation IDs, `AbortSignal`, an eight-second timeout and disposal reject stale work and terminate its worker. Each completed job also terminates its worker. Startup/execution failures are explicit; there is no main-thread verification fallback.
-- `ReceiptExchange.svelte` shares file handling, cancellation, safe errors and evidence-level display between the Orbit inspector and independent verifier. Files are capped before reading; UTF-8 byte limits are rechecked before `postMessage` and in the worker. The DOM never renders raw parser errors.
-- `src/lib/domain/discoveries.ts` records session learning progress separately from journey authority.
-- `src/lib/components` contains receipt inspection, local receipt exchange, privacy disclosure and discovery challenges.
-- `src/lib/prototype` holds temporary visual directions, the tactile document, shared controls and a development switcher. The root page selects a direction; the domain transition module remains the authority for presentation state. These designs are not a production interface commitment.
+## Independent verification
 
-This is a simulation. It performs no PDF verification, identity check, custody reservation, permit signing, proof generation, wallet interaction or blockchain transaction. The Rust PDF modules are not connected to the browser. No personal PDF is accepted. Session state stays in memory and disappears on refresh; exported sample JSON remains wherever the user saves it.
+`/verify/` accepts `ultratokenizer.issuance-receipt.v1` (256 KB maximum) plus a separately obtained `ultratokenizer.audit-policy.v1` (8 KB maximum). It rejects the former sample receipt format.
 
-Browser state and checkboxes are never mint authority. A production implementation needs authenticated issuer and custody services, a request-bound proof, a signed issuer permit and contract-enforced replay and reservation checks. UI guards only model the intended journey.
+The `src/lib/verification` worker boundary calls [packages/audit](../../packages/audit/src/index.ts). By default, canonical request/public-value/permit bindings and EOA signatures are checked locally. Proof cryptography and historical chain evidence remain unverified. The result always distinguishes verified, failed and unverified checks; it cannot claim complete assurance.
 
-## Validation
+Historical token implementation links, supply roles and transfer configuration are explicitly
+unverified. A current ATS deployment check in the issuance client does not establish that historical
+state, and a receipt cannot supply its own backend admission.
+
+An explicit optional RPC setting uses the caller-pinned SP1 verifier after checking its chain and runtime code. This sends public proof bytes, public values and the program key to that provider. It is online verification and does not establish historical registry state, reservation/supply/replay effects or transaction inclusion. Receipt authors cannot select a verifier or RPC through the receipt itself.
+
+Every verification job runs in a dedicated Web Worker. UTF-8 bounds are checked before posting and inside the worker. Correlation IDs, cancellation, a 45-second timeout and disposal terminate workers and reject stale results. Worker failures do not fall back to the UI thread. Imported files stay in memory; the user may save the resulting audit report. The static page and worker assets must be available from the host; no offline cache is installed.
+
+## Checks
 
 ```sh
 npm --prefix apps/web test
@@ -51,23 +54,11 @@ npm --prefix apps/web run check
 npm --prefix apps/web run build
 ```
 
-Twenty-three tests cover flow gates, exact amounts, rejection and recovery, invalidation, duplicate completion, learning markers, receipt round-trips, request tampering, schema validation and size limits. The receipt tests bundle the same browser adapter into a temporary directory using Vite and clean it up afterward. The static adapter produces `build/`; it does not deploy the application.
+Unit tests cover real-client orchestration boundaries, exact quantities, rejected checks, wallet races, transaction reconciliation, worker lifecycle and untrusted replies. Test-only fixtures have real ephemeral EOA signatures but deliberately invalid proof bytes; they establish no real ZK acceptance or deployment. The old sample fixture remains only to test rejection.
 
-## Static deployment security
-
-`npm run build` produces `build/index.html` and `build/verify/index.html` with SvelteKit-generated hash CSPs. Hydration is allowed by its exact script hash; scripts and dedicated workers load from the same origin. Inline scripts and event handlers receive no blanket exception. Inline styles remain allowed because the tactile UI uses reactive CSS custom properties and Svelte-managed styling. The existing Google Fonts stylesheet/font origins are explicitly allowed; verification works without them.
-
-Deploy the complete build, including `_app/immutable/workers/`. Serve JavaScript with its correct content type. `static/_headers` supplies framing restrictions, `nosniff`, no-referrer, a restrictive permissions policy, same-origin opener policy and HTTPS HSTS for hosts that understand this format. On other static servers, translate those entries into HTTP response headers. Do not assume copying `_headers` makes an arbitrary server enforce it. Its supplemental CSP adds `frame-ancestors`, which cannot be enforced from an HTML meta policy. Do not replace the generated per-page CSP with a script policy that drops the hydration hashes.
-
-The sample schema establishes no issuer authentication or asset rights. Future signed receipt formats require a separately reviewed schema and verification implementation; unsupported formats fail closed.
-
-## Worker browser checks
-
-`test/worker-browser.mjs` uses `@playwright/test` pinned in this package's development dependencies. From a clean checkout, run these commands from the repository root:
+Production browser checks use this package's pinned Playwright dependency:
 
 ```sh
-npm ci
-npm --prefix apps/web ci
 cd apps/web
 npx playwright install chromium
 cd ../..
@@ -75,16 +66,29 @@ npm --prefix apps/web run build
 npm --prefix apps/web run preview -- --port 4175 --strictPort
 ```
 
-Keep that preview running. In another terminal at the repository root:
+With the preview running, use another terminal:
 
 ```sh
 PREVIEW_URL=http://127.0.0.1:4175/ npm --prefix apps/web run test:browser
+PREVIEW_URL=http://127.0.0.1:4175/ npm --prefix apps/web run test:browser:backends
 ```
 
-Start a **fresh** preview after each build. `PREVIEW_URL` selects the local static preview and defaults to `http://127.0.0.1:4173/`. The test uses Playwright's bundled Chromium by default. On Linux CI, `npx playwright install --with-deps chromium` also installs required system libraries. To opt into an already installed Chrome explicitly:
+The browser test exercises the actual shared client against an intentionally mismatched test RPC, proving failure remains closed. It also checks worker auditing of signed test fixtures, missing trust pins, changed amounts, sample rejection, size bounds, cancellation/retry, unavailable workers, production CSP/hydration and 320px layout. It performs no live issuance. Screenshots are written to the ignored root `.scratch/web-qa/` directory. `PLAYWRIGHT_CHANNEL=chrome` can select an explicitly installed Chrome instead of bundled Chromium.
 
-```sh
-PLAYWRIGHT_CHANNEL=chrome PREVIEW_URL=http://127.0.0.1:4175/ npm --prefix apps/web run test:browser
-```
+The backend browser check imports synthetic v1/v2 HTS and v2 ATS configurations, rejects an
+incomplete ATS import, checks association visibility, preserves the full claim and divisible
+transfer inputs, and checks desktop/mobile layout. It intercepts external requests and permits
+no wallet or RPC call; an existing optional font stylesheet request is blocked and reported
+separately. Its screenshots and assertions establish UI behavior, not deployment admission or mint.
 
-This exercises an actual browser Worker, its emitted production asset, UTF-8 preflight limits, termination, CPU-bound timeout and cancellation, retry, unavailable-worker errors, static CSP/hydration, all evidence levels and a 320px layout. Network requests outside the static host and application API requests are blocked. The JSON fixture contains synthetic identifiers only.
+## Static hosting
+
+The build produces `build/index.html`, `build/verify/index.html` and worker assets. SvelteKit generates hash-based script CSP; scripts/workers remain same-origin, with no blanket inline-script exception. Explicit user RPCs require HTTPS connections and loopback HTTP connections in `connect-src`. Application code initiates them only through the described user actions. Google Fonts origins remain permitted by the existing stylesheet.
+
+Serve the complete build and correct JavaScript content types. `static/_headers` supplies framing, MIME, referrer, permissions, opener and HTTPS policies for supporting hosts; translate them to server response headers elsewhere. Its supplemental `frame-ancestors` policy requires an HTTP header. Do not replace the generated CSP with a policy that drops hydration hashes. Building does not deploy the app or register any chain authority.
+
+The token recovery browser cases use the production client with a synthetic wallet and intercepted
+RPC: lose the returned hash, change account/chain/form fields, reject an old-nonce transaction, then
+confirm the original transfer or HTS association with one send. This complements the no-wallet
+backend import checks above. It does not establish live RPC behavior or durable recovery across a
+page reload.

@@ -16,7 +16,14 @@ export default {
         'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
         'font-src': ['self', 'https://fonts.gstatic.com'],
         'img-src': ['self', 'data:'],
-        'connect-src': ['self'],
+        // RPC origins are explicit user imports, never supplied by a receipt.
+        'connect-src': [
+          'self',
+          'https:',
+          'http://localhost:*',
+          'http://127.0.0.1:*',
+          'http://[::1]:*',
+        ],
         'worker-src': ['self'],
         'object-src': ['none'],
         'frame-src': ['none'],

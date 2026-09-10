@@ -1,21 +1,26 @@
-import type { SampleReceipt } from '../adapters/sample-receipt';
+import type {
+  AuditReport,
+  IssuanceReceipt,
+} from '../../../../../packages/audit/src/index.js';
 
-export const MAX_RECEIPT_BYTES = 64 * 1024;
-export const VERIFICATION_TIMEOUT_MS = 8_000;
-
+// Preflight bounds mirror the audit parser; the worker rechecks them before parsing.
+export const MAX_RECEIPT_BYTES = 256 * 1024;
+export const MAX_POLICY_BYTES = 8 * 1024;
+export const VERIFICATION_TIMEOUT_MS = 45_000;
 export const verificationMessages = {
-  too_large: 'Choose a sample receipt smaller than 64 KB.',
+  too_large:
+    'Choose a receipt up to 256 KB and an independent policy up to 8 KB.',
   invalid_receipt:
-    'This receipt is invalid or unsupported. Choose a sample v1 receipt.',
-  digest_mismatch:
-    'Request digest mismatch. The request or digest was changed.',
+    'The issuance receipt is invalid or unsupported. Sample receipts are not accepted.',
+  invalid_policy: 'The independent caller trust policy is missing or invalid.',
+  invalid_rpc: 'Use an explicit HTTPS RPC URL, or HTTP on localhost.',
   unavailable:
     'The verification worker could not start. This browser cannot verify the receipt right now.',
-  timeout: 'Receipt verification timed out. Try again with a supported sample.',
+  timeout:
+    'Receipt verification timed out. Check the configured RPC if enabled, then retry.',
   cancelled: 'Receipt verification was cancelled.',
   failed: 'The verification worker stopped unexpectedly. Try again.',
 } as const;
-
 export type VerificationErrorCode = keyof typeof verificationMessages;
 export class VerificationError extends Error {
   readonly code: VerificationErrorCode;
@@ -25,45 +30,67 @@ export class VerificationError extends Error {
     this.code = code;
   }
 }
-
 export type ReceiptVerification = Readonly<{
-  receipt: SampleReceipt;
+  receipt: IssuanceReceipt;
+  report: AuditReport;
   execution: 'dedicated-worker';
-  requestIntegrity: 'consistent';
-  evidence: 'not-verified';
-  issuer: 'not-verified';
-  proof: 'not-verified';
-  chain: 'not-verified';
+  mode: 'offline' | 'rpc';
 }>;
-
-/** Latest request wins. Abort, timeout and disposal terminate CPU work, not just its display. */
 export interface ReceiptVerifier {
   verify(
     text: string,
-    options?: { signal?: AbortSignal },
+    options: { policyText: string; rpcUrl?: string; signal?: AbortSignal },
   ): Promise<ReceiptVerification>;
   dispose(): void;
 }
-
 export type VerificationRequest = Readonly<{
-  type: 'verify-sample-v1';
+  type: 'verify-issuance-v1';
   id: number;
   text: string;
+  policyText: string;
+  rpcUrl?: string;
 }>;
 export type VerificationReply =
   | { id: number; ok: true; result: ReceiptVerification }
   | {
       id: number;
       ok: false;
-      code: 'invalid_receipt' | 'digest_mismatch' | 'too_large';
+      code: 'invalid_receipt' | 'invalid_policy' | 'invalid_rpc' | 'too_large';
     };
 
-export function checkPayloadSize(text: string): void {
-  // Reject huge strings before allocating the UTF-8 buffer, then bound actual bytes.
-  if (
-    typeof text !== 'string' ||
-    text.length > MAX_RECEIPT_BYTES ||
-    new TextEncoder().encode(text).byteLength > MAX_RECEIPT_BYTES
-  )
-    throw new VerificationError('too_large');
+export function checkPayloadSize(text: string, policyText: string): void {
+  if (typeof text !== 'string') throw new VerificationError('invalid_receipt');
+  if (typeof policyText !== 'string')
+    throw new VerificationError('invalid_policy');
+  for (const [value, limit] of [
+    [text, MAX_RECEIPT_BYTES],
+    [policyText, MAX_POLICY_BYTES],
+  ] as const) {
+    if (
+      value.length > limit ||
+      new TextEncoder().encode(value).byteLength > limit
+    )
+      throw new VerificationError('too_large');
+  }
+}
+
+export function checkRpcUrl(value: string | undefined): void {
+  if (value === undefined) return;
+  try {
+    if (typeof value !== 'string' || value.length > 2048) throw new Error();
+    const url = new URL(value);
+    if (
+      url.username ||
+      url.password ||
+      url.hash ||
+      (url.protocol !== 'https:' &&
+        !(
+          url.protocol === 'http:' &&
+          ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+        ))
+    )
+      throw new Error();
+  } catch {
+    throw new VerificationError('invalid_rpc');
+  }
 }
