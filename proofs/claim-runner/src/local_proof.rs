@@ -28,7 +28,7 @@ fn options() -> impl Options {
         .reject_trailing_bytes()
 }
 
-fn check_runtime() -> Result<(), &'static str> {
+pub(super) fn check_runtime() -> Result<(), &'static str> {
     if SP1_CIRCUIT_VERSION != EXPECTED_CIRCUIT_VERSION {
         return Err("Unexpected SP1 outer circuit version.");
     }
@@ -201,7 +201,7 @@ async fn prove(args: &[String]) -> Result<(), &'static str> {
     Ok(())
 }
 
-fn check_public_values(request: &Request, values: &[u8]) -> Result<(), &'static str> {
+pub(super) fn check_public_values(request: &Request, values: &[u8]) -> Result<(), &'static str> {
     if values.len() != PUBLIC_VALUES_BYTES
         || values[..32]
             != ultratokenizer_claim_evidence::request::word_u64(u64::from(PROFILE_VERSION))

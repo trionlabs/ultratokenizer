@@ -1,7 +1,13 @@
 /target/
+/network-requester/target/
 /elf/
 /.env*
 /fixtures/private/
 __pycache__/
 *.py[cod]
 *.core.proof
+*.sp1-network-preparation.json
+*.sp1-network-quote.json
+*.sp1-network-staging.jsonl
+*.sp1-network-submission.json
+*.sp1-network-proof

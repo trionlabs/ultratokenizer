@@ -82,6 +82,12 @@ async fn run() -> Result<(), &'static str> {
     ) {
         return local_proof::run(&args).await;
     }
+    if matches!(
+        args.first().map(String::as_str),
+        Some("network-prepare-synthetic")
+    ) {
+        return network_request::run(&args).await;
+    }
     if args.len() == 2 && args[0] == "self-test" {
         return self_test(Elf::from(read_bounded(&args[1], 32 * 1024 * 1024)?)).await;
     }
@@ -233,3 +239,4 @@ async fn main() -> ExitCode {
     }
 }
 mod local_proof;
+mod network_request;

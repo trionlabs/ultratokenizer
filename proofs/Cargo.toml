@@ -6,8 +6,10 @@ members = [
   "claim-evidence",
   "claim-guest",
   "claim-runner",
+  "network-request-schema",
 ]
 default-members = ["pdf-evidence"]
+exclude = ["network-requester"]
 resolver = "2"
 
 [workspace.package]
