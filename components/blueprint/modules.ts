@@ -170,7 +170,7 @@ export const modules: BlueprintModule[] = [
     output:
       'One atomic issuance and an Issued event binding the request, claim, reservation, amount, permit digest, public-values hash and program key; otherwise a revert.',
     state:
-      'Consumed request IDs/digests, holder and issuer nonces, claim usage IDs and cumulative reservation use are on-chain. Claim single-use is global within this gate, not across deployments.',
+      'Consumed request IDs/digests, holder and issuer nonces, claim usage IDs, reservation state and aggregate backing totals are on-chain. Claim single-use is global within this gate, not across deployments.',
     guard:
       'One authenticated claim permits one issuance of its full exact quantity. Smaller and larger requests reject. Pending reservations plus outstanding issuance cannot exceed the configured issuer/token backing cap.',
     failure:
@@ -295,7 +295,7 @@ export const journey: {
     modules: ['registry', 'gate', 'token'],
     selected: 'gate',
     detail:
-      'A wallet or relayer submits to the gate. It checks proof, both signatures and live records, then consumes one claim plus reservation capacity and performs HTS mint/transfer atomically. Any failure reverts.',
+      'A wallet or relayer submits to the gate. It checks proof, both signatures and live records, then consumes one claim plus reservation capacity and issues through the admitted HTS or ATS adapter atomically. Any failure reverts.',
   },
   {
     title: 'Observe',
