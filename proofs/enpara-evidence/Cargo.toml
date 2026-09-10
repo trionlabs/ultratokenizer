@@ -1,0 +1,22 @@
+[package]
+name = "ultratokenizer-enpara-evidence"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.94"
+publish = false
+
+# Deliberately separate from the reviewed synthetic guest workspace/lockfile.
+[workspace]
+
+[dependencies]
+ultratokenizer-pdf-evidence = { path = "../pdf-evidence" }
+miniz_oxide = "=0.8.9"
+sha2 = "=0.10.9"
+hex = "=0.4.3"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
