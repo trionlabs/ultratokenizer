@@ -55,6 +55,8 @@ void test(
     });
     let rpc = rpcFixture(request, digest, observer.module.issuanceEvent);
     let indexed = false;
+    let transactionIndexed = false;
+    let missingTransactionReads = 0;
     const observedMethods = [];
     const outboundErrors = [];
     const options = {
@@ -98,8 +100,14 @@ void test(
                 !input.method.startsWith('eth_send'),
                 'Observer must never broadcast.',
               );
+              const missingReceipt =
+                !indexed && input.method === 'eth_getTransactionReceipt';
+              const missingTransaction =
+                !transactionIndexed &&
+                input.method === 'eth_getTransactionByHash';
+              if (missingTransaction) missingTransactionReads++;
               const result =
-                !indexed && input.method === 'eth_getTransactionReceipt'
+                missingReceipt || missingTransaction
                   ? null
                   : rpc.values[input.method];
               return Response.json({ jsonrpc: '2.0', id: input.id, result });
@@ -245,6 +253,49 @@ void test(
       assert.equal(state.transactionHash, hash);
       assert.ok(['submitted', 'checking'].includes(state.status));
       indexed = true;
+      // A receipt can be indexed before its transaction body. That incomplete
+      // observation must preserve this same hash for durable automatic recovery.
+      const bodyDeadline = Date.now() + 12_000;
+      while (
+        Date.now() < bodyDeadline &&
+        (missingTransactionReads === 0 ||
+          state.status !== 'submitted' ||
+          state.observation?.reason !== 'not_indexed')
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        state = await (await call(`/v1/requests/${digest}`)).json();
+      }
+      assert.ok(
+        missingTransactionReads > 0,
+        'The actual worker requested the unavailable transaction body.',
+      );
+      assert.equal(state.observation?.reason, 'not_indexed');
+      assert.equal(state.status, 'submitted', JSON.stringify(state));
+      assert.equal(state.transactionHash, hash);
+      await mf.dispose();
+      mf = new Miniflare(convertV4MiniflareOptions(options));
+      await mf.ready;
+      state = await (await call(`/v1/requests/${digest}`)).json();
+      assert.equal(state.transactionHash, hash);
+      assert.equal(state.observation?.reason, 'not_indexed');
+      assert.deepEqual(state.priorTransactionHashes, []);
+      const completeLogs = rpc.values.eth_getTransactionReceipt.logs;
+      rpc.values.eth_getTransactionReceipt.logs = [null];
+      transactionIndexed = true;
+      const logDeadline = Date.now() + 12_000;
+      while (
+        Date.now() < logDeadline &&
+        (state.status !== 'submitted' ||
+          state.observation?.reason !== 'rpc_unavailable')
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        state = await (await call(`/v1/requests/${digest}`)).json();
+      }
+      assert.equal(state.status, 'submitted', JSON.stringify(state));
+      assert.equal(state.observation?.reason, 'rpc_unavailable');
+      assert.equal(state.transactionHash, hash);
+      assert.deepEqual(state.priorTransactionHashes, []);
+      rpc.values.eth_getTransactionReceipt.logs = completeLogs;
       const deadline = Date.now() + 12_000;
       while (Date.now() < deadline && state.status !== 'confirmed') {
         await new Promise((resolve) => setTimeout(resolve, 100));

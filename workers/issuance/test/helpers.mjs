@@ -96,7 +96,12 @@ export function rpcFixture(request, digest, abi, mutate = () => {}) {
       status: '0x1',
       logs: [log],
     },
-    eth_getTransactionByHash: { hash, to: gate, blockHash },
+    eth_getTransactionByHash: {
+      hash,
+      to: gate,
+      blockHash,
+      blockNumber: '0x10',
+    },
     eth_getBlockByNumber: { hash: blockHash, number: '0x10' },
     eth_blockNumber: '0x11',
     eth_getCode: bytecode,

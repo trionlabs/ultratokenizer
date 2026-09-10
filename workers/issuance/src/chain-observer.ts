@@ -1,4 +1,10 @@
-import { decodeEventLog, isAddress, keccak256, type Hex } from 'viem';
+import {
+  decodeEventLog,
+  isAddress,
+  keccak256,
+  toEventSelector,
+  type Hex,
+} from 'viem';
 import type { IssuanceRequest } from '../../../packages/domain/src/index.js';
 import {
   getIssuanceRequestDigest,
@@ -8,6 +14,7 @@ import { isRecord, readJson, WorkerError } from './errors.ts';
 import type { Observation } from './model.ts';
 
 export const issuanceEvent = ISSUED_EVENT_ABI;
+const issuanceTopic = toEventSelector(issuanceEvent[0]);
 
 export type ChainConfiguration = Readonly<{
   rpcUrl: string;
@@ -121,26 +128,65 @@ export async function observeIssuance(
       quantity(latest) < blockNumber + BigInt(config.confirmations - 1)
     )
       return { outcome: 'pending', reason: 'not_final' };
+    const anchorHash = receipt.blockHash;
+    const anchorNumber = receipt.blockNumber;
+    async function terminal(
+      observation: Exclude<Observation, { outcome: 'pending' }>,
+    ): Promise<Observation> {
+      // The concurrent evidence reads may have crossed a reorganization or an
+      // endpoint chain change. Neither success nor rejection is terminal until
+      // the receipt's anchor is checked again after those reads have finished.
+      const [canonical, chain, head] = await Promise.all([
+        rpc('eth_getBlockByNumber', [anchorNumber, false]),
+        rpc('eth_chainId', []),
+        rpc('eth_blockNumber', []),
+      ]);
+      if (quantity(chain) !== BigInt(config.chainId))
+        return { outcome: 'pending', reason: 'rpc_unavailable' };
+      if (
+        !isRecord(canonical) ||
+        canonical.hash !== anchorHash ||
+        quantity(canonical.number) !== blockNumber ||
+        quantity(head) < blockNumber + BigInt(config.confirmations - 1)
+      )
+        return { outcome: 'pending', reason: 'not_final' };
+      return observation;
+    }
     // Relayers and contract wallets may call the gate internally. Authority comes
     // from the pinned gate's exact event, not the top-level transaction recipient.
+    if (transaction === null)
+      return { outcome: 'pending', reason: 'not_indexed' };
     if (
       !isRecord(transaction) ||
+      !isHash(transaction.hash) ||
+      !isHash(transaction.blockHash) ||
       transaction.hash !== hash ||
-      transaction.blockHash !== receipt.blockHash ||
       typeof transaction.to !== 'string' ||
       typeof receipt.to !== 'string' ||
-      transaction.to.toLowerCase() !== receipt.to.toLowerCase()
+      !isAddress(transaction.to, { strict: true }) ||
+      !isAddress(receipt.to, { strict: true })
     )
-      return { outcome: 'rejected', reason: 'gate_mismatch' };
+      throw new Error('Invalid transaction.');
+    if (
+      transaction.blockHash !== receipt.blockHash ||
+      quantity(transaction.blockNumber) !== blockNumber
+    )
+      return { outcome: 'pending', reason: 'not_final' };
+    if (transaction.to.toLowerCase() !== receipt.to.toLowerCase())
+      return await terminal({ outcome: 'rejected', reason: 'gate_mismatch' });
     if (
       typeof code !== 'string' ||
       code.length > 100_002 ||
-      !/^0x(?:[0-9a-fA-F]{2})+$/.test(code) ||
-      keccak256(code as Hex).toLowerCase() !== config.codeHash.toLowerCase()
+      !/^0x(?:[0-9a-fA-F]{2})*$/.test(code)
     )
-      return { outcome: 'rejected', reason: 'gate_mismatch' };
+      throw new Error('Invalid runtime code.');
+    if (keccak256(code as Hex).toLowerCase() !== config.codeHash.toLowerCase())
+      return await terminal({ outcome: 'rejected', reason: 'gate_mismatch' });
     if (receipt.status === '0x0')
-      return { outcome: 'rejected', reason: 'transaction_reverted' };
+      return await terminal({
+        outcome: 'rejected',
+        reason: 'transaction_reverted',
+      });
     if (receipt.status !== '0x1') throw new Error('Invalid receipt status.');
 
     const digest = getIssuanceRequestDigest(request);
@@ -149,37 +195,48 @@ export async function observeIssuance(
       if (
         !isRecord(log) ||
         typeof log.address !== 'string' ||
-        log.address.toLowerCase() !== config.gate.toLowerCase()
+        !isAddress(log.address, { strict: true })
       )
-        continue;
-      if (log.removed === true)
-        return { outcome: 'pending', reason: 'not_final' };
+        throw new Error('Incomplete receipt log.');
+      if (log.address.toLowerCase() !== config.gate.toLowerCase()) continue;
       if (
         !Array.isArray(log.topics) ||
-        log.topics.length !== 4 ||
-        !log.topics.every(isHash) ||
+        log.topics.length === 0 ||
+        log.topics.length > 4 ||
+        !log.topics.every(
+          (topic) =>
+            typeof topic === 'string' && /^0x[0-9a-fA-F]{64}$/.test(topic),
+        ) ||
         typeof log.data !== 'string' ||
-        log.data.length !== 642 ||
-        !/^0x[0-9a-fA-F]+$/.test(log.data)
+        !/^0x(?:[0-9a-fA-F]{2})*$/.test(log.data)
       )
-        continue;
-      let event;
-      try {
-        event = decodeEventLog({
-          abi: issuanceEvent,
-          data: log.data as Hex,
-          topics: log.topics as [Hex, Hex, Hex, Hex],
-          strict: true,
-        });
-      } catch {
-        continue;
-      }
+        throw new Error('Incomplete gate log.');
+      // Other valid Gate events may have different ABI shapes. A malformed
+      // Issued candidate cannot establish that this transaction did not issue.
+      if (log.topics[0]?.toLowerCase() !== issuanceTopic) continue;
+      if (
+        log.topics.length !== 4 ||
+        log.data.length !== 642 ||
+        !isHash(log.transactionHash) ||
+        !isHash(log.blockHash) ||
+        typeof log.removed !== 'boolean'
+      )
+        throw new Error('Incomplete issuance log.');
+      const logBlockNumber = quantity(log.blockNumber);
+      const logIndex = quantity(log.logIndex);
+      if (log.removed) return { outcome: 'pending', reason: 'not_final' };
+      const event = decodeEventLog({
+        abi: issuanceEvent,
+        data: log.data as Hex,
+        topics: log.topics as [Hex, Hex, Hex, Hex],
+        strict: true,
+      });
       const fields = event.args;
       if (fields.requestDigest !== digest) continue;
       if (
         log.transactionHash !== hash ||
         log.blockHash !== receipt.blockHash ||
-        quantity(log.blockNumber) !== blockNumber ||
+        logBlockNumber !== blockNumber ||
         fields.requestId !== request.requestId ||
         fields.claimUsageId !== request.claimUsageId ||
         fields.issuerId !== request.issuerId ||
@@ -193,20 +250,25 @@ export async function observeIssuance(
         !isHash(fields.publicValuesHash) ||
         !isHash(fields.programVKey)
       )
-        return { outcome: 'rejected', reason: 'issuance_mismatch' };
+        return await terminal({
+          outcome: 'rejected',
+          reason: 'issuance_mismatch',
+        });
       matches.push({
         outcome: 'confirmed',
         blockNumber: blockNumber.toString(),
         blockHash: receipt.blockHash,
-        logIndex: quantity(log.logIndex).toString(),
+        logIndex: logIndex.toString(),
         permitDigest: fields.permitDigest,
         publicValuesHash: fields.publicValuesHash,
         programVKey: fields.programVKey,
       });
     }
-    return matches.length === 1
-      ? matches[0]!
-      : { outcome: 'rejected', reason: 'issuance_mismatch' };
+    return await terminal(
+      matches.length === 1
+        ? matches[0]!
+        : { outcome: 'rejected', reason: 'issuance_mismatch' },
+    );
   } catch {
     return { outcome: 'pending', reason: 'rpc_unavailable' };
   }

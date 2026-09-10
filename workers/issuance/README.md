@@ -80,3 +80,9 @@ Before deployment, configure the real identity provider and pin the independentl
 Alert on sustained `unavailable`, `attention_required`, authentication failure spikes and RPC disagreement. Assign an operator and response procedures for those conditions. Cloudflare log retention, alert destinations, recovery objectives, external RPC service guarantees and production routing are operational configuration, not established by the local suite. Keep this worker private/unconfigured until those release gates are met.
 
 Storage and alarm behavior follow the official [SQLite storage interface](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/) and [Durable Objects lifecycle](https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/). Authentication uses [JOSE verification](https://github.com/panva/jose).
+
+Before a chain-derived terminal result, the observer rechecks the canonical receipt block,
+confirmation depth and RPC chain after reading transaction/code/event evidence. Missing or malformed
+transaction bodies and incomplete receipt logs remain retryable; only complete contradictory
+observations can support rejection. Same-hash recovery is exercised across local Durable Object
+restarts. These checks narrow inconsistent-provider failures; they do not eliminate RPC trust.
