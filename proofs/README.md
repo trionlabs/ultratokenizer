@@ -104,6 +104,32 @@ Profile V2 requires a newly built guest and independently pinned program key. A 
 
 ## Succinct Network staging
 
+### Guest identity and build reproducibility
+
+[claim-v2.json](programs/claim-v2.json) retains the original measured program and tooling history.
+The [current build inputs](programs/claim-v2-build-inputs.json) separately pin the reviewed workspace
+lockfile. Host-only package additions changed that lockfile; rebuilding with the original recipe
+still produced exactly the recorded ELF on macOS. Neither that result nor a lockfile edit authorizes
+a different program key.
+
+`python3 tools/build-claim-guest.py` builds a candidate under `target/normalized-elf/`, remapping
+checkout, Cargo source and toolchain paths. It leaves the staged ELF under `elf/` alone. The compiler's
+[path-remapping option](https://doc.rust-lang.org/rustc/command-line-arguments.html#--remap-path-prefix-remap-source-names-in-output)
+removes a known source of build-path variation; it does not guarantee cross-platform reproducibility.
+On macOS, two independent checkout directories produced identical normalized ELF bytes, without
+either checkout path or the personal home path. All 11 guest execution cases passed. The resulting
+candidate key differs from the staged key and remains unadmitted; no proof was requested for it.
+
+The identity checker defaults to `require-reviewed`: changed ELF/key, invalid self-hash, wrong outer
+circuit or unreviewed build inputs fail. Native CI explicitly uses `--mode record-candidate` to record
+Linux measurements and reproducibility gaps, with `requiresAdmissionReview: true` for a changed
+identity. Invalid evidence still fails. A green candidate measurement job is not admission of a new
+program, a cryptographic proof, or proof of matching Linux/macOS output. Request parity runs in an
+independent CI job, so a guest-build failure cannot skip it. Linux execution remains unmeasured until
+an actual CI run supplies the comparison record.
+
+### Staged synthetic program
+
 Network preparation and credential use are deliberately split. The main proof workspace has the
 SP1 network feature disabled. `claim-runner network-prepare-synthetic` locally executes the reviewed
 fixture, measures cycles and PGUs, and writes an integrity-sealed ignored preparation journal. The

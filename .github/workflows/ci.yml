@@ -92,7 +92,7 @@ jobs:
       - run: npm ci --no-audit
       - run: npm --prefix contracts/ats ci --ignore-scripts --no-audit
       - run: npm --prefix contracts/ats run compiler:fetch
-      - name: Build and verify actual ATS contracts from pinned sources
+      - name: Test Gate and ATS state transitions with an isolated test verifier
         run: npm run check:ats
 
   contracts:
@@ -123,6 +123,8 @@ jobs:
       - name: Install the validated native Rust toolchain
         run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt --component clippy
       - run: cargo +1.96.0 fmt --all -- --check
+      - name: Check identity comparison policy
+        run: python3 ../.github/scripts/test-claim-identity.py
       - name: Install checksum-pinned SP1 CLI and guest Rust
         run: bash .github/scripts/install-sp1.sh
         working-directory: .
@@ -134,27 +136,41 @@ jobs:
           cargo +1.96.0 test --manifest-path enpara-evidence/Cargo.toml --locked --all-targets
           cargo +1.96.0 clippy --manifest-path enpara-evidence/Cargo.toml --locked --all-targets -- -D warnings
       - run: cargo +1.96.0 build --locked -p ultratokenizer-claim-runner -p ultratokenizer-pdf-runner
-      - run: cargo prove build --locked --packages ultratokenizer-claim-guest --output-directory elf
+      - name: Build a path-remapped candidate without replacing reviewed pins
+        run: python3 tools/build-claim-guest.py
       - name: Execute the actual guest and record its identity
         run: |
-          test -s elf/ultratokenizer-claim-guest
-          target/debug/ultratokenizer-claim-runner self-test elf/ultratokenizer-claim-guest
-          target/debug/ultratokenizer-claim-runner identity elf/ultratokenizer-claim-guest > target/ci-claim-identity.json
-          sha256sum elf/ultratokenizer-claim-guest
+          test -s target/normalized-elf/ultratokenizer-claim-guest
+          target/debug/ultratokenizer-claim-runner self-test target/normalized-elf/ultratokenizer-claim-guest
+          target/debug/ultratokenizer-claim-runner identity target/normalized-elf/ultratokenizer-claim-guest > target/ci-claim-identity.json
+          sha256sum target/normalized-elf/ultratokenizer-claim-guest
           cat target/ci-claim-identity.json
-      - name: Compare candidate program with reviewed identities
-        run: python3 ../.github/scripts/check-claim-identity.py target/ci-claim-identity.json elf/ultratokenizer-claim-guest target/ci-claim-comparison.json
+      - name: Record candidate gaps without admitting a replacement program
+        run: python3 ../.github/scripts/check-claim-identity.py target/ci-claim-identity.json target/normalized-elf/ultratokenizer-claim-guest target/ci-claim-comparison.json --mode record-candidate
       - name: Preserve candidate identity comparison in the job log
         if: always()
         run: |
           if test -f target/ci-claim-comparison.json; then
             cat target/ci-claim-comparison.json
+            printf '### SP1 candidate identity (not a proof or deployment approval)\n\n```json\n' >> "$GITHUB_STEP_SUMMARY"
+            cat target/ci-claim-comparison.json >> "$GITHUB_STEP_SUMMARY"
+            printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  request-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install the validated native Rust toolchain
+        run: rustup toolchain install 1.96.0 --profile minimal
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
       - run: npm ci --no-audit
-        working-directory: .
       - run: npm run check:parity
-        working-directory: .

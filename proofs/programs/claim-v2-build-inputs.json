@@ -1,0 +1,26 @@
+{
+  "manifestVersion": 1,
+  "recordedAt": "2026-09-11",
+  "reviewedProgramManifestSha256": "1ba2200b87c35f3c6687571a94793bf0b447127b591fbbda8ee56ff4c4a36978",
+  "cargoLockSha256": "356e1e66157327daf6763de166dcc8133883d16eaa8a9976ad896a85cfab3939",
+  "lockChange": "The host runner adds serde and the workspace network-request-schema package. No guest dependency version changes.",
+  "legacyRecipeMeasurement": {
+    "platform": "aarch64-apple-darwin",
+    "elfSha256": "708d3adaf02390a4cf7c4601f94fdb80aaf89fdf572f1e4ee514144e28f4058c",
+    "matchesReviewedElf": true
+  },
+  "candidateRecipe": "python3 tools/build-claim-guest.py",
+  "candidateMeasurement": {
+    "platform": "aarch64-apple-darwin",
+    "independentCheckoutDirectories": 2,
+    "elfBytesIdentical": true,
+    "personalBuildPathsPresent": false,
+    "elfSha256": "f5c57fc4b8480943f520d7f6c039b7780119cf807bc1ae1094eb2a3ef931e718",
+    "programVKey": "0x008cf0fb0793dd265f4153c8d5ab804d6951aaaa3e06826c39b5970971df488b",
+    "guestSelfTestCasesPassed": 11,
+    "zkProof": false
+  },
+  "candidateAdmission": "Measurement only. A different candidate key never replaces claim-v2.json or the staged Succinct program.",
+  "linuxMeasurement": "pending CI execution",
+  "productionApproved": false
+}

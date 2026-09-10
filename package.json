@@ -26,7 +26,7 @@
     "check:contracts": "forge fmt --root contracts --check && forge test --root contracts",
     "check:ats": "node scripts/check-ats.mjs",
     "check:evidence": "cargo test --manifest-path proofs/Cargo.toml --locked -p ultratokenizer-pdf-evidence -p ultratokenizer-claim-evidence -p ultratokenizer-claim-runner -p ultratokenizer-pdf-runner --all-targets && cargo clippy --manifest-path proofs/Cargo.toml --locked -p ultratokenizer-pdf-evidence -p ultratokenizer-claim-evidence -p ultratokenizer-claim-runner -p ultratokenizer-pdf-runner --all-targets -- -D warnings && npm run check:enpara",
-    "check:parity": "npm --prefix packages/domain run build && node proofs/tools/check-request-parity.mjs",
+    "check:parity": "cargo +1.96.0 build --manifest-path proofs/Cargo.toml --locked -p ultratokenizer-claim-runner && npm --prefix packages/domain run build && node proofs/tools/check-request-parity.mjs",
     "build:workers": "npm --prefix workers/issuance run build",
     "check": "npm run check:blueprint && npm run check:domain && npm run check:audit && npm run check:issuance && npm run check:institution && npm run check:web && npm run check:workers",
     "check:institution": "npm --prefix packages/institution test",
