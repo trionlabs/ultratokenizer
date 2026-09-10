@@ -8,6 +8,7 @@ use crate::EvidenceError;
 
 const MAX_CMS_BYTES: usize = 64 * 1024;
 const MAX_DER_DEPTH: usize = 16;
+const MAX_REVIEWED_DER_DEPTH: usize = 24;
 const MAX_DER_NODES: usize = 2048;
 const SIGNED_DATA: &[u8] = &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 1, 7, 2];
 const DATA: &[u8] = &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 1, 7, 1];
@@ -16,6 +17,15 @@ const RSA_SHA256: &[u8] = &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 1, 1, 11];
 const SHA256: &[u8] = &[0x60, 0x86, 0x48, 1, 0x65, 3, 4, 2, 1];
 const CONTENT_TYPE: &[u8] = &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 1, 9, 3];
 const MESSAGE_DIGEST: &[u8] = &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 1, 9, 4];
+const ECDSA_SHA384: &[u8] = &[0x2a, 0x86, 0x48, 0xce, 0x3d, 4, 3, 3];
+const SIGNATURE_TIMESTAMP: &[u8] = &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 1, 9, 16, 2, 14];
+const MAX_UNSIGNED_ATTRIBUTES_BYTES: usize = 8 * 1024;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CmsProfile {
+    Strict,
+    ReviewedCades,
+}
 
 struct Element<'a> {
     tag: u8,
@@ -30,8 +40,13 @@ fn require(condition: bool) -> Result<()> {
     condition.then_some(()).ok_or(EvidenceError::InvalidCms)
 }
 
-fn element<'a>(input: &mut &'a [u8], depth: usize, budget: &mut usize) -> Result<Element<'a>> {
-    require(depth <= MAX_DER_DEPTH && *budget > 0)?;
+fn element<'a>(
+    input: &mut &'a [u8],
+    depth: usize,
+    maximum_depth: usize,
+    budget: &mut usize,
+) -> Result<Element<'a>> {
+    require(depth <= maximum_depth && *budget > 0)?;
     *budget -= 1;
     let original = *input;
     let (&tag, rest) = input.split_first().ok_or(EvidenceError::InvalidCms)?;
@@ -61,7 +76,7 @@ fn element<'a>(input: &mut &'a [u8], depth: usize, budget: &mut usize) -> Result
     if tag & 0x20 != 0 {
         let mut remaining = body;
         while !remaining.is_empty() {
-            children.push(element(&mut remaining, depth + 1, budget)?);
+            children.push(element(&mut remaining, depth + 1, maximum_depth, budget)?);
         }
         // Empty SEQUENCEs are unsafe in several upstream extraction paths.
         require(tag != 0x30 || !children.is_empty())?;
@@ -103,6 +118,10 @@ fn positive_integer(value: &Element<'_>) -> Result<()> {
 
 /// Decode exactly the already-validated signature gap, with zero padding only.
 pub(crate) fn decode_and_validate(hex_value: &[u8]) -> Result<Vec<u8>> {
+    decode_profile(hex_value, CmsProfile::Strict)
+}
+
+pub(crate) fn decode_profile(hex_value: &[u8], profile: CmsProfile) -> Result<Vec<u8>> {
     let compact: Vec<u8> = hex_value
         .iter()
         .copied()
@@ -112,13 +131,18 @@ pub(crate) fn decode_and_validate(hex_value: &[u8]) -> Result<Vec<u8>> {
     let raw = hex::decode(compact).map_err(|_| EvidenceError::InvalidCms)?;
     let mut remaining = raw.as_slice();
     let mut budget = MAX_DER_NODES;
-    let root = element(&mut remaining, 0, &mut budget)?;
+    let maximum_depth = if profile == CmsProfile::ReviewedCades {
+        MAX_REVIEWED_DER_DEPTH
+    } else {
+        MAX_DER_DEPTH
+    };
+    let root = element(&mut remaining, 0, maximum_depth, &mut budget)?;
     require(remaining.iter().all(|byte| *byte == 0))?;
-    validate_content(&root, &mut budget)?;
+    validate_content(&root, &mut budget, profile)?;
     Ok(root.encoded.to_vec())
 }
 
-fn validate_content(root: &Element<'_>, budget: &mut usize) -> Result<()> {
+fn validate_content(root: &Element<'_>, budget: &mut usize, profile: CmsProfile) -> Result<()> {
     fields(root, 0x30, 2)?;
     require(oid(&root.children[0], SIGNED_DATA))?;
     let wrapper = &root.children[1];
@@ -142,8 +166,16 @@ fn validate_content(root: &Element<'_>, budget: &mut usize) -> Result<()> {
     fields(&cert[0], 0xa0, 1)?;
     require(cert[0].children[0].tag == 0x02 && cert[0].children[0].body == [2])?;
     positive_integer(&cert[1])?;
-    algorithm(&cert[2], RSA_SHA256)?;
-    algorithm(&certificate.children[1], RSA_SHA256)?;
+    if profile == CmsProfile::ReviewedCades {
+        // This is the CA's signature on the leaf certificate, not the leaf's
+        // signature on the document. The leaf is authorized by an external
+        // SPKI pin. No certificate-chain or timestamp trust is claimed here.
+        algorithm(&cert[2], RSA_SHA256).or_else(|_| algorithm(&cert[2], ECDSA_SHA384))?;
+        require(cert[2].encoded == certificate.children[1].encoded)?;
+    } else {
+        algorithm(&cert[2], RSA_SHA256)?;
+        algorithm(&certificate.children[1], RSA_SHA256)?;
+    }
     require(certificate.children[2].tag == 0x03)?;
     for name in [&cert[3], &cert[5]] {
         require(name.tag == 0x30 && name.children.iter().all(|part| part.tag == 0x31))?;
@@ -166,7 +198,7 @@ fn validate_content(root: &Element<'_>, budget: &mut usize) -> Result<()> {
     let bits = &spki.children[1];
     require(bits.tag == 0x03 && bits.body.first() == Some(&0))?;
     let mut key_bytes = &bits.body[1..];
-    let key = element(&mut key_bytes, 0, budget)?;
+    let key = element(&mut key_bytes, 0, MAX_DER_DEPTH, budget)?;
     require(key_bytes.is_empty())?;
     fields(&key, 0x30, 2)?;
     positive_integer(&key.children[0])?;
@@ -174,7 +206,11 @@ fn validate_content(root: &Element<'_>, budget: &mut usize) -> Result<()> {
 
     fields(&data[4], 0x31, 1)?;
     let signer = &data[4].children[0];
-    fields(signer, 0x30, 6)?;
+    if profile == CmsProfile::ReviewedCades {
+        require(signer.tag == 0x30 && (6..=7).contains(&signer.children.len()))?;
+    } else {
+        fields(signer, 0x30, 6)?;
+    }
     let info = &signer.children;
     require(info[0].tag == 0x02 && info[0].body == [1])?;
     fields(&info[1], 0x30, 2)?;
@@ -205,5 +241,17 @@ fn validate_content(root: &Element<'_>, budget: &mut usize) -> Result<()> {
     }
     require(content_type && message_digest)?;
     algorithm(&info[4], RSA).or_else(|_| algorithm(&info[4], RSA_SHA256))?;
-    require(info[5].tag == 0x04 && info[5].body.len() == 256)
+    require(info[5].tag == 0x04 && info[5].body.len() == 256)?;
+    if let Some(unsigned) = info.get(6) {
+        // The nested timestamp token is bounded DER but intentionally untrusted.
+        // It cannot supply amount, holder, expiry, signer authority or freshness.
+        fields(unsigned, 0xa1, 1)?;
+        require(unsigned.encoded.len() <= MAX_UNSIGNED_ATTRIBUTES_BYTES)?;
+        let attribute = &unsigned.children[0];
+        fields(attribute, 0x30, 2)?;
+        require(oid(&attribute.children[0], SIGNATURE_TIMESTAMP))?;
+        fields(&attribute.children[1], 0x31, 1)?;
+        require(attribute.children[1].children[0].tag == 0x30)?;
+    }
+    Ok(())
 }

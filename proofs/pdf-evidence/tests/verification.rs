@@ -1,5 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
+use sha2::{Digest, Sha256};
+use ultratokenizer_pdf_evidence::reviewed_revision::{verify_reviewed_revision, ApprovedRevision};
 use ultratokenizer_pdf_evidence::{verify_pdf, EvidenceError, MAX_PDF_BYTES};
 
 const PDF: &[u8] = include_bytes!("../fixtures/statement.synthetic.pdf");
@@ -325,4 +327,137 @@ fn rejects_unsupported_and_oversized_inputs_without_echoing_content() {
     let error = verify_pdf(b"confidential document contents", &signer()).unwrap_err();
     assert_eq!(error, EvidenceError::UnsupportedPdf);
     assert!(!error.to_string().contains("confidential"));
+}
+
+fn approval(pdf: &[u8], signed_revision_bytes: usize) -> ApprovedRevision {
+    ApprovedRevision {
+        full_document_sha256: Sha256::digest(pdf).into(),
+        signed_revision_bytes,
+        signer_fingerprint: signer(),
+    }
+}
+
+#[test]
+fn reviewed_revision_requires_exact_complete_file_approval_and_returns_only_signed_prefix() {
+    let mut complete = PDF.to_vec();
+    complete.extend_from_slice(b"\n9 0 obj << /Later (Untrusted metadata) >> endobj\n%%EOF\n");
+    // The approval in this unit test stands for a separately authenticated
+    // institutional policy. Computing one's own hash does not confer authority.
+    let policy = approval(&complete, PDF.len());
+    let result = verify_reviewed_revision(&complete, &policy).unwrap();
+    assert_eq!(result.revision_bytes(), PDF);
+    assert_eq!(result.full_document_sha256(), policy.full_document_sha256);
+    assert_eq!(result.evidence().profile_version, 2);
+    assert_eq!(
+        result.evidence().signed_digest.as_slice(),
+        expected("signedDigest")
+    );
+    *complete.last_mut().unwrap() = b' ';
+    assert!(matches!(
+        verify_reviewed_revision(&complete, &policy),
+        Err(EvidenceError::RevisionNotApproved)
+    ));
+    assert!(matches!(
+        verify_reviewed_revision(PDF, &approval(PDF, PDF.len() - 1)),
+        Err(EvidenceError::InvalidByteRange)
+    ));
+    for length in [0, PDF.len() + 1] {
+        assert!(matches!(
+            verify_reviewed_revision(PDF, &approval(PDF, length)),
+            Err(EvidenceError::RevisionNotApproved)
+        ));
+    }
+}
+
+#[test]
+fn reviewed_cades_allows_opaque_timestamp_metadata_without_trusting_it() {
+    let (cms, _) = signature_validator::signed_bytes_extractor::get_signature_der(PDF).unwrap();
+    fn unsigned_timestamp() -> Vec<u8> {
+        let id = der(0x06, &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 1, 9, 16, 2, 14]);
+        // Deliberately not a valid timestamp: no timestamp guarantee is made.
+        let opaque = der(0x31, &der(0x30, &der(0x02, &[1])));
+        der(0xa1, &der(0x30, &[id, opaque].concat()))
+    }
+    let with_timestamp = rewrite_der(&cms, &[1, 0, 4, 0], |body| {
+        [body, &unsigned_timestamp()].concat()
+    });
+    let pdf = replace_cms(&with_timestamp);
+    let policy = approval(&pdf, pdf.len());
+    assert!(verify_reviewed_revision(&pdf, &policy).is_ok());
+    assert_eq!(verify_pdf(&pdf, &signer()), Err(EvidenceError::InvalidCms));
+
+    let with_duplicate = rewrite_der(&cms, &[1, 0, 4, 0], |body| {
+        [body, &unsigned_timestamp(), &unsigned_timestamp()].concat()
+    });
+    let pdf = replace_cms(&with_duplicate);
+    assert!(matches!(
+        verify_reviewed_revision(&pdf, &approval(&pdf, pdf.len())),
+        Err(EvidenceError::InvalidCms)
+    ));
+}
+
+#[test]
+fn reviewed_cades_distinguishes_ca_signature_from_pinned_rsa_document_key() {
+    let (cms, _) = signature_validator::signed_bytes_extractor::get_signature_der(PDF).unwrap();
+    let modified = rewrite_der(&cms, &[1, 0, 3, 0, 0, 2], |_| {
+        der(0x06, &[0x2a, 0x86, 0x48, 0xce, 0x3d, 4, 3, 3])
+    });
+    let modified = rewrite_der(&modified, &[1, 0, 3, 0, 1], |_| {
+        der(0x06, &[0x2a, 0x86, 0x48, 0xce, 0x3d, 4, 3, 3])
+    });
+    // Changing this synthetic certificate invalidates its issuer signature.
+    // The document signature remains valid under the same independently pinned
+    // RSA leaf. This primitive deliberately does not validate a PKI chain.
+    let pdf = replace_cms(&modified);
+    assert!(verify_reviewed_revision(&pdf, &approval(&pdf, pdf.len())).is_ok());
+    assert_eq!(verify_pdf(&pdf, &signer()), Err(EvidenceError::InvalidCms));
+    let mut wrong = approval(&pdf, pdf.len());
+    wrong.signer_fingerprint = [0x55; 32];
+    assert!(matches!(
+        verify_reviewed_revision(&pdf, &wrong),
+        Err(EvidenceError::SignerNotAllowed)
+    ));
+    let modified = rewrite_der(&modified, &[1, 0, 4, 0, 3], |body| [body, body].concat());
+    let pdf = replace_cms(&modified);
+    assert!(matches!(
+        verify_reviewed_revision(&pdf, &approval(&pdf, pdf.len())),
+        Err(EvidenceError::InvalidCms)
+    ));
+}
+
+#[test]
+fn reviewed_cades_keeps_signature_checks_and_unsigned_metadata_bounds() {
+    let forged = replace_once(PDF, b"Balance: 10000", b"Balance: 90000");
+    assert!(matches!(
+        verify_reviewed_revision(&forged, &approval(&forged, forged.len())),
+        Err(EvidenceError::InvalidSignature)
+    ));
+    let (cms, _) = signature_validator::signed_bytes_extractor::get_signature_der(PDF).unwrap();
+    let nested = rewrite_der(&cms, &[1, 0, 4, 0], |body| {
+        let mut opaque = der(0x02, &[1]);
+        for _ in 0..32 {
+            opaque = der(0x30, &opaque);
+        }
+        let id = der(0x06, &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 1, 9, 16, 2, 14]);
+        [
+            body,
+            &der(0xa1, &der(0x30, &[id, der(0x31, &opaque)].concat())),
+        ]
+        .concat()
+    });
+    let pdf = replace_cms(&nested);
+    assert!(matches!(
+        verify_reviewed_revision(&pdf, &approval(&pdf, pdf.len())),
+        Err(EvidenceError::InvalidCms)
+    ));
+    let unknown = rewrite_der(&cms, &[1, 0, 4, 0], |body| {
+        let id = der(0x06, &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 1, 9, 16, 2, 15]);
+        let value = der(0x31, &der(0x30, &der(0x02, &[1])));
+        [body, &der(0xa1, &der(0x30, &[id, value].concat()))].concat()
+    });
+    let pdf = replace_cms(&unknown);
+    assert!(matches!(
+        verify_reviewed_revision(&pdf, &approval(&pdf, pdf.len())),
+        Err(EvidenceError::InvalidCms)
+    ));
 }

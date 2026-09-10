@@ -1,5 +1,6 @@
 use sp1_sdk::{Elf, Prover, ProverClient, SP1Stdin};
 use std::{env, fs::File, io::Read, process::ExitCode};
+use ultratokenizer_pdf_evidence::reviewed_revision::{verify_reviewed_revision, ApprovedRevision};
 use ultratokenizer_pdf_evidence::{verify_pdf, EvidenceInput, MAX_PDF_BYTES};
 
 fn read_bounded(path: &str, maximum: usize) -> Result<Vec<u8>, &'static str> {
@@ -33,12 +34,44 @@ async fn execute(elf: Elf, input: &EvidenceInput) -> Result<(Vec<u8>, u64, u64),
 
 async fn run() -> Result<(), &'static str> {
     let arguments: Vec<String> = env::args().skip(1).collect();
+    if arguments.len() == 5 && arguments[0] == "reviewed-native" {
+        let mut signer_fingerprint = [0; 32];
+        let mut full_document_sha256 = [0; 32];
+        hex::decode_to_slice(&arguments[2], &mut signer_fingerprint)
+            .map_err(|_| "Invalid signer fingerprint.")?;
+        hex::decode_to_slice(&arguments[3], &mut full_document_sha256)
+            .map_err(|_| "Invalid complete-document digest.")?;
+        let signed_revision_bytes = arguments[4]
+            .parse::<usize>()
+            .map_err(|_| "Invalid signed revision length.")?;
+        let pdf = read_bounded(&arguments[1], MAX_PDF_BYTES)?;
+        verify_reviewed_revision(
+            &pdf,
+            &ApprovedRevision {
+                signer_fingerprint,
+                full_document_sha256,
+                signed_revision_bytes,
+            },
+        )
+        .map_err(|_| "Selected PDF revision did not pass native verification.")?;
+        // No private text, digest or filename is printed. The CLI accepts policy
+        // inputs for diagnostics; it does not authenticate their approval.
+        println!(
+            "{}",
+            serde_json::json!({
+                "status":"selected_revision_signature_verified", "execution":"native", "zkProof":false,
+                "institutionalApprovalVerified":false, "quantityExtracted":false,
+                "certificateChainVerified":false, "timestampVerified":false,
+            })
+        );
+        return Ok(());
+    }
     if arguments.len() == 2 && arguments[0] == "self-test" {
         return self_test(Elf::from(read_bounded(&arguments[1], 32 * 1024 * 1024)?)).await;
     }
     if arguments.len() != 4 || arguments[0] != "execute" {
         return Err(
-            "Usage: pdf-runner execute <elf> <pdf> <approved-spki-sha256-hex> | self-test <elf>",
+            "Usage: pdf-runner execute <elf> <pdf> <approved-spki-sha256-hex> | self-test <elf> | reviewed-native <pdf> <approved-spki-sha256-hex> <approved-full-document-sha256-hex> <approved-signed-revision-length>",
         );
     }
     let elf = Elf::from(read_bounded(&arguments[1], 32 * 1024 * 1024)?);

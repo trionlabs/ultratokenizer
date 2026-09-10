@@ -6,6 +6,7 @@
 
 mod cms;
 mod coverage;
+pub mod reviewed_revision;
 
 use rsa::{pkcs8::EncodePublicKey, RsaPublicKey};
 use serde::{Deserialize, Serialize};
@@ -43,6 +44,7 @@ pub enum EvidenceError {
     UnsupportedAlgorithm,
     SignerNotAllowed,
     InvalidSignature,
+    RevisionNotApproved,
 }
 
 impl fmt::Display for EvidenceError {
@@ -58,6 +60,9 @@ impl fmt::Display for EvidenceError {
             Self::UnsupportedAlgorithm => "Only RSA-2048/SHA-256 with exponent 65537 is supported.",
             Self::SignerNotAllowed => "The signer does not match the approved fingerprint.",
             Self::InvalidSignature => "The document signature or signed digest is invalid.",
+            Self::RevisionNotApproved => {
+                "The complete document or selected revision is not approved."
+            }
         })
     }
 }
@@ -92,8 +97,26 @@ pub fn verify_pdf(
     pdf: &[u8],
     approved_signer: &SignerFingerprint,
 ) -> Result<VerifiedEvidence, EvidenceError> {
+    verify_covered_pdf(
+        pdf,
+        approved_signer,
+        cms::CmsProfile::Strict,
+        PROFILE_VERSION,
+    )
+}
+
+fn verify_covered_pdf(
+    pdf: &[u8],
+    approved_signer: &SignerFingerprint,
+    profile: cms::CmsProfile,
+    profile_version: u32,
+) -> Result<VerifiedEvidence, EvidenceError> {
     let coverage = coverage::validate(pdf)?;
-    let cms = cms::decode_and_validate(&pdf[coverage.gap_start + 1..coverage.gap_end - 1])?;
+    let cms_bytes = &pdf[coverage.gap_start + 1..coverage.gap_end - 1];
+    let cms = match profile {
+        cms::CmsProfile::Strict => cms::decode_and_validate(cms_bytes)?,
+        cms::CmsProfile::ReviewedCades => cms::decode_profile(cms_bytes, profile)?,
+    };
     let parameters = parse_signed_data(&cms).map_err(|_| EvidenceError::InvalidCms)?;
 
     if parameters.algorithm != SignatureAlgorithm::Sha256WithRsaEncryption {
@@ -137,7 +160,7 @@ pub fn verify_pdf(
     }
 
     Ok(VerifiedEvidence {
-        profile_version: PROFILE_VERSION,
+        profile_version,
         signer_fingerprint,
         signed_digest,
     })
