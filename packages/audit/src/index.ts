@@ -22,3 +22,4 @@ export type {
   ProofVerificationAdapter,
 } from './audit.js';
 export { ISSUED_EVENT_ABI, getExpectedIssuedEvent } from './issued-event.js';
+export { createRpcProofVerifier } from './rpc-proof-verifier.js';

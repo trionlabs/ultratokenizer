@@ -254,6 +254,10 @@ export async function auditIssuanceReceipt(
       'Actual mint adapter execution and token supply/recipient balance effects are unknown.',
     ],
     [
+      'historical_token_configuration',
+      'Token backend, implementation links, supply roles and transfer configuration at execution have not been independently authenticated. Current deployment checks cannot establish historical state.',
+    ],
+    [
       'replay_accounting',
       'Request, claim, holder nonce and permit nonce consumption at execution are unknown.',
     ],

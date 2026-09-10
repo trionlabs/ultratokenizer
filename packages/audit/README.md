@@ -1,8 +1,8 @@
 # Portable issuance audit
 
-A standalone, read-only library and command for exported issuance bundles. It uses the canonical request and issuer-permit definitions in `packages/domain` and the seven-word claim / `Issued` event layout in `contracts/src/IssuanceGate.sol`. It never calls the application API or a chain endpoint.
+A standalone, read-only library and command for exported issuance bundles. It uses the canonical request and issuer-permit definitions in `packages/domain` and the seven-word claim / `Issued` event layout in `contracts/src/IssuanceGate.sol`. The offline core and CLI never call the application API or a chain endpoint. The separately configured `createRpcProofVerifier` adapter can explicitly check public proof bytes against the caller-pinned verifier over RPC.
 
-This format is **`ultratokenizer.issuance-receipt.v1`**, distinct from the browser preview's **`ultratokenizer.sample-receipt.v1`**. The existing browser verifier continues to support sample receipts only. No real proof, deployment or issuance is implied by creating a bundle.
+The current product and browser verifier accept **`ultratokenizer.issuance-receipt.v1`** with a separately supplied trust policy. Historical **`ultratokenizer.sample-receipt.v1`** payloads are rejected. No real proof, deployment or issuance is implied by creating a bundle.
 
 ## Build and run
 
@@ -93,7 +93,7 @@ The adapter is trusted executable code installed/configured by the caller; its i
 
 ## Evidence that remains missing
 
-Offline output remains `complete: false`, including after an explicit proof adapter succeeds. Transaction inclusion/success/finality, historical issuer/source/program/policy/rights state, reservation capacity and consumption, mint/supply effects, replay/nonce accounting, execution time, current revocation and account-code / ERC-1271 state are unverified.
+Offline output remains `complete: false`, including after an explicit proof adapter succeeds. Transaction inclusion/success/finality, historical issuer/source/program/policy/rights state, reservation capacity and consumption, mint/supply effects, historical token implementation/roles/configuration, replay/nonce accounting, execution time, current revocation and account-code / ERC-1271 state are unverified.
 
 Cryptographic and chain checks cannot themselves establish physical custody, document-subject identity, exclusive real-world reserves, or enforceable redemption. Those trust questions remain explicit limitations.
 

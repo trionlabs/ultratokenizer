@@ -124,6 +124,7 @@ await test('genuine EOA signatures and bindings verify while offline assurance r
     'historical_registry',
     'historical_reservation',
     'historical_supply',
+    'historical_token_configuration',
     'replay_accounting',
     'execution_time',
     'current_revocation',
@@ -328,6 +329,8 @@ await test('proof adapters require exact outer verifier identity and never compl
     proofVerifier: adapter,
   });
   assert.equal(status(checked, 'proof_cryptography'), 'verified');
+  assert.equal(status(checked, 'historical_token_configuration'), 'unverified');
+  assert.ok(checked.missingEvidence.includes('historical_token_configuration'));
   assert.equal(checked.status, 'incomplete');
   assert.equal(checked.complete, false);
   assert.equal(calls, 1);
@@ -455,4 +458,123 @@ await test('CLI is truthful by default, strict incomplete exits 2, invalid exits
   assert.equal(invalid.stderr, '');
   await writeFile(receiptPath, Buffer.from([0xff, 0xff]));
   assert.equal(JSON.parse(run().stdout).error.code, 'unreadable');
+});
+
+await test('RPC proof checks distinguish explicit rejection from server failure and unstable chain views', async (t) => {
+  const { createRpcProofVerifier } =
+    await import('../src/rpc-proof-verifier.js');
+  const code = '0x6000';
+  const rpcPolicy = { ...policy, verifierCodeHash: keccak256(code) };
+  for (const scenario of [
+    'revert',
+    'internal',
+    'transport',
+    'reorg',
+    'wrong-code',
+    'wrong-chain',
+    'hedera-contract-execution-exception',
+    'hedera-insufficient-gas',
+  ] as const) {
+    await t.test(scenario, async (subtest) => {
+      let blockReads = 0;
+      let proofCalls = 0;
+      subtest.mock.method(
+        globalThis,
+        'fetch',
+        async (_input: unknown, init?: { body?: unknown }) => {
+          const call = JSON.parse(String(init?.body));
+          let result: unknown;
+          let error: unknown;
+          let httpStatus = 200;
+          if (call.method === 'eth_chainId')
+            result = scenario === 'wrong-chain' ? '0x127' : '0x128';
+          else if (call.method === 'eth_getBlockByNumber') {
+            blockReads++;
+            result = {
+              number: '0x1',
+              hash: bytes32(
+                scenario === 'reorg' && blockReads > 1 ? '02' : '01',
+              ),
+              timestamp: '0x60000000',
+              transactions: [],
+            };
+          } else if (call.method === 'eth_getCode') {
+            assert.equal(
+              call.params[1],
+              '0x1',
+              'runtime must use the selected block',
+            );
+            result = scenario === 'wrong-code' ? '0x6001' : code;
+          } else if (call.method === 'eth_call') {
+            proofCalls++;
+            assert.equal(
+              call.params[1],
+              '0x1',
+              'proof must use the same block as runtime',
+            );
+            if (scenario === 'transport')
+              throw new Error('transport unavailable');
+            if (scenario === 'internal')
+              error = {
+                code: -32603,
+                message: 'backend temporarily unavailable',
+              };
+            else if (
+              scenario === 'hedera-contract-execution-exception' ||
+              scenario === 'hedera-insufficient-gas'
+            ) {
+              // Local fixtures of the observed Hedera relay HTTP 400 shape.
+              // Neither a generic execution exception nor a gas failure proves rejection.
+              httpStatus = 400;
+              const exception =
+                scenario === 'hedera-contract-execution-exception'
+                  ? 'CONTRACT_EXECUTION_EXCEPTION'
+                  : 'INSUFFICIENT_GAS';
+              error = {
+                code: -32000,
+                message: `[Request ID: 00000000-0000-4000-8000-000000000001] Error occurred during transaction simulation: ${exception}`,
+              };
+            } else
+              error = {
+                code: 3,
+                message: 'execution reverted',
+                data: '0xdeadbeef',
+              };
+          } else throw new Error(`Unexpected RPC method ${call.method}`);
+          return new Response(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: call.id,
+              ...(error ? { error } : { result }),
+            }),
+            {
+              status: httpStatus,
+              headers: { 'content-type': 'application/json' },
+            },
+          );
+        },
+      );
+      const adapter = createRpcProofVerifier({
+        policy: rpcPolicy,
+        rpcUrl: 'http://127.0.0.1:12345',
+      });
+      const report = await auditIssuanceReceipt(text, rpcPolicy, {
+        proofVerifier: adapter,
+      });
+      assert.equal(
+        status(report, 'proof_cryptography'),
+        scenario === 'revert' ? 'failed' : 'unverified',
+      );
+      assert.equal(
+        report.status,
+        scenario === 'revert' ? 'invalid' : 'incomplete',
+      );
+      assert.equal(report.complete, false);
+      assert.equal(status(report, 'transaction_inclusion'), 'unverified');
+      assert.equal(
+        proofCalls,
+        ['wrong-code', 'wrong-chain'].includes(scenario) ? 0 : 1,
+      );
+    });
+  }
 });
