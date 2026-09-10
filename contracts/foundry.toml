@@ -11,3 +11,14 @@ via_ir = true
 
 [fuzz]
 runs = 256
+
+# Preserve the exact reviewed upstream verifier sources and their checksums.
+[fmt]
+ignore = ["src/vendor/**"]
+
+# Optional profile for Hedera deploy commands. It inherits everything from
+# [profile.default]; pass the relay URL and signer at the command line:
+#   forge script script/DeployIssuance.s.sol --root contracts \
+#     --rpc-url "$HEDERA_RPC_URL" --broadcast --private-key "$DEPLOYER_KEY" --profile hedera
+[profile.hedera]
+evm_version = "paris"
