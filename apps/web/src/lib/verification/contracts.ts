@@ -2,6 +2,7 @@ import type {
   AuditReport,
   IssuanceReceipt,
 } from '../../../../../packages/audit/src/index.js';
+import { browserRpcMessage, parseBrowserRpcUrl } from '../browser-rpc.ts';
 
 // Preflight bounds mirror the audit parser; the worker rechecks them before parsing.
 export const MAX_RECEIPT_BYTES = 256 * 1024;
@@ -13,7 +14,7 @@ export const verificationMessages = {
   invalid_receipt:
     'The issuance receipt is invalid or unsupported. Sample receipts are not accepted.',
   invalid_policy: 'The independent caller trust policy is missing or invalid.',
-  invalid_rpc: 'Use an explicit HTTPS RPC URL, or HTTP on localhost.',
+  invalid_rpc: browserRpcMessage,
   unavailable:
     'The verification worker could not start. This browser cannot verify the receipt right now.',
   timeout:
@@ -77,19 +78,7 @@ export function checkPayloadSize(text: string, policyText: string): void {
 export function checkRpcUrl(value: string | undefined): void {
   if (value === undefined) return;
   try {
-    if (typeof value !== 'string' || value.length > 2048) throw new Error();
-    const url = new URL(value);
-    if (
-      url.username ||
-      url.password ||
-      url.hash ||
-      (url.protocol !== 'https:' &&
-        !(
-          url.protocol === 'http:' &&
-          ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
-        ))
-    )
-      throw new Error();
+    parseBrowserRpcUrl(value);
   } catch {
     throw new VerificationError('invalid_rpc');
   }

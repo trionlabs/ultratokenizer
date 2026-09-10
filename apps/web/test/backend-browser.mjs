@@ -183,23 +183,11 @@ try {
     ),
   );
   assert.deepEqual(await page.evaluate(() => window.walletCalls), []);
-  // Existing optional web fonts remain blocked. They do not carry imported data;
-  // any other external request or non-GET request fails this import-only test.
-  assert.deepEqual(
-    blockedRequests.filter(
-      (request) =>
-        request.origin !== 'https://fonts.googleapis.com' ||
-        request.pathname !== '/css2' ||
-        request.method !== 'GET' ||
-        request.type !== 'stylesheet',
-    ),
-    [],
-  );
+  assert.deepEqual(blockedRequests, []);
   assert.deepEqual(errors, []);
   console.log(
     'Backend browser checks passed: empty, invalid ATS, v1 HTS, v2 HTS, ATS imports; no RPC or wallet calls.',
   );
-  console.log(`Blocked optional font stylesheets: ${blockedRequests.length}.`);
   for (const start of ['unknown', 'unresolved']) {
     for (const outcome of ['confirmed', 'reverted']) {
       await exerciseIssuanceRecovery({

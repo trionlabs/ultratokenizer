@@ -1,3 +1,4 @@
+import { parseVerificationResult } from './reply';
 import {
   checkPayloadSize,
   checkRpcUrl,
@@ -67,41 +68,38 @@ export function createWorkerVerifier(
         cancel = abort;
         options.signal?.addEventListener('abort', abort, { once: true });
         worker.onmessage = (event) => {
-          const reply = event.data as Partial<VerificationReply> | null;
-          if (!reply || typeof reply !== 'object') {
+          try {
+            const reply = event.data as Partial<VerificationReply> | null;
+            if (!reply || typeof reply !== 'object') {
+              finish('failed');
+              return;
+            }
+            if (reply.id !== id) return;
+            if (reply.ok === false) {
+              finish(
+                [
+                  'invalid_receipt',
+                  'invalid_policy',
+                  'invalid_rpc',
+                  'too_large',
+                ].includes(reply.code ?? '')
+                  ? reply.code
+                  : 'failed',
+              );
+            } else if (reply.ok === true) {
+              finish(
+                undefined,
+                parseVerificationResult(
+                  reply.result,
+                  text,
+                  options.rpcUrl ? 'rpc' : 'offline',
+                ),
+              );
+            } else finish('failed');
+          } catch {
+            // A malformed reply must settle this job instead of escaping an event handler.
             finish('failed');
-            return;
           }
-          if (reply.id !== id) return; // Correlate even if a superseded worker was already posting.
-          if (reply.ok === false) {
-            finish(
-              [
-                'invalid_receipt',
-                'invalid_policy',
-                'invalid_rpc',
-                'too_large',
-              ].includes(reply.code ?? '')
-                ? reply.code
-                : 'failed',
-            );
-          } else if (
-            reply.ok === true &&
-            reply.result?.execution === 'dedicated-worker' &&
-            reply.result.receipt?.format ===
-              'ultratokenizer.issuance-receipt.v1' &&
-            reply.result.report?.format === 'ultratokenizer.audit-report.v1' &&
-            reply.result.report.complete === false &&
-            ['invalid', 'incomplete'].includes(reply.result.report.status) &&
-            Array.isArray(reply.result.report.checks) &&
-            reply.result.report.checks.every((check) =>
-              ['verified', 'failed', 'unverified'].includes(check.status),
-            ) &&
-            Array.isArray(reply.result.report.missingEvidence) &&
-            Array.isArray(reply.result.report.limitations) &&
-            reply.result.mode === (options.rpcUrl ? 'rpc' : 'offline')
-          ) {
-            finish(undefined, reply.result);
-          } else finish('failed');
         };
         worker.onerror = (event) => {
           event.preventDefault();

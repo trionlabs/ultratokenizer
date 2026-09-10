@@ -243,16 +243,11 @@ export async function exerciseIssuanceRecovery({
     }
     if (url.origin === base.origin && rpcRequest.method() === 'GET')
       return route.continue();
-    if (!(
-      url.origin === 'https://fonts.googleapis.com' &&
-      url.pathname === '/css2' &&
-      rpcRequest.method() === 'GET'
-    ))
-      unexpectedRequests.push({
-        origin: url.origin,
-        path: url.pathname,
-        method: rpcRequest.method(),
-      });
+    unexpectedRequests.push({
+      origin: url.origin,
+      path: url.pathname,
+      method: rpcRequest.method(),
+    });
     await route.abort();
   });
   await page.addInitScript(
@@ -383,6 +378,17 @@ export async function exerciseIssuanceRecovery({
           : 'Reconcile recovered issuance hash',
       exact: true,
     });
+    for (const malformed of ['0x1234', `0x${'00'.repeat(32)}`]) {
+      const readCount = rpcCalls.length;
+      await input.fill(malformed);
+      await reconcile.click();
+      await expect(
+        page.locator('.issuance-controls .inline-error'),
+      ).toContainText('full nonzero 32-byte transaction hash');
+      assert.equal(rpcCalls.length, readCount);
+      if (start === 'unknown') await expect(transaction).toHaveCount(0);
+      else await expect(transaction).toContainText(originalHash);
+    }
     await input.fill(badHash);
     await reconcile.click();
     await expect(reconcile).toBeEnabled();

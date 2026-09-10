@@ -157,16 +157,11 @@ export async function exerciseTokenRecovery({
       await route.continue();
       return;
     }
-    if (!(
-      url.origin === 'https://fonts.googleapis.com' &&
-      url.pathname === '/css2' &&
-      request.method() === 'GET'
-    ))
-      unexpectedRequests.push({
-        origin: url.origin,
-        path: url.pathname,
-        method: request.method(),
-      });
+    unexpectedRequests.push({
+      origin: url.origin,
+      path: url.pathname,
+      method: request.method(),
+    });
     await route.abort();
   });
   await page.addInitScript(
@@ -266,6 +261,22 @@ export async function exerciseTokenRecovery({
     assert.equal(beforeRecovery.sends.length, 1);
     assert.equal(beforeRecovery.sends[0].data, callData);
     assert.equal(beforeRecovery.sends[0].nonce, '0x7');
+    for (const malformed of ['0x1234', `0x${'00'.repeat(32)}`]) {
+      const readCount = rpcCalls.length;
+      await page
+        .getByLabel('Transaction hash from wallet', { exact: true })
+        .fill(malformed);
+      await page
+        .getByRole('button', { name: 'Reconcile wallet hash', exact: true })
+        .click();
+      await expect(
+        page.locator('.issuance-controls .inline-error'),
+      ).toContainText('full nonzero 32-byte transaction hash');
+      assert.equal(rpcCalls.length, readCount);
+      await expect(
+        page.getByRole('region', { name: 'Unknown wallet outcome' }),
+      ).toBeVisible();
+    }
     await page
       .getByLabel('Transaction hash from wallet', { exact: true })
       .fill(badHash);

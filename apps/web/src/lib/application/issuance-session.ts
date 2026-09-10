@@ -1,9 +1,11 @@
 import type { EIP1193Provider, Hex } from 'viem';
+import { parseBrowserRpcUrl } from '../browser-rpc';
 import {
   createIssuanceClient,
   parseDeploymentConfig,
   getTokenBackend,
   parseIssuanceBundle,
+  parseTransactionHash,
   assertBundleDeployment,
   IssuanceClientError,
   type IssuanceClient,
@@ -242,6 +244,7 @@ export function createIssuanceSession(
     loadDeployment(text: string) {
       canReplace();
       const deployment = parseDeploymentConfig(text);
+      parseBrowserRpcUrl(deployment.rpcUrl);
       client = undefined;
       tokenAttempted = undefined;
       resetChecks();
@@ -258,8 +261,14 @@ export function createIssuanceSession(
       canReplace();
       const bundle = parseIssuanceBundle(text);
       if (state.deployment) assertBundleDeployment(bundle, state.deployment);
+      tokenAttempted = undefined;
       resetChecks();
-      update({ bundle });
+      update({
+        bundle,
+        tokenTransaction: undefined,
+        tokenIntent: undefined,
+        balanceMg: undefined,
+      });
     },
     disclose(value: boolean) {
       if (!state.busy) update({ disclosed: value });
@@ -332,14 +341,12 @@ export function createIssuanceSession(
           !(
             state.unknownSubmission === 'issuance' ||
             state.transaction?.outcome === 'unresolved'
-          ) ||
-          !/^0x[0-9a-fA-F]{64}$/.test(hash) ||
-          /^0x0+$/.test(hash)
+          )
         )
           throw new Error(
             'Use the transaction hash from the wallet that submitted this request.',
           );
-        const candidate = hash.toLowerCase() as Hex;
+        const candidate = parseTransactionHash(hash);
         // Keep the original reference until the captured reader authenticates this call.
         try {
           const receipt = await attempt.client.wait(
@@ -437,14 +444,12 @@ export function createIssuanceSession(
           !(
             state.unknownSubmission === attempt.intent.kind ||
             state.tokenTransaction?.outcome === 'unresolved'
-          ) ||
-          !/^0x[0-9a-fA-F]{64}$/.test(hash) ||
-          /^0x0+$/.test(hash)
+          )
         )
           throw new Error(
             'Use the transaction hash from the wallet that submitted this token action.',
           );
-        const candidate = hash.toLowerCase() as Hex;
+        const candidate = parseTransactionHash(hash);
         // A bad recovery hash cannot replace the original reference or intent.
         try {
           await attempt.client.waitTokenTransaction(candidate, attempt.intent);

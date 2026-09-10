@@ -13,8 +13,8 @@ export default {
         'script-src': ['self'],
         'script-src-attr': ['none'],
         // Orbit uses reactive CSS custom properties and Svelte-managed styles.
-        'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
-        'font-src': ['self', 'https://fonts.gstatic.com'],
+        'style-src': ['self', 'unsafe-inline'],
+        'font-src': ['self'],
         'img-src': ['self', 'data:'],
         // RPC origins are explicit user imports, never supplied by a receipt.
         'connect-src': [
@@ -22,7 +22,6 @@ export default {
           'https:',
           'http://localhost:*',
           'http://127.0.0.1:*',
-          'http://[::1]:*',
         ],
         'worker-src': ['self'],
         'object-src': ['none'],

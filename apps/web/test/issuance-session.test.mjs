@@ -75,6 +75,22 @@ async function ready(session) {
   await session.simulate();
 }
 
+test('browser deployment rejects HTTP IPv6 before replacing the imported session', async () => {
+  const fixture = await createFixture();
+  const { session, calls } = harness(fixture);
+  const previous = session.read();
+  assert.throws(
+    () =>
+      session.loadDeployment(
+        JSON.stringify({ ...fixture.deployment, rpcUrl: 'http://[::1]:8545/' }),
+      ),
+    /Use HTTPS, or HTTP at localhost or 127\.0\.0\.1\./,
+  );
+  assert.equal(session.read(), previous);
+  assert.deepEqual(calls, []);
+  session.dispose();
+});
+
 test('no default inputs or successful states; signing and submission require prior real client outcomes', async () => {
   const empty = createIssuanceSession(() => {
     throw new Error('must not create a default client');
@@ -753,3 +769,70 @@ test('token actions require a displayed wallet and wait for unresolved issuance'
   await session.transfer(fixture.policy.issuerAddress, '125');
   assert.equal(calls.includes('prepare-token'), false);
 });
+
+for (const kind of ['issuance', 'transfer', 'association']) {
+  test(`${kind} malformed recovery hashes get specific guidance without reading or changing the attempt`, async () => {
+    const fixture = await createFixture();
+    let reads = 0;
+    const { session } = harness(fixture, {
+      submit: async () => {
+        throw new IssuanceClientError('transaction_uncertain');
+      },
+      sendTokenTransaction: async () => {
+        throw new IssuanceClientError('transaction_uncertain');
+      },
+      wait: async () => {
+        reads++;
+        return fixture.receipt;
+      },
+      waitTokenTransaction: async () => {
+        reads++;
+      },
+    });
+    if (kind === 'issuance') {
+      await ready(session);
+      await session.submit();
+    } else {
+      await session.connect();
+      if (kind === 'transfer')
+        await session.transfer(fixture.policy.issuerAddress, '125');
+      else await session.associate();
+    }
+    const prior = session.read();
+    for (const hash of ['0x1234', `0x${'00'.repeat(32)}`, '', null, {}]) {
+      if (kind === 'issuance') await session.recoverIssuanceHash(hash);
+      else await session.recoverTokenHash(hash);
+      assert.match(
+        session.read().error,
+        /full nonzero 32-byte transaction hash/,
+      );
+      assert.equal(session.read().unknownSubmission, prior.unknownSubmission);
+      assert.equal(session.read().transaction, prior.transaction);
+      assert.equal(session.read().tokenIntent, prior.tokenIntent);
+    }
+    assert.equal(reads, 0);
+  });
+}
+
+for (const outcome of ['confirmed', 'reverted']) {
+  test(`reimporting a bundle clears ${outcome} token status and its retained intent`, async () => {
+    const fixture = await createFixture();
+    const { session } = harness(fixture, {
+      waitTokenTransaction: async () => {
+        if (outcome === 'reverted')
+          throw new IssuanceClientError('transaction_reverted');
+      },
+    });
+    await session.connect();
+    await session.transfer(fixture.policy.issuerAddress, '125');
+    await session.confirmToken();
+    assert.equal(session.read().tokenTransaction.outcome, outcome);
+    // Even reimporting the same bundle starts a new presentation session.
+    session.loadBundle(JSON.stringify(fixture.bundle));
+    assert.equal(session.read().tokenTransaction, undefined);
+    assert.equal(session.read().tokenIntent, undefined);
+    assert.equal(session.read().balanceMg, undefined);
+    await session.confirmToken();
+    assert.equal(session.read().tokenTransaction, undefined);
+  });
+}

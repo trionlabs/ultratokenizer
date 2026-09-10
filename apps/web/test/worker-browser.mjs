@@ -6,6 +6,18 @@ import { loadModule } from './helpers.mjs';
 const base = process.env.PREVIEW_URL || 'http://127.0.0.1:4173/';
 const { createFixture } = await loadModule('./fixtures/issuance.ts');
 const fixture = await createFixture();
+const { auditIssuanceReceipt } = await loadModule(
+  '../../../packages/audit/src/index.ts',
+);
+const checked = {
+  receipt: fixture.receipt,
+  report: await auditIssuanceReceipt(
+    JSON.stringify(fixture.receipt),
+    fixture.policy,
+  ),
+  execution: 'dedicated-worker',
+  mode: 'offline',
+};
 const oldSample = await readFile(
   new URL('./fixtures/sample-receipt-v1.json', import.meta.url),
 );
@@ -35,6 +47,7 @@ try {
   const errors = [];
   const workerUrls = [];
   const rpcCalls = [];
+  const externalRequests = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('worker', (worker) => workerUrls.push(worker.url()));
   await page.addInitScript(
@@ -70,7 +83,10 @@ try {
   );
   await page.route('**/*', (route) => {
     const url = new URL(route.request().url());
-    if (url.origin !== new URL(base).origin) return route.abort();
+    if (url.origin !== new URL(base).origin) {
+      externalRequests.push(url.href);
+      return route.abort();
+    }
     if (url.pathname === '/rpc-test') {
       const input = route.request().postDataJSON();
       const reply = (request) => {
@@ -278,6 +294,56 @@ try {
   );
   await expect(page.locator('.receipt-read-error')).toContainText('256 KB');
 
+  // A bad worker reply must settle as a recoverable failure before it reaches rendering.
+  for (const mutation of [
+    'null-check',
+    'unsafe-receipt',
+    'missing-history',
+    'offline-proof-verified',
+  ]) {
+    const malformed = structuredClone(checked);
+    if (mutation === 'null-check') malformed.report.checks = [null];
+    else if (mutation === 'unsafe-receipt')
+      malformed.receipt = { format: fixture.receipt.format };
+    else {
+      const id =
+        mutation === 'missing-history'
+          ? 'historical_registry'
+          : 'proof_cryptography';
+      if (mutation === 'missing-history')
+        malformed.report.checks = malformed.report.checks.filter(
+          (check) => check.id !== id,
+        );
+      else
+        malformed.report.checks.find((check) => check.id === id).status =
+          'verified';
+      malformed.report.missingEvidence =
+        malformed.report.missingEvidence.filter((missing) => missing !== id);
+    }
+    const malformedWorker = (route) =>
+      route.fulfill({
+        contentType: 'application/javascript',
+        body: `onmessage = ({data}) => postMessage({id: data.id, ok: true, result: ${JSON.stringify(malformed)}});`,
+      });
+    await page.route('**/receipt.worker-*.js', malformedWorker);
+    await upload(page, 'Choose issuance receipt JSON', fixture.receipt);
+    await page.getByRole('button', { name: 'Check receipt offline' }).click();
+    await expect(page.locator('.receipt-read-error')).toContainText(
+      'worker stopped unexpectedly',
+    );
+    await expect(page.locator('.audit-report')).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: 'Check receipt offline' }),
+    ).toBeEnabled();
+    await page.unroute('**/receipt.worker-*.js', malformedWorker);
+    await page.getByRole('button', { name: 'Check receipt offline' }).click();
+    await expect(
+      page.getByRole('heading', {
+        name: 'Checks completed · history incomplete',
+      }),
+    ).toBeVisible();
+  }
+
   // An actual busy worker is terminated by cancellation; no UI-thread fallback.
   const hangWorker = (route) =>
     route.fulfill({
@@ -307,6 +373,7 @@ try {
   assert.equal(stats.created, stats.terminated);
   assert.deepEqual(await page.evaluate(() => window.cspViolations), []);
   assert.deepEqual(errors, []);
+  assert.deepEqual(externalRequests, []);
 
   const unsupported = await browser.newPage();
   await unsupported.route('**/*', (route) =>

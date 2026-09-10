@@ -27,6 +27,9 @@ chain, nonce and exact transfer fields before sending. Recovered hashes are chec
 intent before replacing a reference. Wrong or unavailable candidates preserve uncertainty; a
 matching success or authenticated revert records its actual outcome. Account, provider and form
 changes cannot rewrite the attempted action. Preparation failures do not claim a broadcast.
+Malformed or zero recovery hashes show a specific input error without reading the chain or changing
+the retained attempt. Importing a valid replacement bundle clears completed token status and balance;
+pending or unknown actions still prevent replacement.
 
 The token panel uses the imported backend configuration. Native HTS exposes association for the connected wallet; ATS omits that action and the session and client both reject it before sending anything. Balance and transfer use the shared ERC-20 methods. Transfer quantities can divide the issued amount into whole milligrams. ENS is optional only for transfers: an explicit Ethereum mainnet RPC resolves the intended Hedera coin type, displays the full resulting address and resolver-default fallback boundary, then freezes that address for the transfer. Changing the input clears the resolution. ENS never changes an imported issuance recipient or grants source/issuer authority.
 
@@ -45,6 +48,12 @@ state, and a receipt cannot supply its own backend admission.
 An explicit optional RPC setting uses the caller-pinned SP1 verifier after checking its chain and runtime code. This sends public proof bytes, public values and the program key to that provider. It is online verification and does not establish historical registry state, reservation/supply/replay effects or transaction inclusion. Receipt authors cannot select a verifier or RPC through the receipt itself.
 
 Every verification job runs in a dedicated Web Worker. UTF-8 bounds are checked before posting and inside the worker. Correlation IDs, cancellation, a 45-second timeout and disposal terminate workers and reject stale results. Worker failures do not fall back to the UI thread. Imported files stay in memory; the user may save the resulting audit report. The static page and worker assets must be available from the host; no offline cache is installed.
+
+Worker replies must have bounded report fields and a receipt identical to the normalized input.
+The v1 report must contain all 18 known checks. Unsupported history/account checks remain unverified;
+transaction inclusion cannot be verified, and offline mode cannot report verified proof cryptography.
+Malformed or substituted replies fail the job and allow a fresh retry. This is structural transport
+validation; it does not independently establish the truth of an otherwise well-formed audit report.
 
 ## Checks
 
@@ -78,14 +87,26 @@ The browser test exercises the actual shared client against an intentionally mis
 The backend browser check imports synthetic v1/v2 HTS and v2 ATS configurations, rejects an
 incomplete ATS import, checks association visibility, preserves the full claim and divisible
 transfer inputs, and checks desktop/mobile layout. It intercepts external requests and permits
-no wallet or RPC call; an existing optional font stylesheet request is blocked and reported
-separately. Its screenshots and assertions establish UI behavior, not deployment admission or mint.
+no wallet or RPC call and no third-party page-load requests. Its screenshots and assertions establish
+UI behavior, not deployment admission or mint.
 
 ## Static hosting
 
-The build produces `build/index.html`, `build/verify/index.html` and worker assets. SvelteKit generates hash-based script CSP; scripts/workers remain same-origin, with no blanket inline-script exception. Explicit user RPCs require HTTPS connections and loopback HTTP connections in `connect-src`. Application code initiates them only through the described user actions. Google Fonts origins remain permitted by the existing stylesheet.
+The build produces `build/index.html`, `build/verify/index.html` and worker assets. SvelteKit generates hash-based script CSP; scripts/workers remain same-origin, with no blanket inline-script exception. Explicit user RPCs require HTTPS connections or HTTP at `localhost` or `127.0.0.1` in `connect-src`. Browser deployment imports, ENS resolution and verification reject HTTP IPv6 loopback before transport because Chromium cannot apply an IPv6-literal CSP host source. The shared Node/CLI client retains IPv6 support. Application code initiates RPC only through the described user actions. Fonts use locally available families and system fallbacks; loading the app does not contact a font provider.
 
-Serve the complete build and correct JavaScript content types. `static/_headers` supplies framing, MIME, referrer, permissions, opener and HTTPS policies for supporting hosts; translate them to server response headers elsewhere. Its supplemental `frame-ancestors` policy requires an HTTP header. Do not replace the generated CSP with a policy that drops hydration hashes. Building does not deploy the app or register any chain authority.
+Serve the complete build and correct JavaScript content types. `static/_headers` supplies framing, MIME, referrer, permissions, opener and HTTPS policies for supporting hosts; translate them to server response headers elsewhere. Its supplemental `frame-ancestors` policy requires an HTTP header. It intentionally omits `connect-src`: a second, narrower directive would intersect the generated page policy and block explicit RPC and ENS providers. Do not replace the generated CSP with a policy that drops hydration hashes. Building does not deploy the app or register any chain authority.
+
+Response headers are the primary framing defense. As a fallback, prerendered HTML exposes only a
+direct-link notice; file and wallet controls render after JavaScript confirms a top-level tab.
+An embedded page keeps the notice even when a host omits response headers; its direct link is pinned
+to the current origin, including double-slash path aliases. This fallback does not
+replace HTTP frame protections. JavaScript is required to use the workspace.
+
+`test:browser` also serves the actual static build with its `_headers` policy and checks it together
+with the generated meta CSP. It verifies no automatic third-party requests, explicit HTTPS RPC and
+ENS transport at HTTPS/localhost/IPv4 loopback, early HTTP IPv6 rejection, header-enforced frame denial
+and headerless inactive frames with JavaScript enabled and disabled. Those RPC responses are
+intercepted synthetic fixtures, with no live chain calls.
 
 The token recovery browser cases use the production client with a synthetic wallet and intercepted
 RPC: lose the returned hash, change account/chain/form fields, reject an old-nonce transaction, then

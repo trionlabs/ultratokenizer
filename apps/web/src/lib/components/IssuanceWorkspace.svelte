@@ -11,8 +11,9 @@
     MAX_BUNDLE_BYTES,
     MAX_DEPLOYMENT_BYTES,
     IssuanceClientError,
+    resolveEnsRecipient,
   } from '../issuance';
-  import { resolveEnsRecipient } from '../../../../../packages/issuance/src/index.js';
+  import { BrowserRpcError } from '../browser-rpc';
   import Glyph from '../visuals/Glyph.svelte';
   import OrbitField from '../visuals/OrbitField.svelte';
 
@@ -135,7 +136,7 @@
       }
     } catch (error) {
       fileError =
-        error instanceof IssuanceClientError
+        error instanceof IssuanceClientError || error instanceof BrowserRpcError
           ? error.message
           : 'The file could not be imported. Check its format, size and any pending transaction.';
     } finally {
@@ -163,9 +164,11 @@
         snapshot.deployment?.auditPolicy.chainId === chainId
       )
         ens = result;
-    } catch {
+    } catch (error) {
       transferError =
-        'ENS resolution did not complete. Check the name, Ethereum RPC and intended chain.';
+        error instanceof BrowserRpcError
+          ? error.message
+          : 'ENS resolution did not complete. Check the name, Ethereum RPC and intended chain.';
     } finally {
       resolving = false;
     }

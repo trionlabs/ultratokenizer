@@ -1,8 +1,12 @@
+import { resolveEnsRecipient as resolveSharedEnsRecipient } from '../../../../packages/issuance/src/index.js';
+import { parseBrowserRpcUrl } from './browser-rpc';
+
 export {
   createIssuanceClient,
   parseDeploymentConfig,
   getTokenBackend,
   parseIssuanceBundle,
+  parseTransactionHash,
   assertBundleDeployment,
   IssuanceClientError,
   MAX_BUNDLE_BYTES,
@@ -16,6 +20,15 @@ export type {
   TokenTransactionIntent,
 } from '../../../../packages/issuance/src/index.js';
 export type { IssuanceReceipt } from '../../../../packages/audit/src/index.js';
+
+export async function resolveEnsRecipient(
+  input: Parameters<typeof resolveSharedEnsRecipient>[0],
+) {
+  return resolveSharedEnsRecipient({
+    ...input,
+    ethereumRpcUrl: parseBrowserRpcUrl(input.ethereumRpcUrl),
+  });
+}
 
 export function formatGrams(milligrams: string | bigint): string {
   const value = BigInt(milligrams);
