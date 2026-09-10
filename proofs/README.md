@@ -6,14 +6,16 @@ The signature-only modules do not interpret balances or bind an issuance request
 
 ## Modules
 
-| Module           | Responsibility                                                                                               |
-| ---------------- | ------------------------------------------------------------------------------------------------------------ |
-| `pdf-evidence`   | Strict signature coverage, RSA-SHA256 verification, approved-signer matching and minimal public output.      |
-| `pdf-guest`      | Execute the same evidence check inside SP1 and commit its output only on success.                            |
-| `pdf-runner`     | Run the compiled guest locally, compare its output with native verification and exercise rejection cases.    |
-| `claim-evidence` | Authenticate the synthetic capsule, derive claim identifiers and recompute the full issuance request digest. |
-| `claim-guest`    | Execute the bounded request-bound claim program, with a distinct 224-byte output.                            |
-| `claim-runner`   | Execute, generate local CPU proofs and independently verify them with pinned program identity.               |
+| Module                   | Responsibility                                                                                               |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `pdf-evidence`           | Strict signature coverage, RSA-SHA256 verification, approved-signer matching and minimal public output.      |
+| `pdf-guest`              | Execute the same evidence check inside SP1 and commit its output only on success.                            |
+| `pdf-runner`             | Run the compiled guest locally, compare its output with native verification and exercise rejection cases.    |
+| `claim-evidence`         | Authenticate the synthetic capsule, derive claim identifiers and recompute the full issuance request digest. |
+| `claim-guest`            | Execute the bounded request-bound claim program, with a distinct 224-byte output.                            |
+| `claim-runner`           | Execute, generate local CPU proofs, verify them and prepare a sealed synthetic Network request offline.      |
+| `network-request-schema` | Validate integrity-sealed preparation and quote journals without network credentials.                        |
+| `network-requester`      | Separately locked credential boundary for quote and one-shot synthetic artifact staging.                     |
 
 The TypeScript request module remains in `packages/domain`. The claim profile independently recomputes its EIP-712 digest; the signature-only output does not bind requests.
 
@@ -99,6 +101,26 @@ The runner explicitly selects a local executor, with the SDK's network proving f
 The former `groth16-scaffold` command has been removed. `native`, `execute` and `self-test` remain non-proof diagnostics and report `zkProof: false`.
 
 Profile V2 requires a newly built guest and independently pinned program key. A historical profile V1 core proof is neither a V2 proof nor zero knowledge. Successful Groth16 generation and acceptance by the intended Hedera verifier must be demonstrated before claiming that integration works.
+
+## Succinct Network staging
+
+Network preparation and credential use are deliberately split. The main proof workspace has the
+SP1 network feature disabled. `claim-runner network-prepare-synthetic` locally executes the reviewed
+fixture, measures cycles and PGUs, and writes an integrity-sealed ignored preparation journal. The
+separately locked [network requester](network-requester/README.md) can quote the job and stage only
+that exact ELF and embedded synthetic witness. Its staging command has no proof-request RPC.
+
+On 2026-09-11 the pinned V2 program was registered on Succinct mainnet and the synthetic witness was
+uploaded as `PrivateStdin`. A second read observed the same registered program. The adjacent balance
+observations showed no PROVE change, and no proof request was submitted. The tracked
+[staging receipt](programs/claim-v2-succinct-staging.json) records the requester, program transaction,
+VKey, ELF/witness/payload hashes, measured limits and the explicit non-proof/non-bank status. Artifact
+URIs, credentials, witness bytes and local append-only journals remain ignored.
+
+This staging result closes artifact compatibility and account-access preparation only. It is not a
+Groth16 proof, cryptographic verification, Gate acceptance, Hedera execution, bank authorization or
+asset backing. A fresh quote plus explicit single-request and total-attempt PROVE caps are still
+required before one paid proof request can be implemented and sent.
 
 ## Synthetic fixture
 
