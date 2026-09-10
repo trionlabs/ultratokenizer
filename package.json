@@ -20,13 +20,17 @@
     "check:blueprint": "npm run check:hygiene && npm run format:check && npm run lint && npm run typecheck",
     "check:domain": "npm --prefix packages/domain test",
     "check:audit": "npm --prefix packages/audit test",
+    "check:issuance": "npm --prefix packages/issuance test",
     "check:web": "npm --prefix apps/web run format:check && npm --prefix apps/web run check && npm --prefix apps/web test",
     "check:workers": "npm --prefix workers/issuance run check && npm --prefix workers/issuance test",
     "check:contracts": "forge fmt --root contracts --check && forge test --root contracts",
-    "check:evidence": "cargo test --manifest-path proofs/Cargo.toml --locked -p ultratokenizer-pdf-evidence -p ultratokenizer-claim-evidence && cargo clippy --manifest-path proofs/Cargo.toml --locked -p ultratokenizer-pdf-evidence -p ultratokenizer-claim-evidence --all-targets -- -D warnings",
+    "check:ats": "node scripts/check-ats.mjs",
+    "check:evidence": "cargo test --manifest-path proofs/Cargo.toml --locked -p ultratokenizer-pdf-evidence -p ultratokenizer-claim-evidence -p ultratokenizer-claim-runner -p ultratokenizer-pdf-runner --all-targets && cargo clippy --manifest-path proofs/Cargo.toml --locked -p ultratokenizer-pdf-evidence -p ultratokenizer-claim-evidence -p ultratokenizer-claim-runner -p ultratokenizer-pdf-runner --all-targets -- -D warnings && npm run check:enpara",
     "check:parity": "npm --prefix packages/domain run build && node proofs/tools/check-request-parity.mjs",
     "build:workers": "npm --prefix workers/issuance run build",
-    "check": "npm run check:blueprint && npm run check:domain && npm run check:audit && npm run check:web && npm run check:workers"
+    "check": "npm run check:blueprint && npm run check:domain && npm run check:audit && npm run check:issuance && npm run check:institution && npm run check:web && npm run check:workers",
+    "check:institution": "npm --prefix packages/institution test",
+    "check:enpara": "cargo fmt --manifest-path proofs/enpara-evidence/Cargo.toml -- --check && cargo test --manifest-path proofs/enpara-evidence/Cargo.toml --locked --all-targets && cargo clippy --manifest-path proofs/enpara-evidence/Cargo.toml --locked --all-targets -- -D warnings"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
