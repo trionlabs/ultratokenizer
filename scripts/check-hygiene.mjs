@@ -1,10 +1,20 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { lstatSync, readFileSync, readlinkSync } from 'node:fs';
 
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' });
-const files = git('ls-files', '-z').split('\0').filter(Boolean);
+const tracked = git('ls-files', '-z').split('\0').filter(Boolean);
+const deleted = new Set(
+  git('ls-files', '--deleted', '-z').split('\0').filter(Boolean),
+);
+const files = [
+  ...new Set(
+    git('ls-files', '--cached', '--others', '--exclude-standard', '-z')
+      .split('\0')
+      .filter((file) => file && !deleted.has(file)),
+  ),
+];
 const ignored = spawnSync('git', ['check-ignore', '--no-index', '--stdin'], {
-  input: files.join('\n') + '\n',
+  input: tracked.join('\n') + '\n',
   encoding: 'utf8',
 });
 if (ignored.status !== 0 && ignored.status !== 1) {
@@ -30,10 +40,15 @@ const rules = [
   ['private key', /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/],
 ];
 for (const file of files) {
-  const content = readFileSync(file);
-  if (content.includes(0)) continue;
+  // Inspect a symlink's target text without following it into private files.
+  const content = lstatSync(file).isSymbolicLink()
+    ? Buffer.from(readlinkSync(file))
+    : readFileSync(file);
   for (const [label, pattern] of rules) {
-    if (pattern.test(file) || pattern.test(content.toString('utf8'))) {
+    if (
+      pattern.test(file) ||
+      (!content.includes(0) && pattern.test(content.toString('utf8')))
+    ) {
       failures.push(`${file}: ${label}`);
     }
   }
@@ -61,5 +76,7 @@ if (failures.length) {
   console.error(failures.join('\n'));
   process.exitCode = 1;
 } else {
-  console.log(`Repository hygiene passed (${files.length} tracked files).`);
+  console.log(
+    `Repository hygiene passed (${files.length} tracked or unignored new files; ${deleted.size} deleted paths omitted).`,
+  );
 }

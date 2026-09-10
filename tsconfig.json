@@ -27,11 +27,14 @@
     "**/*.mts"
   ],
   "exclude": [
+    "contracts/ats",
     "node_modules",
     "apps/web",
     "workers",
     "packages/domain",
     "packages/audit",
+    "packages/issuance",
+    "packages/institution",
     "dist",
     "work",
     ".scratch",

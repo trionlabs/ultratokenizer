@@ -4,6 +4,10 @@
   "printWidth": 80,
   "sortPackageJson": false,
   "ignorePatterns": [
+    "contracts/ats/vendor/**",
+    "contracts/ats/node_modules/**",
+    "contracts/ats/build/**",
+    "contracts/ats/compilers/**",
     "apps/web/**",
     "workers/issuance/node_modules/**",
     "workers/issuance/build/**",
