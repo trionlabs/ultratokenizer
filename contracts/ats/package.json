@@ -1,0 +1,19 @@
+{
+  "name": "@ultratokenizer/ats-build",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "verify": "node scripts/verify-build.mjs",
+    "test": "node --test test/build.test.mjs",
+    "compiler:fetch": "node scripts/fetch-compiler.mjs"
+  },
+  "devDependencies": {
+    "js-sha3": "0.8.0",
+    "solc-main": "npm:solc@0.8.30"
+  }
+}

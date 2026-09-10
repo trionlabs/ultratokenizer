@@ -1,0 +1,159 @@
+{
+  "format": "ultratokenizer.ats-build-config.v1",
+  "upstreamCommit": "be4f860e408ec5b1a24d12feb6f872aabff69319",
+  "atsPackageVersion": "8.0.0",
+  "compilers": {
+    "main": {
+      "package": "solc-main",
+      "version": "0.8.30+commit.73712a01.Emscripten.clang",
+      "soljsonSha256": "3bb491a777f76dff9b2fe73ce29ca20e21a971b59a2f2cf8f73415424f00be06",
+      "settings": {
+        "optimizer": {
+          "enabled": true,
+          "runs": 200
+        },
+        "evmVersion": "paris",
+        "viaIR": true,
+        "metadata": {
+          "bytecodeHash": "ipfs"
+        }
+      }
+    },
+    "ats": {
+      "version": "0.8.28+commit.7893614a",
+      "settings": {
+        "optimizer": {
+          "enabled": true,
+          "runs": 100
+        },
+        "evmVersion": "cancun",
+        "viaIR": false,
+        "metadata": {
+          "bytecodeHash": "ipfs"
+        },
+        "remappings": [
+          "ats/=vendor/packages/ats/contracts/contracts/",
+          "@openzeppelin/contracts/=vendor/openzeppelin-contracts/",
+          "@openzeppelin/contracts-upgradeable/=vendor/openzeppelin-contracts-upgradeable/"
+        ]
+      },
+      "kind": "native",
+      "platforms": {
+        "linux-x64": {
+          "file": "solc-linux-amd64-v0.8.28",
+          "url": "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.28+commit.7893614a",
+          "sha256": "9a0fb7e0db2c0641dbae1c5cc645dc686820c83af516226abb1c0a2f76636f25"
+        },
+        "darwin-universal": {
+          "file": "solc-macos-v0.8.28",
+          "url": "https://github.com/ethereum/solidity/releases/download/v0.8.28/solc-macos",
+          "sha256": "81515b0e53deaa266d549545ccaac0a5a96e6d4e8201c77f673b2c710976d9ea"
+        }
+      }
+    }
+  },
+  "targets": [
+    {
+      "name": "IssuanceGate",
+      "source": "src/IssuanceGate.sol",
+      "compiler": "main"
+    },
+    {
+      "name": "AtsGateMintAdapter",
+      "source": "src/AtsGateMintAdapter.sol",
+      "compiler": "main"
+    },
+    {
+      "name": "AtsGateProfile",
+      "source": "src/AtsGateProfile.sol",
+      "compiler": "ats"
+    },
+    {
+      "name": "BusinessLogicResolver",
+      "source": "vendor/packages/ats/contracts/contracts/infrastructure/diamond/BusinessLogicResolver.sol",
+      "compiler": "ats"
+    },
+    {
+      "name": "ResolverProxy",
+      "source": "vendor/packages/ats/contracts/contracts/infrastructure/proxy/ResolverProxy.sol",
+      "compiler": "ats"
+    },
+    {
+      "name": "AccessControlFacet",
+      "source": "vendor/packages/ats/contracts/contracts/facets/accessControl/AccessControlFacet.sol",
+      "compiler": "ats"
+    },
+    {
+      "name": "InitializerFacet",
+      "source": "vendor/packages/ats/contracts/contracts/facets/initializer/InitializerFacet.sol",
+      "compiler": "ats"
+    },
+    {
+      "name": "CoreFacet",
+      "source": "vendor/packages/ats/contracts/contracts/facets/core/CoreFacet.sol",
+      "compiler": "ats"
+    },
+    {
+      "name": "CapFacet",
+      "source": "vendor/packages/ats/contracts/contracts/facets/cap/CapFacet.sol",
+      "compiler": "ats"
+    },
+    {
+      "name": "PartitionsFacet",
+      "source": "vendor/packages/ats/contracts/contracts/facets/partitions/PartitionsFacet.sol",
+      "compiler": "ats"
+    },
+    {
+      "name": "MintFacet",
+      "source": "vendor/packages/ats/contracts/contracts/facets/mint/MintFacet.sol",
+      "compiler": "ats"
+    },
+    {
+      "name": "TransferFacet",
+      "source": "vendor/packages/ats/contracts/contracts/facets/transfer/TransferFacet.sol",
+      "compiler": "ats"
+    },
+    {
+      "name": "BalanceTrackerFacet",
+      "source": "vendor/packages/ats/contracts/contracts/facets/balanceTracker/BalanceTrackerFacet.sol",
+      "compiler": "ats"
+    },
+    {
+      "name": "AllowanceFacet",
+      "source": "vendor/packages/ats/contracts/contracts/facets/allowance/AllowanceFacet.sol",
+      "compiler": "ats"
+    },
+    {
+      "name": "ControlListFacet",
+      "source": "vendor/packages/ats/contracts/contracts/facets/controlList/ControlListFacet.sol",
+      "compiler": "ats"
+    },
+    {
+      "name": "TokenCoreOps",
+      "source": "vendor/packages/ats/contracts/contracts/domain/orchestrator/TokenCoreOps.sol",
+      "compiler": "ats"
+    },
+    {
+      "name": "ClearingReadOps",
+      "source": "vendor/packages/ats/contracts/contracts/domain/orchestrator/ClearingReadOps.sol",
+      "compiler": "ats"
+    },
+    {
+      "name": "ScheduledTasksOps",
+      "source": "vendor/packages/ats/contracts/contracts/domain/orchestrator/ScheduledTasksOps.sol",
+      "compiler": "ats"
+    },
+    {
+      "name": "ScheduledTasksDispatchOps",
+      "source": "vendor/packages/ats/contracts/contracts/domain/orchestrator/ScheduledTasksDispatchOps.sol",
+      "compiler": "ats"
+    }
+  ],
+  "testTargets": [
+    {
+      "name": "GateStateOnlyVerifier",
+      "source": "test/GateStateOnlyVerifier.sol",
+      "compiler": "main"
+    }
+  ]
+}
