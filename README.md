@@ -88,7 +88,7 @@ npm --prefix contracts/ats run compiler:fetch
 npm run check:ats
 ```
 
-The main check covers hygiene, root format/lint/types, domain, audit, issuance, institution, web and worker modules. The separate unconditional ATS CI job rebuilds the normal-source pinned package and requires actual local Gate/ATS acceptance; its test verifier is isolated from provisioning output. Rust, Solidity and parity have separate checks. Contracts pin Solidity 0.8.30; CI pins Foundry 1.8.1. Native Rust uses 1.96.0; SP1 uses its separately pinned guest toolchain. Browser integration is documented in apps/web. CI configuration does not establish a successful remote CI run.
+The main check covers hygiene, root format/lint/types, domain, audit, issuance, institution, web and worker modules. The separate ATS CI job rebuilds the pinned ATS contracts and tests local Gate/ATS state transitions using an isolated test verifier. It does not establish SP1 proof acceptance. Rust, Solidity and request parity have independent checks; parity rebuilds the Rust runner before comparing it with TypeScript. Contracts pin Solidity 0.8.30; CI pins Foundry 1.8.1. Native Rust uses 1.96.0; SP1 uses its separately pinned guest toolchain. Browser integration is documented in apps/web. CI configuration does not establish a successful remote CI run.
 
 The worker build is a local deployment dry run; the web build produces static files. Neither deploys a service. The root build generates the architecture explorer and standalone map. Genuine proof, native HTS behavior and infrastructure recovery require separate evidence.
 
@@ -120,4 +120,4 @@ These checks do not establish bank participation, physical delivery, transfer re
 
 Use English in code, comments, UI and committed documentation. Keep module boundaries explicit and verify authorization and failure transitions through public interfaces. Guest execution, consistent receipts and test verifiers are not positive cryptographic proof acceptance.
 
-Keep AI tooling, private plans, credentials, private documents, witnesses, core proofs, personal details and generated output Git-ignored. Use project-safe authorship and preserve meaningful history. Repository hygiene checks tracked paths and common private-data patterns; human provenance and privacy review remains necessary.
+Keep AI tooling, private plans, credentials, private documents, witnesses, core proofs, personal details and generated output Git-ignored. Use project-safe authorship and preserve meaningful history. Repository hygiene checks tracked and unignored paths, common private-data patterns, ordinary escaped strings and readable binary/UTF-16 key signatures. Its language checks are heuristics. It does not decode arbitrary encodings, decompress archives, detect every secret or establish that prose is English; human provenance and privacy review remains necessary.
