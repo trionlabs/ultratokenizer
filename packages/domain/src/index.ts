@@ -12,6 +12,8 @@ export {
   getIssuanceRequestDigest,
   getIssuanceRequestTypedData,
 } from './request-digest.js';
+export { CLAIM_USAGE_TYPE, getClaimUsageId } from './claim-identity.js';
+export type { ClaimIdentity } from './claim-identity.js';
 export {
   getIssuerPermitDigest,
   getIssuerPermitTypedData,

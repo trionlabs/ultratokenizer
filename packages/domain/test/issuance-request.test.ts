@@ -27,7 +27,7 @@ function rejects(input: unknown, code: RequestErrorCode, field?: string) {
 
 await test('normalizes a valid request into immutable JSON-safe values', () => {
   const request = parseIssuanceRequest(fixture);
-  assert.equal(request.amount, '1000');
+  assert.equal(request.amount, '10000');
   assert.equal(request.nonce, '0');
   assert.deepEqual(JSON.parse(serializeIssuanceRequest(request)), request);
   assert.ok(Object.isFrozen(request));
@@ -224,7 +224,7 @@ const changedFields = {
 await test('matches the pinned version-one request digest', () => {
   assert.equal(
     getIssuanceRequestDigest(fixture),
-    '0x996df02433637893ae8b8ef23e2d694dfda258a551b6251339e451179424a237',
+    '0xc591af7ea5cdef6005e1a9b31f14d7d30566e87615478d25a4861f43721b5deb',
   );
 });
 
@@ -271,11 +271,12 @@ await test('mutating returned typed-data definitions cannot alter later digests'
 });
 
 await test('expiry is exclusive and does not depend on the machine clock', () => {
+  const expiry = BigInt(fixture.validUntil);
   assert.equal(
-    assertIssuanceRequestActive(fixture, BigInt(1999999999)).validUntil,
-    '2000000000',
+    assertIssuanceRequestActive(fixture, expiry - 1n).validUntil,
+    fixture.validUntil,
   );
-  for (const now of [BigInt(2000000000), BigInt(2000000001)]) {
+  for (const now of [expiry, expiry + 1n]) {
     assert.throws(
       () => assertIssuanceRequestActive(fixture, now),
       (error: unknown) =>

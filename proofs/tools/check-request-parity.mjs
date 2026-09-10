@@ -1,5 +1,6 @@
 /** Compare independent TypeScript/viem and Rust validation/digests on adversarial inputs. */
 import { getIssuanceRequestDigest } from '../../dist/domain/src/request-digest.js';
+import { getClaimUsageId } from '../../dist/domain/src/claim-identity.js';
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -48,6 +49,7 @@ const missing = { ...baseline };
 delete missing.amount;
 cases.push(missing);
 const temporary = mkdtempSync(join(tmpdir(), 'ultratokenizer-parity-'));
+let requestCases = 0;
 try {
   const path = join(temporary, 'request.json');
   for (const candidate of cases) {
@@ -72,13 +74,57 @@ try {
         'EIP-712 request digest differs between TypeScript and Rust.',
       );
   }
-  console.log(
-    JSON.stringify({
-      status: 'passed',
-      cases: cases.length,
-      implementations: ['typescript-viem', 'rust-tiny-keccak'],
-    }),
-  );
+  requestCases = cases.length;
 } finally {
   rmSync(temporary, { recursive: true, force: true });
 }
+
+const metadata = JSON.parse(
+  readFileSync(
+    new URL('claim-evidence/fixtures/gold-certificate.synthetic.json', root),
+  ),
+);
+const claim = metadata.claim;
+const identityCases = [
+  {
+    sourceId: claim.sourceId,
+    claimId: claim.claimId,
+  },
+];
+for (const field of ['sourceId', 'claimId']) {
+  identityCases.push({ ...identityCases[0], [field]: `0x${'7a'.repeat(32)}` });
+  identityCases.push({ ...identityCases[0], [field]: `0x${'00'.repeat(32)}` });
+  identityCases.push({ ...identityCases[0], [field]: '0x1234' });
+}
+for (const identity of identityCases) {
+  let expected;
+  try {
+    expected = getClaimUsageId(identity);
+  } catch {
+    expected = undefined;
+  }
+  const actual = spawnSync(
+    new URL('target/debug/ultratokenizer-claim-runner', root).pathname,
+    ['claim-usage', identity.sourceId, identity.claimId],
+    { encoding: 'utf8' },
+  );
+  if (actual.error || (actual.status === 0) !== Boolean(expected))
+    throw new Error(
+      'Claim usage acceptance differs between TypeScript and Rust.',
+    );
+  if (expected && JSON.parse(actual.stdout).claimUsageId !== expected)
+    throw new Error(
+      'Claim usage identifier differs between TypeScript and Rust.',
+    );
+}
+console.log(
+  JSON.stringify({
+    status: 'passed',
+    cases: requestCases + identityCases.length,
+    phases: {
+      request: { cases: requestCases },
+      identity: { cases: identityCases.length },
+    },
+    implementations: ['typescript-viem', 'rust-tiny-keccak'],
+  }),
+);

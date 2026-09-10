@@ -2,7 +2,7 @@
 
 use ultratokenizer_claim_evidence::{
     request::{Request, RequestJson, MAX_REQUEST_BYTES},
-    verify_claim, ClaimError, ClaimInput, CAPSULE_MARKER, MAX_WITNESS_BYTES,
+    verify_claim, ClaimError, ClaimInput, CAPSULE_MARKER, MAX_WITNESS_BYTES, PROFILE_VERSION,
 };
 
 const PDF: &[u8] = include_bytes!("../fixtures/gold-certificate.synthetic.pdf");
@@ -52,6 +52,11 @@ fn signed_claim_and_full_request_match_independent_viem_vectors() {
         expected["publicValues"]
     );
     assert_eq!(result.public_values().len(), 224);
+    assert_eq!(PROFILE_VERSION, 2);
+    assert_eq!(
+        &result.public_values()[..32],
+        &ultratokenizer_claim_evidence::request::word_u64(2)
+    );
 }
 
 #[test]
@@ -87,12 +92,23 @@ fn holder_issuer_and_derived_identifiers_cannot_be_substituted() {
 }
 
 #[test]
-fn exact_capacity_and_expiry_boundaries_are_enforced() {
+fn complete_authenticated_amount_is_required_without_partial_issuance() {
     assert!(verify_claim(&input(PDF, &request_change("amount", "10000"))).is_ok());
+    for amount in ["1", "1000", "9999", "10001"] {
+        assert_eq!(
+            verify_claim(&input(PDF, &request_change("amount", amount))),
+            Err(ClaimError::AmountMismatch),
+            "{amount}"
+        );
+    }
     assert_eq!(
-        verify_claim(&input(PDF, &request_change("amount", "10001"))),
-        Err(ClaimError::CapacityExceeded)
+        ClaimError::AmountMismatch.to_string(),
+        "The request must equal the complete authenticated amount."
     );
+}
+
+#[test]
+fn claim_expiry_boundary_is_enforced() {
     assert!(verify_claim(&input(PDF, &request_change("validUntil", "2000000000"))).is_ok());
     assert_eq!(
         verify_claim(&input(PDF, &request_change("validUntil", "2000000001"))),
@@ -108,7 +124,6 @@ fn every_unconstrained_request_field_changes_the_public_digest() {
         ("chainId", "297".into()),
         ("gate", format!("0x{}", "88".repeat(20))),
         ("token", format!("0x{}", "88".repeat(20))),
-        ("amount", "999".into()),
         ("reservationId", format!("0x{}", "88".repeat(32))),
         ("policyVersion", "2".into()),
         ("rightsVersion", "2".into()),

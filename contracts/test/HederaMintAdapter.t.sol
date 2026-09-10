@@ -86,12 +86,12 @@ contract HederaMintAdapterTest is GateFixture {
         address token = real.initializeToken("Test gold", "TGOLD", IHts.Expiry(2000000000, address(0), 0));
         asset = TestHtsToken(token);
         gate.registerRights(ISSUER, 2, address(real), keccak256("mg rights"));
-        vm.prank(issuer);
-        gate.openReservation(ISSUER, 1, bytes32(uint256(50)), holder, token, 2000, EXPIRY);
         r = request();
         r.token = token;
         r.rightsVersion = 2;
         r.reservationId = bytes32(uint256(50));
+        gate.setBackingCap(ISSUER, token, 2000);
+        reserve(r);
     }
 
     function testHtsCreatesSoleSupplyAuthorityAndMintsExactUnits() public {
@@ -121,11 +121,12 @@ contract HederaMintAdapterTest is GateFixture {
         (, TestHtsToken asset, RequestHash.Request memory r) = actual();
         TestHtsService(address(0x167)).configure(false, true, false);
         issue(r, HederaMintAdapter.HtsFailure.selector);
-        (,,, uint256 used,,) = gate.reservations(ISSUER, r.reservationId);
+        (,,, uint256 used,,,,,) = gate.reservations(ISSUER, r.reservationId);
         require(
             asset.totalSupply() == 0 && asset.balanceOf(holder) == 0 && used == 0,
             "token or reservation rollback failed"
         );
+        assertPool(r.token, 1000, 0);
         require(
             !gate.usedRequests(RequestHash.digest(r)) && !gate.usedClaims(r.claimUsageId)
                 && !gate.usedRequestIds(r.requestId) && !gate.usedHolderNonces(holder, 0)

@@ -12,11 +12,14 @@ use sp1_sdk::{
 use std::{env, fs::OpenOptions, io::Write, path::Path};
 use ultratokenizer_claim_evidence::{
     request::{Request, MAX_REQUEST_BYTES},
-    verify_claim, ClaimInput, MAX_DOCUMENT_BYTES, PUBLIC_VALUES_BYTES,
+    verify_claim, ClaimInput, MAX_DOCUMENT_BYTES, PROFILE_VERSION, PUBLIC_VALUES_BYTES,
 };
 
 const EXPECTED_CIRCUIT_VERSION: &str = "v6.1.0";
 const MAX_PROOF_BYTES: usize = 64 * 1024 * 1024;
+const GROTH16_EVM_BYTES: usize = 356;
+const EXPECTED_GROTH16_VERIFIER_HASH: &str =
+    "4388a21c687fdd5f218d7e3d13190cac4c5355818d3605fd5fb811df468ee696";
 
 fn options() -> impl Options {
     bincode::DefaultOptions::new()
@@ -96,8 +99,9 @@ pub async fn run(args: &[String]) -> Result<(), &'static str> {
             Ok(())
         }
         Some("prove-local") if args.len() == 8 => prove(args).await,
-        Some("verify-local") if args.len() == 5 => verify(args).await,
-        _ => Err("Usage: claim-runner identity <elf> | prove-local <core|groth16> <elf> <pdf> <request-json> <approved-spki-sha256-hex> <expected-program-vkey> <new-proof-file> | verify-local <elf> <request-json> <proof-file> <expected-program-vkey>"),
+        Some("verify-local") if args.len() == 5 => verify(args, false).await,
+        Some("export-groth16") if args.len() == 5 => verify(args, true).await,
+        _ => Err("Usage: claim-runner identity <elf> | prove-local <core|groth16> <elf> <pdf> <request-json> <approved-spki-sha256-hex> <expected-program-vkey> <new-proof-file> | verify-local <elf> <request-json> <proof-file> <expected-program-vkey> | export-groth16 <elf> <request-json> <proof-file> <expected-program-vkey>"),
     }
 }
 
@@ -197,17 +201,10 @@ async fn prove(args: &[String]) -> Result<(), &'static str> {
     Ok(())
 }
 
-async fn verify(args: &[String]) -> Result<(), &'static str> {
-    let elf = Elf::from(read_bounded(&args[1], 32 * 1024 * 1024)?);
-    let request = Request::from_json(&read_bounded(&args[2], MAX_REQUEST_BYTES)?)
-        .map_err(|_| "Invalid expected request.")?;
-    let proof: SP1ProofWithPublicValues = options()
-        .deserialize(&read_bounded(&args[3], MAX_PROOF_BYTES)?)
-        .map_err(|_| "Invalid proof encoding.")?;
-    let (proof_mode, zero_knowledge) = mode(&proof)?;
-    let values = proof.public_values.as_slice();
+fn check_public_values(request: &Request, values: &[u8]) -> Result<(), &'static str> {
     if values.len() != PUBLIC_VALUES_BYTES
-        || values[..32] != ultratokenizer_claim_evidence::request::word_u64(1)
+        || values[..32]
+            != ultratokenizer_claim_evidence::request::word_u64(u64::from(PROFILE_VERSION))
         || values[32..64] != request.digest()
         || values[128..160] != request.claim_usage_id
         || values[160..192] != request.claim_commitment
@@ -216,6 +213,40 @@ async fn verify(args: &[String]) -> Result<(), &'static str> {
     {
         return Err("Proof is not bound to the expected request.");
     }
+    Ok(())
+}
+
+fn groth16_evm_bytes(proof: &SP1ProofWithPublicValues) -> Result<Vec<u8>, &'static str> {
+    let (proof_mode, zero_knowledge) = mode(proof)?;
+    if proof_mode != "groth16" || !zero_knowledge {
+        return Err("Only a verified Groth16 proof can be exported.");
+    }
+    let SP1Proof::Groth16(wrapped) = &proof.proof else {
+        return Err("Only a verified Groth16 proof can be exported.");
+    };
+    if hex::encode(wrapped.groth16_vkey_hash) != EXPECTED_GROTH16_VERIFIER_HASH {
+        return Err("Groth16 verifier identity does not match the pinned outer circuit.");
+    }
+    // mode() has already checked the encoding, so SDK bytes() cannot panic on
+    // malformed hex or a core/TEE wrapper. This helper does not prove validity;
+    // the only CLI caller verifies cryptographically before emitting its bytes.
+    let bytes = proof.bytes();
+    if bytes.len() != GROTH16_EVM_BYTES {
+        return Err("Groth16 proof does not have the canonical v6.1.0 envelope length.");
+    }
+    Ok(bytes)
+}
+
+async fn verify(args: &[String], export: bool) -> Result<(), &'static str> {
+    let elf = Elf::from(read_bounded(&args[1], 32 * 1024 * 1024)?);
+    let request_bytes = read_bounded(&args[2], MAX_REQUEST_BYTES)?;
+    let request = Request::from_json(&request_bytes).map_err(|_| "Invalid expected request.")?;
+    let proof: SP1ProofWithPublicValues = options()
+        .deserialize(&read_bounded(&args[3], MAX_PROOF_BYTES)?)
+        .map_err(|_| "Invalid proof encoding.")?;
+    let (proof_mode, zero_knowledge) = mode(&proof)?;
+    let values = proof.public_values.as_slice();
+    check_public_values(&request, values)?;
     let client = ProverClient::builder().light().build().await;
     let key = client.setup(elf).await.map_err(|_| "Guest setup failed.")?;
     if key.verifying_key().bytes32() != args[4] {
@@ -224,6 +255,23 @@ async fn verify(args: &[String]) -> Result<(), &'static str> {
     client
         .verify(&proof, key.verifying_key(), None)
         .map_err(|_| "Cryptographic proof verification failed.")?;
+    if export {
+        let proof_bytes = groth16_evm_bytes(&proof)?;
+        let request_json: serde_json::Value =
+            serde_json::from_slice(&request_bytes).map_err(|_| "Invalid expected request.")?;
+        println!(
+            "{}",
+            serde_json::json!({
+                "status":"verified_groth16_export", "proofMode":"groth16", "zeroKnowledge":true,
+                "issuerAuthorityChecked":false, "outerCircuitVersion":EXPECTED_CIRCUIT_VERSION,
+                "proofBytes":format!("0x{}", hex::encode(proof_bytes)),
+                "publicValues":format!("0x{}", hex::encode(values)),
+                "programVKey":key.verifying_key().bytes32(),
+                "request":request_json,
+            })
+        );
+        return Ok(());
+    }
     let mut result = serde_json::json!({"status":"cryptographic_proof_verified", "proofMode":proof_mode,
         "zeroKnowledge":zero_knowledge, "issuerAuthorityChecked":false,
         "programVkey":key.verifying_key().bytes32(), "outerCircuitVersion":EXPECTED_CIRCUIT_VERSION,
@@ -238,8 +286,35 @@ async fn verify(args: &[String]) -> Result<(), &'static str> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use sp1_sdk::SP1PublicValues;
+
+    #[test]
+    fn verification_rejects_old_claim_profiles_and_other_request_amounts() {
+        let mut request = Request::from_json(include_bytes!(
+            "../../claim-evidence/fixtures/request.synthetic.json"
+        ))
+        .unwrap();
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../claim-evidence/fixtures/gold-certificate.synthetic.json"
+        ))
+        .unwrap();
+        let mut values = hex::decode(
+            fixture["publicValues"]
+                .as_str()
+                .unwrap()
+                .strip_prefix("0x")
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(check_public_values(&request, &values).is_ok());
+        values[..32].copy_from_slice(&ultratokenizer_claim_evidence::request::word_u64(1));
+        assert!(check_public_values(&request, &values).is_err());
+        values[..32].copy_from_slice(&ultratokenizer_claim_evidence::request::word_u64(2));
+        request.amount = ultratokenizer_claim_evidence::request::word_u64(9999);
+        assert!(check_public_values(&request, &values).is_err());
+    }
 
     #[test]
     fn empty_core_proofs_and_unexpected_versions_are_never_success() {
@@ -280,5 +355,35 @@ mod tests {
             wrapped.public_inputs[1] = "9".repeat(1000);
         }
         assert!(mode(&proof).is_err());
+    }
+
+    #[test]
+    fn groth16_export_rejects_core_wrong_verifier_and_legacy_or_oversized_envelopes() {
+        let core = SP1ProofWithPublicValues::new(
+            SP1Proof::Core(Vec::new()),
+            SP1PublicValues::new(),
+            EXPECTED_CIRCUIT_VERSION.into(),
+        );
+        assert!(groth16_evm_bytes(&core).is_err());
+        let mut proof = SP1ProofWithPublicValues::new(
+            SP1Proof::Groth16(Default::default()),
+            SP1PublicValues::new(),
+            EXPECTED_CIRCUIT_VERSION.into(),
+        );
+        if let SP1Proof::Groth16(wrapped) = &mut proof.proof {
+            wrapped.public_inputs = std::array::from_fn(|_| "0".into());
+            wrapped.encoded_proof = "00".repeat(352);
+        }
+        assert!(groth16_evm_bytes(&proof).is_err());
+        for encoded_bytes in [256, 353] {
+            if let SP1Proof::Groth16(wrapped) = &mut proof.proof {
+                wrapped.groth16_vkey_hash = hex::decode(EXPECTED_GROTH16_VERIFIER_HASH)
+                    .unwrap()
+                    .try_into()
+                    .unwrap();
+                wrapped.encoded_proof = "00".repeat(encoded_bytes);
+            }
+            assert!(groth16_evm_bytes(&proof).is_err());
+        }
     }
 }

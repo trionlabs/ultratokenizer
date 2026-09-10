@@ -100,12 +100,12 @@ abstract contract GateFixture {
         verifier = new TestVerifier();
         adapter = new TestAdapter(address(gate));
         gate.registerIssuerKey(ISSUER, 1, issuer, EXPIRY);
-        gate.registerProgram(1, address(verifier), bytes32(uint256(77)), 1);
+        gate.registerProgram(1, address(verifier), address(verifier).codehash, bytes32(uint256(77)), 2);
         gate.registerSourceKey(SOURCE, 1, FINGERPRINT);
         gate.registerPolicy(ISSUER, 1, 1, SOURCE, 1, keccak256("policy terms"));
         gate.registerRights(ISSUER, 1, address(adapter), keccak256("rights terms"));
-        vm.prank(issuer);
-        gate.openReservation(ISSUER, 1, RESERVATION, holder, address(0xCAFE), 2000, EXPIRY);
+        gate.setBackingCap(ISSUER, address(0xCAFE), 2000);
+        reserve(request());
         gate.setPaused(false);
     }
 
@@ -135,10 +135,31 @@ abstract contract GateFixture {
         return RequestHash.Permit(RequestHash.digest(r), r.issuerId, 1, r.nonce, r.validUntil);
     }
 
+    function reserve(RequestHash.Request memory r) internal {
+        vm.prank(issuer);
+        gate.openReservation(
+            r.issuerId,
+            1,
+            r.reservationId,
+            r.recipient,
+            r.token,
+            r.amount,
+            r.validUntil,
+            RequestHash.digest(r),
+            r.claimUsageId
+        );
+    }
+
+    function assertPool(address token, uint256 pending, uint256 outstanding) internal view {
+        (uint256 cap, uint256 actualPending, uint256 actualOutstanding) = gate.backingPools(ISSUER, token);
+        require(actualPending == pending && actualOutstanding == outstanding, "wrong pool accounting");
+        require(actualPending + actualOutstanding <= cap, "pool exposure exceeds cap");
+    }
+
     function evidence(RequestHash.Request memory r) internal pure returns (bytes memory) {
         return abi.encode(
             IssuanceGate.Evidence(
-                1, RequestHash.digest(r), FINGERPRINT, SOURCE, r.claimUsageId, r.claimCommitment, EXPIRY
+                2, RequestHash.digest(r), FINGERPRINT, SOURCE, r.claimUsageId, r.claimCommitment, EXPIRY
             )
         );
     }
@@ -168,8 +189,9 @@ abstract contract GateFixture {
             !gate.usedHolderNonces(r.recipient, r.nonce) && !gate.usedPermitNonces(ISSUER, 1, r.nonce),
             "nonce consumed on failure"
         );
-        (,,, uint256 used,,) = gate.reservations(ISSUER, RESERVATION);
+        (,,, uint256 used,,,,,) = gate.reservations(ISSUER, RESERVATION);
         require(used == 0 && adapter.balances(holder) == 0, "balance or reservation changed");
+        assertPool(adapter.token(), 1000, 0);
     }
 }
 
@@ -183,8 +205,9 @@ contract IssuanceGateTest is GateFixture {
             "missing replay consumption"
         );
         require(gate.usedHolderNonces(holder, 0) && gate.usedPermitNonces(ISSUER, 1, 0), "missing nonce consumption");
-        (,,, uint256 used,,) = gate.reservations(ISSUER, RESERVATION);
+        (,,, uint256 used,,,,,) = gate.reservations(ISSUER, RESERVATION);
         require(used == 1000 && adapter.balances(holder) == 1000, "wrong mint");
+        assertPool(adapter.token(), 0, 1000);
     }
 
     function testRequestAndClaimCannotBeReplayedWithNewReservationOrNonce() public {
@@ -195,20 +218,22 @@ contract IssuanceGateTest is GateFixture {
         r.nonce = 1;
         issue(r, IssuanceGate.Replay.selector);
         r.claimUsageId = bytes32(uint256(99));
+        issue(r, IssuanceGate.Replay.selector);
+        r.reservationId = bytes32(uint256(100));
+        reserve(r);
         issue(r, 0);
-        (,,, uint256 used,,) = gate.reservations(ISSUER, RESERVATION);
-        require(used == 2000, "partial reservation accounting");
+        (,,, uint256 used,,,,,) = gate.reservations(ISSUER, RESERVATION);
+        require(used == 1000, "original reservation was reused");
+        assertPool(adapter.token(), 0, 2000);
     }
 
-    function testReservationCapacityIsCumulative() public {
+    function testReservationRejectsBothPartialAndGreaterAmounts() public {
         RequestHash.Request memory r = request();
-        issue(r, 0);
-        r.requestId = bytes32(uint256(8));
-        r.claimUsageId = bytes32(uint256(9));
-        r.nonce = 1;
+        r.amount = 999;
+        issue(r, IssuanceGate.ReservationMismatch.selector);
         r.amount = 1001;
-        issue(r, IssuanceGate.CapacityExceeded.selector);
-        require(!gate.usedClaims(r.claimUsageId), "claim consumed");
+        issue(r, IssuanceGate.ReservationMismatch.selector);
+        assertUnused(r);
     }
 
     function testMintRevertRollsBackEveryConsumption() public {
@@ -361,7 +386,7 @@ contract IssuanceGateTest is GateFixture {
         vm.expectRevert(IssuanceGate.AlreadyRegistered.selector);
         gate.registerIssuerKey(ISSUER, 1, issuer, EXPIRY);
         vm.expectRevert(IssuanceGate.AlreadyRegistered.selector);
-        gate.registerProgram(1, address(verifier), bytes32(uint256(77)), 1);
+        gate.registerProgram(1, address(verifier), address(verifier).codehash, bytes32(uint256(77)), 2);
         vm.expectRevert(IssuanceGate.AlreadyRegistered.selector);
         gate.registerSourceKey(SOURCE, 1, FINGERPRINT);
         vm.expectRevert(IssuanceGate.AlreadyRegistered.selector);
@@ -376,7 +401,17 @@ contract IssuanceGateTest is GateFixture {
         gate.setPaused(true);
         vm.prank(holder);
         vm.expectRevert(IssuanceGate.Unauthorized.selector);
-        gate.openReservation(ISSUER, 1, bytes32(uint256(99)), holder, address(0xCAFE), 1000, EXPIRY);
+        gate.openReservation(
+            ISSUER,
+            1,
+            bytes32(uint256(99)),
+            holder,
+            address(0xCAFE),
+            1000,
+            EXPIRY,
+            bytes32(uint256(8)),
+            bytes32(uint256(9))
+        );
         vm.expectRevert();
         adapter.mint(holder, 1000);
     }
@@ -384,8 +419,12 @@ contract IssuanceGateTest is GateFixture {
     function testFuzzExactCapacity(uint64 amount) public {
         RequestHash.Request memory r = request();
         r.amount = uint256(amount) % 2000 + 1;
+        gate.revokeReservation(ISSUER, 1, RESERVATION);
+        r.reservationId = bytes32(uint256(55));
+        reserve(r);
         issue(r, 0);
         require(adapter.balances(holder) == r.amount, "inexact amount");
+        assertPool(adapter.token(), 0, r.amount);
     }
 
     function testContractHolderUsesLiveERC1271Authorization() public {
@@ -393,8 +432,7 @@ contract IssuanceGateTest is GateFixture {
         RequestHash.Request memory r = request();
         r.recipient = address(wallet);
         r.reservationId = bytes32(uint256(55));
-        vm.prank(issuer);
-        gate.openReservation(ISSUER, 1, r.reservationId, address(wallet), address(0xCAFE), 2000, EXPIRY);
+        reserve(r);
         wallet.setAccepted(RequestHash.digest(r));
         issue(r, 0);
         require(adapter.balances(address(wallet)) == 1000, "wallet mint failed");

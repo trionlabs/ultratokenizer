@@ -1,6 +1,7 @@
 /** Generate public synthetic test inputs and independent viem ABI/hash vectors. */
 import { encodeAbiParameters, keccak256, stringToHex } from 'viem';
 import { getIssuanceRequestDigest } from '../../dist/domain/src/request-digest.js';
+import { getClaimUsageId } from '../../dist/domain/src/claim-identity.js';
 import { writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
@@ -16,15 +17,22 @@ const claim = {
   validUntil: 2000000000n,
 };
 const usageType =
-  'UltratokenizerClaimUsageV1(bytes32 sourceId,bytes32 issuerId,bytes32 claimId)';
+  'UltratokenizerClaimUsageV2(bytes32 sourceId,bytes32 claimId)';
 const claimType =
   'UltratokenizerSyntheticGoldClaimV1(bytes32 sourceId,bytes32 claimId,bytes32 issuerId,address holder,uint256 capacityMilligrams,string unit,uint64 validUntil)';
 const claimUsageId = keccak256(
   encodeAbiParameters(
-    ['bytes32', 'bytes32', 'bytes32', 'bytes32'].map((type) => ({ type })),
-    [textHash(usageType), claim.sourceId, claim.issuerId, claim.claimId],
+    ['bytes32', 'bytes32', 'bytes32'].map((type) => ({ type })),
+    [textHash(usageType), claim.sourceId, claim.claimId],
   ),
 );
+if (
+  getClaimUsageId({ sourceId: claim.sourceId, claimId: claim.claimId }) !==
+  claimUsageId
+)
+  throw new Error(
+    'The canonical identity helper disagrees with the V2 ABI vector.',
+  );
 const claimCommitment = keccak256(
   encodeAbiParameters(
     [
@@ -79,7 +87,7 @@ const request = {
   gate: `0x${'11'.repeat(20)}`,
   token: `0x${'22'.repeat(20)}`,
   recipient: claim.holder,
-  amount: '1000',
+  amount: String(claim.capacityMilligrams),
   unit: claim.unit,
   issuerId: claim.issuerId,
   reservationId: word('55'),
@@ -102,7 +110,7 @@ const publicValues = encodeAbiParameters(
     'uint64',
   ].map((type) => ({ type })),
   [
-    1,
+    2,
     requestDigest,
     `0x${evidence.signerFingerprint}`,
     claim.sourceId,
@@ -121,8 +129,9 @@ writeFileSync(
   JSON.stringify(
     {
       ...evidence,
-      profile: 'ultratokenizer-synthetic-gold-v1',
-      capacityAbsentFromPublicValues: true,
+      profile: 'ultratokenizer-synthetic-gold-v2',
+      capsuleFormat: 'ultratokenizer-synthetic-gold-v1',
+      authenticatedAmountPublicThroughRequest: true,
       claim: {
         ...claim,
         capacityMilligrams: String(claim.capacityMilligrams),

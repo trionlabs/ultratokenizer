@@ -8,6 +8,8 @@ import {IMintAdapter} from "./interfaces/IMintAdapter.sol";
 
 /// Non-upgradeable issuance gate. Registry entries are append-only; revocation is permanent.
 contract IssuanceGate {
+    uint32 public constant EXACT_CLAIM_PROFILE = 2;
+
     struct IssuerKey {
         address signer;
         uint64 validUntil;
@@ -50,6 +52,15 @@ contract IssuanceGate {
         uint256 used;
         uint64 validUntil;
         bool revoked;
+        bytes32 requestDigest;
+        bytes32 claimUsageId;
+        bool released;
+    }
+
+    struct BackingPool {
+        uint256 cap;
+        uint256 pending;
+        uint256 outstanding;
     }
 
     struct Evidence {
@@ -71,6 +82,7 @@ contract IssuanceGate {
     mapping(bytes32 => mapping(uint64 => Policy)) public policies;
     mapping(bytes32 => mapping(uint64 => Rights)) public rights;
     mapping(bytes32 => mapping(bytes32 => Reservation)) public reservations;
+    mapping(bytes32 => mapping(address => BackingPool)) public backingPools;
     mapping(bytes32 => bool) public usedRequests;
     mapping(bytes32 => bool) public usedRequestIds;
     mapping(bytes32 => bool) public usedClaims;
@@ -88,6 +100,8 @@ contract IssuanceGate {
     error Expired();
     error Replay();
     error CapacityExceeded();
+    error ReservationMismatch();
+    error ReservationNotExpired();
     error Paused();
     error Reentrant();
 
@@ -119,9 +133,13 @@ contract IssuanceGate {
         address token,
         uint256 capacity,
         uint64 validUntil,
-        uint64 keyVersion
+        uint64 keyVersion,
+        bytes32 requestDigest,
+        bytes32 claimUsageId
     );
     event ReservationRevoked(bytes32 indexed issuerId, bytes32 indexed reservationId);
+    event ReservationExpired(bytes32 indexed issuerId, bytes32 indexed reservationId);
+    event BackingCapChanged(bytes32 indexed issuerId, address indexed token, uint256 previousCap, uint256 cap);
     event Issued(
         bytes32 indexed requestDigest,
         bytes32 indexed requestId,
@@ -171,8 +189,14 @@ contract IssuanceGate {
         emit IssuerKeyRegistered(issuerId, version, signer, validUntil);
     }
 
-    function registerProgram(uint64 version, address verifier, bytes32 vkey, uint32 profile) external onlyGovernor {
-        if (version == 0 || verifier.code.length == 0 || vkey == 0 || profile == 0) revert InvalidConfiguration();
+    function registerProgram(uint64 version, address verifier, bytes32 expectedCodeHash, bytes32 vkey, uint32 profile)
+        external
+        onlyGovernor
+    {
+        if (
+            version == 0 || verifier.code.length == 0 || expectedCodeHash == 0 || verifier.codehash != expectedCodeHash
+                || vkey == 0 || profile != EXACT_CLAIM_PROFILE
+        ) revert InvalidConfiguration();
         if (programs[version].verifier != address(0)) revert AlreadyRegistered();
         programs[version] = Program(verifier, verifier.codehash, vkey, profile, false);
         emit ProgramRegistered(version, verifier, verifier.codehash, vkey, profile);
@@ -246,6 +270,17 @@ contract IssuanceGate {
         emit Revoked("RIGHTS", issuerId, version);
     }
 
+    /// An accepted accounting ceiling, not a cryptographic observation of physical backing.
+    /// No outstanding liability can be removed by lowering the ceiling.
+    function setBackingCap(bytes32 issuerId, address token, uint256 cap) external onlyGovernor {
+        if (issuerId == 0 || token == address(0)) revert InvalidConfiguration();
+        BackingPool storage pool = backingPools[issuerId][token];
+        if (cap < pool.pending + pool.outstanding) revert CapacityExceeded();
+        uint256 previous = pool.cap;
+        pool.cap = cap;
+        emit BackingCapChanged(issuerId, token, previous, cap);
+    }
+
     /// Issuer-authorized reservation is a custody assertion, not an on-chain observation of physical gold.
     function openReservation(
         bytes32 issuerId,
@@ -254,24 +289,53 @@ contract IssuanceGate {
         address recipient,
         address token,
         uint256 capacity,
-        uint64 validUntil
+        uint64 validUntil,
+        bytes32 requestDigest_,
+        bytes32 claimUsageId
     ) external {
         IssuerKey memory key = _key(issuerId, keyVersion);
         if (msg.sender != key.signer) revert Unauthorized();
         if (
             reservationId == 0 || recipient == address(0) || token == address(0) || capacity == 0
+                || capacity > uint256(uint64(type(int64).max)) || requestDigest_ == 0 || claimUsageId == 0
                 || validUntil <= block.timestamp || validUntil > key.validUntil
         ) revert InvalidConfiguration();
         if (reservations[issuerId][reservationId].recipient != address(0)) revert AlreadyRegistered();
-        reservations[issuerId][reservationId] = Reservation(recipient, token, capacity, 0, validUntil, false);
-        emit ReservationOpened(issuerId, reservationId, recipient, token, capacity, validUntil, keyVersion);
+        if (usedRequests[requestDigest_] || usedClaims[claimUsageId]) revert Replay();
+        BackingPool storage pool = backingPools[issuerId][token];
+        if (capacity > pool.cap - pool.pending - pool.outstanding) revert CapacityExceeded();
+        pool.pending += capacity;
+        reservations[issuerId][reservationId] =
+            Reservation(recipient, token, capacity, 0, validUntil, false, requestDigest_, claimUsageId, false);
+        emit ReservationOpened(
+            issuerId, reservationId, recipient, token, capacity, validUntil, keyVersion, requestDigest_, claimUsageId
+        );
     }
 
     function revokeReservation(bytes32 issuerId, uint64 keyVersion, bytes32 reservationId) external {
         if (msg.sender != governor && msg.sender != _key(issuerId, keyVersion).signer) revert Unauthorized();
-        if (reservations[issuerId][reservationId].recipient == address(0)) revert InvalidConfiguration();
-        reservations[issuerId][reservationId].revoked = true;
+        Reservation storage reservation = reservations[issuerId][reservationId];
+        if (reservation.recipient == address(0)) revert InvalidConfiguration();
+        if (reservation.revoked) return;
+        reservation.revoked = true;
+        _releasePending(issuerId, reservation);
         emit ReservationRevoked(issuerId, reservationId);
+    }
+
+    /// Finalized on-chain expiry releases unused pending capacity; it never cancels an earlier issue.
+    function expireReservation(bytes32 issuerId, bytes32 reservationId) external {
+        Reservation storage reservation = reservations[issuerId][reservationId];
+        if (reservation.recipient == address(0)) revert InvalidConfiguration();
+        if (block.timestamp < reservation.validUntil) revert ReservationNotExpired();
+        if (reservation.used != 0 || reservation.released) return;
+        _releasePending(issuerId, reservation);
+        emit ReservationExpired(issuerId, reservationId);
+    }
+
+    function _releasePending(bytes32 issuerId, Reservation storage reservation) private {
+        if (reservation.used != 0 || reservation.released) return;
+        reservation.released = true;
+        backingPools[issuerId][reservation.token].pending -= reservation.capacity;
     }
 
     function requestDigest(RequestHash.Request calldata request) external pure returns (bytes32) {
@@ -306,14 +370,24 @@ contract IssuanceGate {
         ) revert InactiveRecord();
         bytes32 programVKey = _evidence(request, digest, publicValues, proofBytes);
         Reservation storage reservation = reservations[request.issuerId][request.reservationId];
-        if (reservation.recipient != request.recipient || reservation.token != request.token || reservation.revoked) {
+        if (
+            reservation.recipient != request.recipient || reservation.token != request.token || reservation.revoked
+                || reservation.released
+        ) {
             revert InactiveRecord();
         }
         if (block.timestamp >= reservation.validUntil || request.validUntil > reservation.validUntil) revert Expired();
-        if (request.amount > reservation.capacity - reservation.used) revert CapacityExceeded();
+        if (reservation.used != 0) revert Replay();
+        if (
+            reservation.requestDigest != digest || reservation.claimUsageId != request.claimUsageId
+                || request.amount != reservation.capacity
+        ) revert ReservationMismatch();
 
         // All accounting and the external mint/transfer share one reverting EVM transaction.
-        reservation.used += request.amount;
+        reservation.used = request.amount;
+        BackingPool storage pool = backingPools[request.issuerId][request.token];
+        pool.pending -= request.amount;
+        pool.outstanding += request.amount;
         usedRequests[digest] = true;
         usedRequestIds[request.requestId] = true;
         usedClaims[request.claimUsageId] = true;
@@ -383,8 +457,8 @@ contract IssuanceGate {
         Program memory program = programs[policy.programVersion];
         SourceKey memory source = sourceKeys[policy.sourceId][policy.sourceKeyVersion];
         if (
-            program.verifier == address(0) || program.revoked || program.verifier.codehash != program.codeHash
-                || source.fingerprint == 0 || source.revoked
+            program.verifier == address(0) || program.revoked || program.profile != EXACT_CLAIM_PROFILE
+                || program.verifier.codehash != program.codeHash || source.fingerprint == 0 || source.revoked
         ) revert InactiveRecord();
         if (publicValues.length != 224 || proofBytes.length == 0) revert InvalidEvidence();
         Evidence memory evidence = abi.decode(publicValues, (Evidence));

@@ -35,6 +35,8 @@ Import the public API from `src/index.ts` in TypeScript or the generated `dist/d
 | `parseIssuerPermit(input)`                  | Validated, normalized and frozen issuer permit                                             |
 | `getIssuerPermitTypedData(request, permit)` | Distinct issuer signing data bound to the complete request and its issuer                  |
 | `getIssuerPermitDigest(request, permit)`    | EIP-712 digest of the bound issuer permit                                                  |
+| `getClaimUsageId(identity)`                 | Stable claim usage identifier derived from authenticated capsule identifiers               |
+| `CLAIM_USAGE_TYPE`                          | Pinned domain-separator type string for the claim usage derivation                         |
 | `ISSUED_EVENT_ABI`                          | Frozen gate event definition shared by the audit package and chain observer                |
 
 Parsing and hashing intentionally allow expired requests so historical audit remains possible. Call the expiry check explicitly for current execution. Contracts must use the chain's timestamp and live state at issuance.
@@ -67,10 +69,38 @@ The domain name is `Ultratokenizer`; the primary type is `IssuanceRequest`. `req
 The synthetic fixture's version-one digest is:
 
 ```text
-0x996df02433637893ae8b8ef23e2d694dfda258a551b6251339e451179424a237
+0xc591af7ea5cdef6005e1a9b31f14d7d30566e87615478d25a4861f43721b5deb
 ```
 
 This is a pinned protocol regression fixture, not independent evidence of a deployed contract or an audited cryptographic implementation.
+
+## Claim usage identifier
+
+The claim usage identifier is the stable, privacy-preserving identity used to track consumption of one authenticated source claim across requests. The exact-amount V2 evidence profile requires the full signed quantity; smaller and larger requests both fail. It is distinct from a per-request nonce and from the claim commitment, which binds the claim's mutable content.
+
+The derivation is canonical and identical in `packages/domain` (`claim-identity.ts`), the Rust evidence crate (`claim_identity.rs`) and the SP1 guest:
+
+```text
+usageType = "UltratokenizerClaimUsageV2(bytes32 sourceId,bytes32 claimId)"
+claimUsageId = keccak256(abi.encode(keccak256(usageType), sourceId, claimId))
+```
+
+Every field is a 32-byte word; the type hash is the domain separator. The fields come from the authenticated source capsule and mean:
+
+- `sourceId` — the authenticated source institution identifier, distinct from its signing key.
+- `claimId` — the **claim subject key**: a stable, high-entropy, opaque per-claim identifier that stands in for the account/statement identifier and statement period in this synthetic profile.
+
+Why this shape:
+
+- **Authenticated source identity only.** Every input is a signed capsule field; no arbitrary user input enters the hash.
+- **Survives source/document revisions.** A revision changes the holder, capacity and expiry, none of which are inputs. The source keeps `sourceId` and `claimId` constant across revisions of the same claim, so the identifier is stable.
+- **Not reset by issuer, wallet, salt or policy.** Issuer, holder wallet, any fresh salt and the policy version are excluded by construction. Passing them to `getClaimUsageId` is rejected, so a user cannot re-randomize the nullifier to reuse a claim.
+- **Entropy.** The output is a 256-bit Keccak digest. `claimId` is the primary entropy source and must be generated with high entropy; the other fields are opaque institutional identifiers. Uniqueness for single-use tracking requires `claimId` to be unique per claim within a source.
+- **Privacy.** The identifier is a one-way hash, so it does not publish a raw document or account identifier as a nullifier. It is deterministic and therefore linkable, which is intentional for single-use tracking; an observer who can enumerate a low-entropy `claimId` namespace could match identifiers, so `claimId` must be unguessable.
+
+`issuerId` is excluded in V2. Re-authorizing the same source right under another issuer preserves the same consumption identity. The source keeps its opaque right ID stable across redelivery, key rotation and corrections. This prevents issuer-based replay within one Gate; it does not share consumption state with another Gate or chain. A new deployment must preserve consumed rights and backing obligations before accepting old claims. Adding a chain or Gate to the hash would create fresh identities rather than provide that continuity.
+
+`getClaimUsageId` validates identifier shape (nonzero 32-byte hex) but does not authenticate the source. The evidence/prover integration supplies authenticated capsule fields; the request still carries the derived `claimUsageId` and `claimCommitment` as separate bytes32 values.
 
 ## Trust boundary
 
@@ -78,7 +108,7 @@ An issuer permit contains `requestDigest`, `issuerId`, positive uint64 `keyVersi
 
 The digest binds the request contents. It does not establish that a source document is authentic, a signer is an authorized issuer, a reservation exists, a claim identifier was correctly derived, or mint capacity is available. Signatures still require signer and authority verification. Nonces still require persistent consumption checks.
 
-The module accepts a supplied `claimUsageId`; source-derived uniqueness must be established by the evidence/prover integration. The holder must approve all bound fields, and both proof and permit must reference the same request. The issuance gate separately checks the active chain, gate, registry state, authority, expiry and atomic consume-and-mint behavior. See [the contract module](../../contracts/README.md) for its implementation and deployment limits.
+The module accepts a supplied `claimUsageId` and derives one from authenticated capsule fields via `getClaimUsageId`; the two must agree before the request is proven, and uniqueness is enforced by the issuance gate. The holder must approve all bound fields, and both proof and permit must reference the same request. The issuance gate separately checks the active chain, gate, registry state, authority, expiry and atomic consume-and-mint behavior. See [the contract module](../../contracts/README.md) for its implementation and deployment limits.
 
 Tests cover malformed inputs, integer and checksum boundaries, canonical ordering, request and permit binding, actual EOA signature tampering, expiry and historical hashing. Other modules test Solidity parity, shared event ABI and request hashing inside Rust. Domain tests alone do not establish smart-contract wallet, proof, registry or blockchain acceptance.
 

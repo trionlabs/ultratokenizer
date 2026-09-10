@@ -1,8 +1,8 @@
 use sp1_sdk::{Elf, Prover, ProverClient, SP1Stdin};
 use std::{env, fs::File, io::Read, process::ExitCode};
 use ultratokenizer_claim_evidence::{
-    request::MAX_REQUEST_BYTES, verify_claim, ClaimInput, CAPSULE_MARKER, MAX_DOCUMENT_BYTES,
-    MAX_WITNESS_BYTES,
+    claim_usage_id, request::MAX_REQUEST_BYTES, verify_claim, ClaimInput, CAPSULE_MARKER,
+    MAX_DOCUMENT_BYTES, MAX_WITNESS_BYTES,
 };
 
 const MAX_CYCLES: u64 = 100_000_000;
@@ -18,6 +18,18 @@ fn read_bounded(path: &str, maximum: usize) -> Result<Vec<u8>, &'static str> {
         return Err("Input exceeds its size limit.");
     }
     Ok(bytes)
+}
+
+fn decode_word(value: &str) -> Result<[u8; 32], &'static str> {
+    let raw = value
+        .strip_prefix("0x")
+        .ok_or("Claim identity word must be 0x-prefixed hex.")?;
+    let mut word = [0; 32];
+    hex::decode_to_slice(raw, &mut word).map_err(|_| "Invalid claim identity word.")?;
+    if word == [0; 32] {
+        return Err("Claim identity word must be nonzero.");
+    }
+    Ok(word)
 }
 
 async fn execute(elf: Elf, witness: Vec<u8>) -> Result<(Vec<u8>, u64, u64), &'static str> {
@@ -51,9 +63,22 @@ async fn run() -> Result<(), &'static str> {
         );
         return Ok(());
     }
+    if args.len() == 3 && args[0] == "claim-usage" {
+        let source_id = decode_word(&args[1])?;
+        let claim_id = decode_word(&args[2])?;
+        let usage = claim_usage_id(source_id, claim_id);
+        println!(
+            "{}",
+            serde_json::json!({
+                "status":"claim_usage_computed",
+                "claimUsageId":format!("0x{}", hex::encode(usage))
+            })
+        );
+        return Ok(());
+    }
     if matches!(
         args.first().map(String::as_str),
-        Some("identity" | "prove-local" | "verify-local")
+        Some("identity" | "prove-local" | "verify-local" | "export-groth16")
     ) {
         return local_proof::run(&args).await;
     }
@@ -90,7 +115,7 @@ async fn run() -> Result<(), &'static str> {
         "{}",
         serde_json::json!({
             "status":"claim_verified", "execution":backend, "zkProof":false,
-            "profile":"ultratokenizer-synthetic-gold-v1", "instructions":instructions,
+            "profile":"ultratokenizer-synthetic-gold-v2", "instructions":instructions,
             "requestDigest":format!("0x{}", hex::encode(expected.request_digest)),
             "publicValues":format!("0x{}", hex::encode(expected.public_values())),
         })
@@ -154,6 +179,7 @@ async fn self_test(elf: Elf) -> Result<(), &'static str> {
     for (field, value) in [
         ("recipient", format!("0x{}", "99".repeat(20))),
         ("claimUsageId", format!("0x{}", "99".repeat(32))),
+        ("amount", "9999".into()),
         ("amount", "10001".into()),
         ("unit", "XAU_GRAM".into()),
         ("validUntil", "2000000001".into()),

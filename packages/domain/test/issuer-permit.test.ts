@@ -50,7 +50,7 @@ await test('permit is canonical, frozen and a distinct EIP-712 authorization', a
   for (const [field, value] of [
     ['keyVersion', '2'],
     ['nonce', '1'],
-    ['validUntil', '1999999999'],
+    ['validUntil', (BigInt(fixture.validUntil) - 1n).toString()],
   ]) {
     assert.equal(
       await verifyTypedData({
@@ -81,7 +81,10 @@ await test('permit cannot authorize changed request, issuer, chain or gate', () 
     }),
   );
   assert.throws(() =>
-    getIssuerPermitTypedData(fixture, { ...permit, validUntil: '2000000001' }),
+    getIssuerPermitTypedData(fixture, {
+      ...permit,
+      validUntil: (BigInt(fixture.validUntil) + 1n).toString(),
+    }),
   );
 });
 

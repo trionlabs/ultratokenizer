@@ -3,15 +3,17 @@
 //! issuer authorization, expiry and single-use claim consumption independently.
 
 mod capsule;
+pub mod claim_identity;
 pub mod request;
 
 use capsule::Capsule;
 pub use capsule::{CAPSULE_BYTES, CAPSULE_MARKER};
+pub use claim_identity::{claim_usage_id, CLAIM_USAGE_TYPE};
 use request::{word_u64, Request, Word, MAX_REQUEST_BYTES};
 use tiny_keccak::{Hasher, Keccak};
 use ultratokenizer_pdf_evidence::verify_pdf;
 
-pub const PROFILE_VERSION: u32 = 1;
+pub const PROFILE_VERSION: u32 = 2;
 pub const PUBLIC_VALUES_BYTES: usize = 224;
 pub const MAX_DOCUMENT_BYTES: usize = 256 * 1024;
 pub const MAX_WITNESS_BYTES: usize = 48 + MAX_REQUEST_BYTES + MAX_DOCUMENT_BYTES;
@@ -25,7 +27,7 @@ pub enum ClaimError {
     InvalidEvidence,
     InvalidCapsule,
     ClaimMismatch,
-    CapacityExceeded,
+    AmountMismatch,
     ExpiryMismatch,
 }
 type Result<T> = std::result::Result<T, ClaimError>;
@@ -39,7 +41,7 @@ impl std::fmt::Display for ClaimError {
             Self::InvalidEvidence => "Signed PDF evidence was rejected.",
             Self::InvalidCapsule => "Synthetic certificate capsule is invalid.",
             Self::ClaimMismatch => "The request does not match the authenticated claim.",
-            Self::CapacityExceeded => "The request exceeds authenticated capacity.",
+            Self::AmountMismatch => "The request must equal the complete authenticated amount.",
             Self::ExpiryMismatch => "The request exceeds the claim validity period.",
         })
     }
@@ -163,8 +165,8 @@ pub fn verify_claim(input: &ClaimInput<'_>) -> Result<VerifiedClaim> {
     {
         return Err(ClaimError::ClaimMismatch);
     }
-    if request.amount > claim.capacity {
-        return Err(ClaimError::CapacityExceeded);
+    if request.amount != claim.capacity {
+        return Err(ClaimError::AmountMismatch);
     }
     if request.valid_until > claim.valid_until {
         return Err(ClaimError::ExpiryMismatch);

@@ -1,6 +1,7 @@
 //! The synthetic profile authenticates this exact header capsule, never PDF text.
 
 use crate::{
+    claim_identity::claim_usage_id,
     hash,
     request::{hash_words, word_u64, Word, UNIT},
     ClaimError, Result,
@@ -85,12 +86,7 @@ impl Capsule {
     }
 
     pub fn usage_id(&self) -> Word {
-        hash_words(&[
-            hash(b"UltratokenizerClaimUsageV1(bytes32 sourceId,bytes32 issuerId,bytes32 claimId)"),
-            self.source_id,
-            self.issuer_id,
-            self.claim_id,
-        ])
+        claim_usage_id(self.source_id, self.claim_id)
     }
 
     pub fn commitment(&self) -> Word {
@@ -109,10 +105,11 @@ mod tests {
     const PDF: &[u8] = include_bytes!("../fixtures/gold-certificate.synthetic.pdf");
 
     #[test]
-    fn identity_is_stable_across_holder_capacity_and_expiry_changes() {
+    fn identity_is_stable_across_issuer_holder_capacity_and_expiry_changes() {
         let mut claim = Capsule::parse(PDF).unwrap();
         let usage = claim.usage_id();
         let commitment = claim.commitment();
+        claim.issuer_id = [0x66; 32];
         claim.holder = [0x77; 32];
         claim.capacity = word_u64(5000);
         claim.valid_until += 1;
