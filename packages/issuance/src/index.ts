@@ -9,6 +9,7 @@ export {
   parseClaimProofExport,
   parseDeploymentConfig,
   getTokenBackend,
+  parseTransactionHash,
   assertBundleDeployment,
 } from './schema.js';
 export type {

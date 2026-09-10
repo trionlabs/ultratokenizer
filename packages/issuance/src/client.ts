@@ -25,7 +25,7 @@ import {
   assertBundleDeployment,
   IssuanceClientError,
   bytes,
-  nonzeroHash,
+  parseTransactionHash,
   type IssuanceBundle,
 } from './schema.js';
 
@@ -45,6 +45,7 @@ export function createIssuanceClient(input: {
     activeAccount,
     canonicalReceipt,
     send,
+    walletPrompt,
     verifyEvidence,
     assertCanonical,
   } = context;
@@ -130,7 +131,7 @@ export function createIssuanceClient(input: {
   return Object.freeze({
     deployment,
     async connect() {
-      const [address] = await wallet.requestAddresses();
+      const [address] = await walletPrompt(() => wallet.requestAddresses());
       if (!address) throw new IssuanceClientError('wrong_account');
       await deploymentMatches();
       return Object.freeze({
@@ -142,10 +143,12 @@ export function createIssuanceClient(input: {
     async sign(value: unknown): Promise<Hex> {
       const bundle = await validateBundle(value);
       const account = await activeAccount(bundle.request.recipient);
-      const signature = await wallet.signTypedData({
-        account,
-        ...getIssuanceRequestTypedData(bundle.request),
-      });
+      const signature = await walletPrompt(() =>
+        wallet.signTypedData({
+          account,
+          ...getIssuanceRequestTypedData(bundle.request),
+        }),
+      );
       const checked = await checkedSignature(bundle, signature);
       await activeAccount(bundle.request.recipient);
       return checked;
@@ -167,8 +170,7 @@ export function createIssuanceClient(input: {
           throw error;
         throw new IssuanceClientError('issuance_preflight_unavailable');
       }
-      // Only a failure after invoking the wallet send can imply an unknown broadcast.
-      return send(() => wallet.writeContract(simulated.request));
+      return send((sender) => sender.writeContract(simulated.request));
     },
     async wait(
       value: unknown,
@@ -176,7 +178,7 @@ export function createIssuanceClient(input: {
       transactionHash: Hex,
     ): Promise<IssuanceReceipt> {
       const bundle = bundleForDeployment(value);
-      const hash = nonzeroHash(transactionHash);
+      const hash = parseTransactionHash(transactionHash);
       // Historical reconciliation does not require a live permit or the currently selected wallet.
       const receipt = await canonicalReceipt(hash);
       let transaction;

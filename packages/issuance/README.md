@@ -16,16 +16,16 @@ The supported portable signing/receipt path uses canonical 65-byte EOA signature
 
 `validate` checks the imported request/permit/evidence bindings and compares live program, source, issuer, rights, adapter and exact reservation records at one selected block. It checks pending/outstanding exposure and asks the pinned verifier to verify the proof at that same block, then confirms that the block remains canonical according to the RPC. This is a preflight snapshot: state can change before execution. `simulate` executes the complete Gate call without submitting it.
 
-`sign` rechecks the selected wallet after the signing prompt. `submit`, `associate` and `transfer` recheck account and chain immediately before sending. Explicit user rejection is retained as rejection; other send failures are unresolved because a disconnected wallet may have submitted before returning a hash. Preserve any known hash and reconcile before offering another submission. A client cannot make wallet state checks and network submission one atomic operation.
+`sign` rechecks the selected wallet after the signing prompt. `submit` and `sendTokenTransaction` recheck account and chain immediately before sending. Explicit user rejection is retained as rejection; other send failures are unresolved because a disconnected wallet may have submitted before returning a hash. Preserve any known hash and reconcile before offering another submission. A client cannot make wallet state checks and network submission one atomic operation.
 
-During `submit()`, an issuance simulation or final preflight outage returns `issuance_preflight_unavailable` before calling the wallet's transaction method. It must not be presented as a possible broadcast. Errors after entering the actual send boundary remain uncertain unless the wallet explicitly rejected the operation.
+During `submit()`, an issuance simulation or final preflight outage returns `issuance_preflight_unavailable` before calling the wallet's transaction method. This includes viem's internal chain lookup before dispatch; a different chain produces `wrong_chain`. The boundary is the actual provider transaction method, not the invocation of `writeContract()`. Once that method is dispatched, transport loss or an invalid returned hash remains `transaction_uncertain`; retain the request and any hash and reconcile before retrying. A send uses its own observation state and never dispatches a second transaction through viem's method fallback. Explicit numeric wallet rejection, including nested provider errors, produces `wallet_rejected` for connect, sign and send prompts. Error text alone cannot establish rejection.
 
 Issuance reconciliation binds the exact logical request and holder signature, not an original wallet sender/nonce intent. A confirmed success for that request establishes its issuance. A newly supplied reverted transaction cannot establish that another unknown or retained submission failed, even when its calldata matches. The web session preserves that ambiguity with `issuance_recovery_unresolved`; only the already retained original hash can resolve that attempt as reverted. Invalid recovery candidates never replace the original reference.
 
-Use `connect()` to request the wallet account, `validate(bundle)` for preflight, `sign(bundle)` for holder approval, `simulate(bundle, signature)` before `submit(bundle, signature)`, and `wait(bundle, signature, hash)` for reconciliation. `associate()`, `balance()` and `transfer(recipient, milligrams)` operate on the configured token; post-issuance transfers remain divisible into positive integer milligrams. `resolveEnsRecipient` resolves an optional name to an address before that address is confirmed as transfer intent.
+Use `connect()` to request the wallet account, `validate(bundle)` for preflight, `sign(bundle)` for holder approval, `simulate(bundle, signature)` before `submit(bundle, signature)`, and `wait(bundle, signature, hash)` for reconciliation. `balance()` reads the configured token; post-issuance transfers remain divisible into positive integer milligrams. `resolveEnsRecipient` resolves an optional name to an address before that address is confirmed as transfer intent.
 
 `getTokenBackend(deployment)` distinguishes the explicitly selected backend. Ordinary balance,
-decimal and transfer calls use the shared ERC-20 ABI. `associate()` is exclusive to native HTS and
+decimal and transfer calls use the shared ERC-20 ABI. The `association` operation is exclusive to native HTS and
 rejects ATS before making a wallet or RPC call; it never returns a fabricated success or hash.
 
 `wait` does not require the original account to remain selected or its permit to remain live. It refreshes the receipt, checks the supplied transaction hash, canonical block and confirmation depth, compares historical Gate code, verifies the exact direct `issue` calldata and matches one complete `Issued` log. It exports the existing audit receipt format. Replacement/repricing/cancellation receipts are not silently substituted: reconcile the actual wallet transaction hash explicitly. A changed or unavailable chain view remains unresolved.
@@ -39,6 +39,16 @@ checks the exact transaction and, for transfers, one matching `Transfer` event a
 block. An old otherwise identical transaction cannot confirm a new nonce. HTS association also
 requires a historical `isAssociated()` read with the original sender as caller; ATS rejects the
 operation. Current wallet selection and expired mint permissions do not prevent reconciliation.
+
+The former hash-only `associate()` and `transfer()` client shortcuts were removed because they
+discarded the intent needed to recover an uncertain submission. Use the three-step API for
+`{ kind: 'association' }` or `{ kind: 'transfer', recipient, milligrams }`, and preserve the intent
+before invoking send. Preparation and pre-send RPC failures produce `token_preflight_unavailable`;
+a balance read failure produces `token_read_unavailable`. Neither means a token transaction was
+requested. Pending nonces must be canonical JSON-RPC quantities within the client's safe integer
+range; a valid changed nonce requires a new intent. `parseTransactionHash(input)` rejects malformed
+recovery input with `invalid_transaction_hash` before any RPC request. These input errors remain
+distinct from a malformed response after a wallet send.
 
 The legacy hash-only `waitTokenTransaction(hash)` checks generic successful token inclusion only.
 It is retained for compatibility and must not certify the intended action in a product UI. The web

@@ -10,7 +10,11 @@ import {
 } from 'viem';
 import { ERC20_TOKEN_ABI, HTS_TOKEN_ABI } from './abi.js';
 import { type createChainContext } from './chain.js';
-import { getTokenBackend, IssuanceClientError, nonzeroHash } from './schema.js';
+import {
+  getTokenBackend,
+  IssuanceClientError,
+  parseTransactionHash,
+} from './schema.js';
 
 export type TokenOperation =
   | Readonly<{ kind: 'association' }>
@@ -119,7 +123,6 @@ export function createTokenOperations(
     deployment,
     policy,
     reader,
-    wallet,
     activeAccount,
     canonicalReceipt,
     assertCanonical,
@@ -141,43 +144,64 @@ export function createTokenOperations(
     supported(intent);
     return intent;
   }
+  async function checkedRead<T>(
+    unavailable: 'token_preflight_unavailable' | 'token_read_unavailable',
+    read: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await read();
+    } catch (error) {
+      if (
+        error instanceof IssuanceClientError &&
+        error.code !== 'transaction_uncertain'
+      )
+        throw error;
+      throw new IssuanceClientError(unavailable);
+    }
+  }
+  async function pendingNonce(account: Address): Promise<bigint> {
+    // Preserve the raw JSON-RPC quantity until its complete representation has
+    // been checked. Formatted getTransactionCount results lose leading zeros.
+    const value = await reader.request({
+      method: 'eth_getTransactionCount',
+      params: [account, 'pending'],
+    });
+    if (
+      typeof value !== 'string' ||
+      !/^0x(?:0|[1-9a-fA-F][0-9a-fA-F]{0,13})$/.test(value) ||
+      BigInt(value) > BigInt(Number.MAX_SAFE_INTEGER)
+    )
+      throw new IssuanceClientError('token_preflight_unavailable');
+    return BigInt(value);
+  }
   async function prepareTokenTransaction(
     value: TokenOperation,
     expectedAccount?: Address,
   ): Promise<TokenTransactionIntent> {
     const op = operation(value);
     supported(op);
-    const account = await activeAccount(expectedAccount);
-    const nonce = await reader.getTransactionCount({
-      address: account,
-      blockTag: 'pending',
-    });
-    if (!Number.isSafeInteger(nonce) || nonce < 0)
-      throw new IssuanceClientError('transaction_uncertain');
-    return parseTokenTransactionIntent({
-      format: 'ultratokenizer.token-intent.v1',
-      chainId: policy.chainId,
-      token: policy.token,
-      account,
-      nonce: String(nonce),
-      ...op,
+    return checkedRead('token_preflight_unavailable', async () => {
+      const account = await activeAccount(expectedAccount);
+      const nonce = await pendingNonce(account);
+      return parseTokenTransactionIntent({
+        format: 'ultratokenizer.token-intent.v1',
+        chainId: policy.chainId,
+        token: policy.token,
+        account,
+        nonce: String(nonce),
+        ...op,
+      });
     });
   }
   async function freshAccount(intent: TokenTransactionIntent) {
     const account = await activeAccount(intent.account);
-    const nonce = Number(intent.nonce);
-    if (
-      (await reader.getTransactionCount({
-        address: account,
-        blockTag: 'pending',
-      })) !== nonce
-    )
+    if ((await pendingNonce(account)) !== BigInt(intent.nonce))
       throw new IssuanceClientError('stale_token_intent');
     return account;
   }
   async function submission(
     intent: TokenTransactionIntent,
-  ): Promise<() => Promise<Hex>> {
+  ): Promise<Parameters<typeof send>[0]> {
     const account = await freshAccount(intent);
     const nonce = Number(intent.nonce);
     if (intent.kind === 'association') {
@@ -190,7 +214,7 @@ export function createTokenOperations(
       if (simulated.result !== 22n)
         throw new IssuanceClientError('association_failed');
       await freshAccount(intent);
-      return () => wallet.writeContract({ ...simulated.request, nonce });
+      return (sender) => sender.writeContract({ ...simulated.request, nonce });
     }
     if (
       (await reader.readContract({
@@ -209,31 +233,22 @@ export function createTokenOperations(
     });
     if (!simulated.result) throw new IssuanceClientError('invalid_transfer');
     await freshAccount(intent);
-    return () => wallet.writeContract({ ...simulated.request, nonce });
+    return (sender) => sender.writeContract({ ...simulated.request, nonce });
   }
   async function sendTokenTransaction(
     value: TokenTransactionIntent,
   ): Promise<Hex> {
     const intent = bound(value);
-    let submit;
-    try {
-      submit = await submission(intent);
-    } catch (error) {
-      if (
-        error instanceof IssuanceClientError &&
-        error.code !== 'transaction_uncertain'
-      )
-        throw error;
-      throw new IssuanceClientError('token_preflight_unavailable');
-    }
-    // Only failures after the wallet operation starts can mean an unknown broadcast.
-    return send(submit);
+    const submit = await checkedRead('token_preflight_unavailable', () =>
+      submission(intent),
+    );
+    return send(submit, 'token_preflight_unavailable');
   }
   async function waitTokenTransaction(
     value: Hex,
     expected?: TokenTransactionIntent,
   ): Promise<void> {
-    const hash = nonzeroHash(value);
+    const hash = parseTransactionHash(value);
     const intent = expected === undefined ? undefined : bound(expected);
     const receipt = await canonicalReceipt(hash);
     if (!receipt.to || getAddress(receipt.to) !== policy.token)
@@ -347,27 +362,15 @@ export function createTokenOperations(
     prepareTokenTransaction,
     sendTokenTransaction,
     waitTokenTransaction,
-    async associate() {
-      return sendTokenTransaction(
-        await prepareTokenTransaction({ kind: 'association' }),
-      );
-    },
-    async transfer(recipient: string, milligrams: string) {
-      return sendTokenTransaction(
-        await prepareTokenTransaction({
-          kind: 'transfer',
-          recipient,
-          milligrams,
-        }),
-      );
-    },
     async balance() {
-      const account = await activeAccount();
-      return reader.readContract({
-        address: policy.token,
-        abi: ERC20_TOKEN_ABI,
-        functionName: 'balanceOf',
-        args: [account],
+      return checkedRead('token_read_unavailable', async () => {
+        const account = await activeAccount();
+        return reader.readContract({
+          address: policy.token,
+          abi: ERC20_TOKEN_ABI,
+          functionName: 'balanceOf',
+          args: [account],
+        });
       });
     },
   };

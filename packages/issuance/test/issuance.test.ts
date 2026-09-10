@@ -269,7 +269,7 @@ await test('ATS configuration stays independent and association rejects before a
   };
   const client = createIssuanceClient({ provider, deployment: configured });
   await assert.rejects(
-    client.associate(),
+    client.prepareTokenTransaction({ kind: 'association' }),
     (error: unknown) =>
       error instanceof IssuanceClientError &&
       error.code === 'unsupported_operation',
@@ -434,6 +434,12 @@ async function rpcFixture(t: TestContext, version: 'v1' | 'v2' = 'v1') {
     onSimulation: () => {},
     onSign: () => {},
     sendFailure: false,
+    sendError: null as unknown,
+    sendResult: hash as unknown,
+    onSend: async () => {},
+    signError: null as unknown,
+    onWalletRequest: (_method: string) => {},
+    onRpcRequest: (_method: string) => {},
     capacity: BigInt(request.amount),
     reservationExists: true,
     reservationRevoked: false,
@@ -463,7 +469,7 @@ async function rpcFixture(t: TestContext, version: 'v1' | 'v2' = 'v1') {
     duplicateTransferLog: false,
     logRecipient: issuer.address,
     logAmount: 125n,
-    pendingNonce: '0x7',
+    pendingNonce: '0x7' as unknown,
     txNonce: '0x7',
     txTo: request.gate,
     txValue: '0x0',
@@ -479,11 +485,13 @@ async function rpcFixture(t: TestContext, version: 'v1' | 'v2' = 'v1') {
   };
   const provider = {
     async request({ method, params }: { method: string; params?: unknown[] }) {
+      state.onWalletRequest(method);
       if (method === 'eth_chainId') return state.walletChain;
       if (method === 'eth_accounts' || method === 'eth_requestAccounts')
         return [state.account];
       if (method === 'eth_signTypedData_v4') {
         state.signs++;
+        if (state.signError) throw state.signError;
         const typedData =
           params && typeof params[1] === 'string'
             ? JSON.parse(params[1])
@@ -496,15 +504,20 @@ async function rpcFixture(t: TestContext, version: 'v1' | 'v2' = 'v1') {
         state.onSign();
         return signature;
       }
-      if (method === 'eth_sendTransaction') {
+      if (
+        method === 'eth_sendTransaction' ||
+        method === 'wallet_sendTransaction'
+      ) {
         state.sends++;
+        await state.onSend();
         state.sentData = (params?.[0] as { data: Hex } | undefined)?.data ?? '';
         state.sentNonce = (
           params?.[0] as { nonce?: string } | undefined
         )?.nonce;
         if (state.sendFailure)
           throw new Error('Wallet transport disconnected after send');
-        return hash;
+        if (state.sendError) throw state.sendError;
+        return state.sendResult;
       }
       throw new Error(`Unexpected wallet method ${method}`);
     },
@@ -514,6 +527,7 @@ async function rpcFixture(t: TestContext, version: 'v1' | 'v2' = 'v1') {
     'fetch',
     async (_input: unknown, init?: RequestInit) => {
       const call = parseRpcCall(init?.body);
+      state.onRpcRequest(call.method);
       let result: unknown;
       let error: unknown;
       if (call.method === 'eth_chainId') result = '0x128';
@@ -693,6 +707,12 @@ async function rpcFixture(t: TestContext, version: 'v1' | 'v2' = 'v1') {
               functionName: 'decimals',
               result: 3,
             });
+          else if (decoded.functionName === 'balanceOf')
+            result = encodeFunctionResult({
+              abi: HTS_TOKEN_ABI,
+              functionName: 'balanceOf',
+              result: 125n,
+            });
           else if (decoded.functionName === 'associate') {
             state.onSimulation();
             result = encodeFunctionResult({
@@ -838,10 +858,278 @@ async function rpcFixture(t: TestContext, version: 'v1' | 'v2' = 'v1') {
 const hasCode = (code: IssuanceClientError['code']) => (error: unknown) =>
   error instanceof IssuanceClientError && error.code === code;
 
+await test('viem wallet dispatch boundary separates its final chain check from a broadcast', async (t) => {
+  for (const action of ['issuance', 'token'] as const)
+    for (const failure of ['chain', 'outage'] as const)
+      await t.test(`${action}: ${failure}`, async (subtest) => {
+        const { state, client, holderSignature } = await rpcFixture(subtest);
+        const intent = await client.prepareTokenTransaction({
+          kind: 'association',
+        });
+        let simulated = false;
+        let finalChainReads = 0;
+        state.onSimulation = () => {
+          simulated = true;
+        };
+        state.onWalletRequest = (method) => {
+          if (
+            simulated &&
+            method === 'eth_chainId' &&
+            ++finalChainReads === 2
+          ) {
+            if (failure === 'chain') state.walletChain = '0x127';
+            else
+              throw new Error(
+                'Wallet chain RPC failed before eth_sendTransaction',
+              );
+          }
+        };
+        await assert.rejects(
+          action === 'issuance'
+            ? client.submit(bundle, holderSignature)
+            : client.sendTokenTransaction(intent),
+          hasCode(
+            failure === 'chain'
+              ? 'wrong_chain'
+              : action === 'issuance'
+                ? 'issuance_preflight_unavailable'
+                : 'token_preflight_unavailable',
+          ),
+        );
+        assert.equal(finalChainReads, 2);
+        assert.equal(state.sends, 0);
+      });
+});
+
+await test('nested provider rejection is normalized for actual wallet send and sign prompts', async (t) => {
+  for (const action of ['issuance', 'token', 'sign'] as const)
+    await t.test(action, async (subtest) => {
+      const { state, client, holderSignature } = await rpcFixture(subtest);
+      const intent = await client.prepareTokenTransaction({
+        kind: 'association',
+      });
+      const rejection = {
+        code: -32603,
+        message: 'Internal JSON-RPC error',
+        data: {
+          originalError: { code: 4001, message: 'User rejected the request' },
+        },
+      };
+      state.sendError = rejection;
+      state.signError = rejection;
+      await assert.rejects(
+        action === 'issuance'
+          ? client.submit(bundle, holderSignature)
+          : action === 'token'
+            ? client.sendTokenTransaction(intent)
+            : client.sign(bundle),
+        hasCode('wallet_rejected'),
+      );
+      assert.equal(state.sends, action === 'sign' ? 0 : 1);
+      assert.equal(state.signs, action === 'sign' ? 1 : 0);
+    });
+});
+
+await test('provider transaction failures never trigger a second broadcast or a false rejection', async (t) => {
+  for (const scenario of [
+    'method-fallback',
+    'input-fallback',
+    'chain-after-send',
+    'message-only',
+  ] as const)
+    await t.test(scenario, async (subtest) => {
+      const { state, client } = await rpcFixture(subtest);
+      const intent = await client.prepareTokenTransaction({
+        kind: 'association',
+      });
+      state.sendError =
+        scenario === 'message-only'
+          ? new Error('4001 user rejected')
+          : {
+              code:
+                scenario === 'method-fallback'
+                  ? -32601
+                  : scenario === 'input-fallback'
+                    ? -32000
+                    : 4901,
+              message: 'Provider transaction response unavailable',
+            };
+      await assert.rejects(
+        client.sendTokenTransaction(intent),
+        hasCode('transaction_uncertain'),
+      );
+      assert.equal(
+        state.sends,
+        1,
+        'viem must not send another transaction through a fallback method',
+      );
+      assert.equal(
+        intent.nonce,
+        '7',
+        'the caller retains the original intent for reconciliation',
+      );
+    });
+});
+
+await test(
+  'concurrent operations do not borrow an in-flight broadcast state',
+  { timeout: 5000 },
+  async (t) => {
+    const { state, client, hash } = await rpcFixture(t);
+    const intent = await client.prepareTokenTransaction({
+      kind: 'association',
+    });
+    let entered!: () => void;
+    let release!: () => void;
+    const dispatched = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const response = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    state.onSend = async () => {
+      entered();
+      await response;
+    };
+    const first = client.sendTokenTransaction(intent);
+    try {
+      await dispatched;
+      let simulated = false;
+      let finalReads = 0;
+      state.onSimulation = () => {
+        simulated = true;
+      };
+      state.onWalletRequest = (method) => {
+        if (simulated && method === 'eth_chainId' && ++finalReads === 2)
+          throw new Error('Second operation failed before dispatch');
+      };
+      await assert.rejects(
+        client.sendTokenTransaction(intent),
+        hasCode('token_preflight_unavailable'),
+      );
+      assert.equal(state.sends, 1);
+    } finally {
+      release();
+    }
+    assert.equal(await first, hash);
+  },
+);
+
+await test('malformed returned transaction hashes stay uncertain after one real provider dispatch', async (t) => {
+  for (const result of [null, {}, '', '0x12', word('00')])
+    await t.test(JSON.stringify(result), async (subtest) => {
+      const { state, client } = await rpcFixture(subtest);
+      const intent = await client.prepareTokenTransaction({
+        kind: 'association',
+      });
+      state.sendResult = result;
+      await assert.rejects(
+        client.sendTokenTransaction(intent),
+        hasCode('transaction_uncertain'),
+      );
+      assert.equal(state.sends, 1);
+    });
+});
+
+await test('read and prepare outages have no submission ambiguity', async (t) => {
+  for (const action of ['balance', 'prepare'] as const)
+    await t.test(action, async (subtest) => {
+      const { state, client } = await rpcFixture(subtest);
+      assert.equal(await client.balance(), 125n);
+      state.onRpcRequest = (method) => {
+        if (
+          method ===
+          (action === 'balance' ? 'eth_call' : 'eth_getTransactionCount')
+        )
+          throw new Error('Read endpoint unavailable');
+      };
+      await assert.rejects(
+        action === 'balance'
+          ? client.balance()
+          : client.prepareTokenTransaction({ kind: 'association' }),
+        hasCode(
+          action === 'balance'
+            ? 'token_read_unavailable'
+            : 'token_preflight_unavailable',
+        ),
+      );
+      assert.equal(state.sends, 0);
+    });
+});
+
+await test('pending nonces must be complete canonical safe JSON-RPC quantities', async (t) => {
+  for (const bad of [
+    '0x07',
+    '0x7junk',
+    '0x',
+    '0x-1',
+    '0x20000000000000',
+    null,
+    ['0x7'],
+  ])
+    for (const phase of ['prepare', 'send'] as const)
+      await t.test(`${phase}: ${JSON.stringify(bad)}`, async (subtest) => {
+        const { state, client } = await rpcFixture(subtest);
+        const intent = await client.prepareTokenTransaction({
+          kind: 'association',
+        });
+        state.pendingNonce = bad;
+        await assert.rejects(
+          phase === 'prepare'
+            ? client.prepareTokenTransaction({ kind: 'association' })
+            : client.sendTokenTransaction(intent),
+          hasCode('token_preflight_unavailable'),
+        );
+        assert.equal(state.sends, 0);
+      });
+});
+
+await test('zero and maximum safe pending nonces remain exact when sent', async (t) => {
+  for (const nonce of ['0x0', '0x1fffffffffffff'])
+    await t.test(nonce, async (subtest) => {
+      const { state, client, hash } = await rpcFixture(subtest);
+      state.pendingNonce = nonce;
+      const intent = await client.prepareTokenTransaction({
+        kind: 'association',
+      });
+      assert.equal(intent.nonce, String(BigInt(nonce)));
+      assert.equal(await client.sendTokenTransaction(intent), hash);
+      assert.equal(state.sentNonce, nonce);
+    });
+});
+
+await test('invalid recovery hashes are rejected before any RPC or wallet request', async (t) => {
+  const { state, client, holderSignature } = await rpcFixture(t);
+  let calls = 0;
+  state.onRpcRequest = state.onWalletRequest = () => {
+    calls++;
+    throw new Error('Recovery input must be validated first');
+  };
+  for (const value of [null, {}, '', '0x12', word('00')]) {
+    await assert.rejects(
+      client.wait(bundle, holderSignature, value as Hex),
+      hasCode('invalid_transaction_hash'),
+    );
+    await assert.rejects(
+      client.waitTokenTransaction(value as Hex),
+      hasCode('invalid_transaction_hash'),
+    );
+  }
+  assert.equal(calls, 0);
+});
+
 await test('explicit v2 HTS retains association and divisible ERC20 transfer', async (t) => {
   const { state, client, hash } = await rpcFixture(t, 'v2');
-  assert.equal(await client.associate(), hash);
-  assert.equal(await client.transfer(issuer.address, '125'), hash);
+  const association = await client.prepareTokenTransaction({
+    kind: 'association',
+  });
+  assert.equal(await client.sendTokenTransaction(association), hash);
+  const transfer = await client.prepareTokenTransaction({
+    kind: 'transfer',
+    recipient: issuer.address,
+    milligrams: '125',
+  });
+  assert.equal(await client.sendTokenTransaction(transfer), hash);
   assert.equal(state.sends, 2);
 });
 
@@ -849,15 +1137,24 @@ await test('account changes during every send simulation stop submission', async
   for (const action of ['associate', 'transfer', 'submit'] as const)
     await t.test(action, async (subtest) => {
       const { state, client, holderSignature } = await rpcFixture(subtest);
+      const intent =
+        action === 'submit'
+          ? undefined
+          : await client.prepareTokenTransaction(
+              action === 'associate'
+                ? { kind: 'association' }
+                : {
+                    kind: 'transfer',
+                    recipient: issuer.address,
+                    milligrams: '1',
+                  },
+            );
       state.onSimulation = () => {
         state.account = issuer.address;
       };
-      const attempt =
-        action === 'associate'
-          ? client.associate()
-          : action === 'transfer'
-            ? client.transfer(issuer.address, '1')
-            : client.submit(bundle, holderSignature);
+      const attempt = intent
+        ? client.sendTokenTransaction(intent)
+        : client.submit(bundle, holderSignature);
       await assert.rejects(attempt, hasCode('wrong_account'));
       assert.equal(state.sends, 0);
     });
@@ -941,8 +1238,12 @@ await test('issuance submission returns an actual hash and isolates post-send un
 
 await test('a wallet send transport failure preserves uncertainty', async (t) => {
   const { state, client } = await rpcFixture(t);
+  const intent = await client.prepareTokenTransaction({ kind: 'association' });
   state.sendFailure = true;
-  await assert.rejects(client.associate(), hasCode('transaction_uncertain'));
+  await assert.rejects(
+    client.sendTokenTransaction(intent),
+    hasCode('transaction_uncertain'),
+  );
   assert.ok(state.sends >= 1);
 });
 
@@ -1064,6 +1365,57 @@ await test('institution checks the actual proof before opening exact reservation
   assert.equal(state.sentData, state.txData);
   assert.equal(state.sends, 1);
   assert.equal(state.signs, 0);
+});
+
+await test('institution wallet dispatch and signature errors use the shared boundary', async (t) => {
+  for (const scenario of [
+    'chain',
+    'outage',
+    'rejection',
+    'sign-rejection',
+  ] as const)
+    await t.test(scenario, async (subtest) => {
+      const signing = scenario === 'sign-rejection';
+      const { state, issuerClient, hash } = await issuerFixture(
+        subtest,
+        signing,
+      );
+      let simulated = false;
+      let finalReads = 0;
+      state.onSimulation = () => {
+        simulated = true;
+      };
+      state.onWalletRequest = (method) => {
+        if (simulated && method === 'eth_chainId' && ++finalReads === 2) {
+          if (scenario === 'chain') state.walletChain = '0x127';
+          if (scenario === 'outage')
+            throw new Error('Institution wallet chain RPC unavailable');
+        }
+      };
+      const rejection = {
+        code: -32602,
+        data: { originalError: { code: 4001 } },
+      };
+      if (scenario === 'rejection') state.sendError = rejection;
+      if (signing) state.signError = rejection;
+      await assert.rejects(
+        signing
+          ? issuerClient.signPermit(proofExport, hash, {
+              nonce: '123',
+              validForSeconds: 300,
+            })
+          : issuerClient.openReservation(proofExport),
+        hasCode(
+          scenario === 'chain'
+            ? 'wrong_chain'
+            : scenario === 'outage'
+              ? 'issuance_preflight_unavailable'
+              : 'wallet_rejected',
+        ),
+      );
+      assert.equal(state.sends, scenario === 'rejection' ? 1 : 0);
+      assert.equal(state.signs, signing ? 1 : 0);
+    });
 });
 
 await test('institution rejects capacity, replay, wrong wallet, changed signer and proof failures before opening', async (t) => {

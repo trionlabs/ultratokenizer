@@ -36,6 +36,10 @@ const messages = {
   invalid_signature:
     'An authorization signature does not match the request and accepted signer.',
   invalid_proof: 'The configured verifier rejected the cryptographic proof.',
+  invalid_transaction_hash:
+    'Enter the full nonzero 32-byte transaction hash from the wallet that submitted this operation.',
+  wallet_rejected:
+    'The wallet request was declined. No authorization was returned.',
   transaction_reverted: 'The transaction reverted and did not complete.',
   issuance_mismatch:
     'The transaction does not contain the exact expected issuance.',
@@ -48,6 +52,8 @@ const messages = {
   association_failed: 'Token association did not succeed.',
   token_preflight_unavailable:
     'Token checks could not complete. No wallet transaction was requested.',
+  token_read_unavailable:
+    'The token balance could not be read. No wallet transaction was requested.',
   invalid_token_intent:
     'A complete, valid token transaction intent is required.',
   stale_token_intent:
@@ -151,6 +157,14 @@ export function nonzeroHash(input: unknown): Hex {
   const result = bytes(input, 32, 32);
   if (/^0x0+$/.test(result)) throw new Error();
   return result;
+}
+/** Transaction recovery input is distinct from a malformed provider send response. */
+export function parseTransactionHash(input: unknown): Hex {
+  try {
+    return nonzeroHash(input);
+  } catch {
+    throw new IssuanceClientError('invalid_transaction_hash');
+  }
 }
 export function rpcUrl(input: unknown): string {
   if (typeof input !== 'string' || input.length > 2048) throw new Error();

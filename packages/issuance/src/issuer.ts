@@ -40,6 +40,7 @@ export function createIssuerClient(input: {
     activeAccount,
     verifyEvidence,
     assertCanonical,
+    walletPrompt,
   } = context;
 
   function reservationArgs(proof: ClaimProof) {
@@ -230,7 +231,7 @@ export function createIssuerClient(input: {
   return Object.freeze({
     deployment,
     async connect() {
-      await wallet.requestAddresses();
+      await walletPrompt(() => wallet.requestAddresses());
       return {
         address: getAddress(await activeAccount(policy.issuerAddress)),
         chainId: policy.chainId,
@@ -257,7 +258,7 @@ export function createIssuerClient(input: {
         args: reservationArgs(proof),
       });
       await activeAccount(policy.issuerAddress);
-      return context.send(() => wallet.writeContract(simulated.request));
+      return context.send((sender) => sender.writeContract(simulated.request));
     },
     waitReservation,
     async signPermit(
@@ -301,7 +302,9 @@ export function createIssuerClient(input: {
       const account = await activeAccount(policy.issuerAddress);
       const typedData = getIssuerPermitTypedData(proof.request, permit);
       const signature = bytes(
-        await wallet.signTypedData({ account, ...typedData }),
+        await walletPrompt(() =>
+          wallet.signTypedData({ account, ...typedData }),
+        ),
         65,
         65,
       );
