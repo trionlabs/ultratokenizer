@@ -20,7 +20,7 @@ export const cases: {
     label: 'Current implementation',
     title: 'Modules are locally tested; deployment acceptance is pending.',
     detail:
-      'The Svelte preview and receipt Web Worker, canonical domain/permit, verified local core proof, Solidity HTS gate, authenticated API/SQLite alarms and portable auditor exist. They are not a connected deployed product. The ZK wrapper, live institution and native Hedera acceptance remain pending.',
+      'The wallet UI and receipt worker, exact-quantity guest, issuance gate, institution ledger, issuer wallet client, observation API and portable auditor have local checks. Current-program Groth16, institution lifecycle integration and Hedera deployment remain pending. ATS has a real local Gate integration, a main mint adapter and explicit wallet/backend checks; full provisioning and live acceptance remain open.',
     verdict: 'open',
   },
   {
@@ -28,7 +28,7 @@ export const cases: {
     label: 'All gate conditions satisfied',
     title: 'The gate has one atomic issuance path.',
     detail:
-      'Local tests exercise matching signatures, proof outputs, live authority and capacity with test doubles. In a configured deployment, the actual pinned proof verifier and HTS must also succeed. One claim is consumed even when the request uses less than its private capacity.',
+      'Local tests exercise matching signatures, proof outputs, live authority and exact reservations with test doubles. In a configured deployment, the actual pinned verifier and token backend must also succeed. One claim is consumed only for its full exact authenticated quantity.',
     verdict: 'pass',
   },
   {
@@ -52,7 +52,7 @@ export const cases: {
     label: 'Reuse a claim or exceed a reservation',
     title: 'New nonces cannot renew consumed claim authority.',
     detail:
-      'The same authenticated source/issuer/claim ID is single-use within the gate, even after a smaller issuance or changed wallet, document export or policy. Separately, a reservation cannot exceed its cumulative capacity. This does not establish uniqueness across deployments or new institutional claim IDs.',
+      'The same authenticated source/stable-claim identity is single-use within the gate, despite changed issuer, wallet, token or policy. Each reservation binds one exact request; pending plus outstanding quantities obey an aggregate cap. New deployments or newly assigned institutional claim IDs still require continuity controls.',
     verdict: 'stop',
   },
   {
@@ -60,7 +60,7 @@ export const cases: {
     label: 'Institution signs a false reserve claim',
     title: 'Cryptographic checks cannot inspect a vault.',
     detail:
-      'An accepted signer can attest false capacity or assign multiple claim IDs to the same asset. The private-capacity predicate and single-use gate do not turn snapshots into exclusive reserves. Custody records and independent institutional accountability remain necessary.',
+      'An accepted signer can attest a false quantity or assign multiple claim IDs to the same asset. Exact-quantity proof and single-use state do not turn snapshots into exclusive reserves. Custody records and independent institutional accountability remain necessary.',
     verdict: 'blind',
   },
   {
@@ -68,7 +68,7 @@ export const cases: {
     label: 'Governance approves a harmful configuration',
     title: 'The governor remains a trust boundary.',
     detail:
-      'The implemented adapter creates its own token with a sole supply key and exposes only gate-authorized minting. That closes an alternate adapter mint route, but governance can still admit a dishonest issuer, source or verifier. Code hashes do not establish honest policy or safe proxy state.',
+      'Native HTS creates a sole-supply-key token. The ATS adapter requires separately admitted roles and a resolver/facet graph. Both restrict adapter mint calls to the Gate, but governance can admit a dishonest source, program or adapter. Code hashes do not establish honest policy or safe proxy state.',
     verdict: 'blind',
   },
   {
@@ -76,7 +76,7 @@ export const cases: {
     label: 'Successful mint mistaken for redemption rights',
     title: 'Token issuance does not establish gold delivery.',
     detail:
-      'The implemented HTS adapter handles creation, mint and transfer. ATS controls, redemption/burn operations, legal instrument fit and physical delivery are not implemented or established. Neither a confirmed tracking status nor a consistent audit receipt fills those gaps.',
+      'Token adapters support mint and divisible transfers. The narrow ATS profile excludes administrative maintenance and recovery. Redemption/burn settlement, legal instrument fit and physical delivery are not implemented or established. Neither a confirmed tracking status nor a consistent audit receipt fills those gaps.',
     verdict: 'blind',
   },
 ];

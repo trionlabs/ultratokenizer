@@ -2,7 +2,7 @@
 
 This workspace implements the first evidence boundary for Ultratokenizer: authenticate a PDF's signed bytes against an explicitly supplied signer fingerprint. It contains a native Rust library, an SP1 guest and a local execution runner.
 
-The signature-only modules do not interpret balances or bind an issuance request. The separate [synthetic gold claim profile](claim-evidence/README.md) authenticates a fixed versioned capsule, derives claim identity and binds the full EIP-712 request. It does not support real bank statements or establish asset backing. Execution success is labeled `zkProof: false`; local proving is an explicit separate command.
+The signature-only modules do not interpret balances or bind an issuance request. The separate [synthetic gold claim profile](claim-evidence/README.md) authenticates a fixed versioned capsule, enforces the complete authenticated amount, derives issuer-independent V2 claim identity and binds the full EIP-712 request. It does not support real bank statements or establish asset backing. Execution success is labeled `zkProof: false`; local proving is an explicit separate command.
 
 ## Modules
 
@@ -22,6 +22,22 @@ The TypeScript request module remains in `packages/domain`. The claim profile in
 Version 1 accepts one RSA-2048 signature using SHA-256 and exponent 65537. The signature must cover the entire supplied PDF revision except for exactly one hexadecimal `/Contents` value. Multiple signature markers, appended revisions, malformed ranges, extra excluded content and ambiguous signature selection are rejected.
 
 The CMS boundary accepts definite-length DER with one signer, one RSA/SHA-256 X.509 v3 certificate, detached `data` content and unique signed attributes containing `contentType` and a 32-byte `messageDigest`. Issuer name and serial number must match that certificate. Only zero bytes may follow the CMS value inside the signature gap. BER encoding, certificate bundles, unsigned attributes and other profiles require separate review and are rejected. Signature containers are limited to 64 KiB including padding, 16 levels of constructed nesting and 2,048 ASN.1 elements.
+
+### Separate native CAdES revision primitive
+
+`pdf-evidence::reviewed_revision::verify_reviewed_revision` verifies a specifically selected signed prefix while checking the complete file against an `ApprovedRevision` input. That input must ultimately be authenticated by an institutional signature or approved policy. A caller computing its own file hash does **not** establish institutional approval. The native diagnostic command below does not authenticate that approval and always reports `institutionalApprovalVerified:false` and `zkProof:false`.
+
+```sh
+proofs/target/debug/ultratokenizer-pdf-runner reviewed-native \
+  <complete-pdf> <approved-spki-sha256-hex> \
+  <approved-complete-file-sha256-hex> <approved-signed-revision-length>
+```
+
+The separate CAdES envelope retains one RSA-2048/SHA-256 document signer, exact signed byte coverage, matching issuer/serial, unique signed attributes, content-type/message-digest checks and the independent leaf-key pin. It also accepts an ECDSA-SHA384 issuer signature on that RSA leaf certificate: a certificate issuer's algorithm is distinct from the leaf's document-signing algorithm. It permits one bounded, untrusted `signatureTimeStampToken` unsigned attribute. No certificate chain, timestamp validity, qualified-seal status or revocation/freshness claim is made. CAdES DER depth is limited to 24 for the nested token, with the same 2,048-node/64-KiB envelope limits and an 8-KiB unsigned-attribute limit. The original strict profile retains depth 16 and rejects unsigned attributes.
+
+The returned `VerifiedReviewedRevision` exposes only the authenticated prefix for downstream extraction. Any change to later bytes invalidates the supplied full-file approval. Accepting an earlier revision does not authenticate a changed financial statement in a later revision. The two explicitly supplied Enpara portfolio reports and the previously inspected report passed this native signature primitive locally; none was copied into fixtures or uploaded. These private probes establish compatibility with those samples, not general PDF rendering or parser correctness.
+
+This primitive is **not wired into claim profile 2**. The separate [native Enpara extractor candidate](enpara-evidence/README.md) now resolves the selected revision's table/font/content graph and selects the full available-XAU column under the explicit gram label. It has its own workspace/lockfile and does not change the existing guest. Real Enpara issuance still requires parser/template review, running this extraction inside a separately identified guest, and an authenticated issuer attestation binding the complete document, selected revision, amount, stable right, holder and expiry. The resulting claim must then pass a genuine ZK proof and the Gate's ordinary permit/registry/consumption checks. A receipt or successful native PDF diagnostic is not an issuance proof.
 
 The accepted key fingerprint is **SHA-256 of canonical SubjectPublicKeyInfo DER**, not a certificate fingerprint or a hash of PKCS#1 DER. Obtain approved fingerprints from an independent trust policy. Never extract a key from an untrusted PDF and automatically call it trusted.
 
@@ -75,6 +91,14 @@ cargo run --locked -p ultratokenizer-pdf-runner -- execute \
 ```
 
 The runner explicitly selects a local executor, with the SDK's network proving feature disabled. SP1 execution is an integration check, not a cryptographic proof. Groth16 generation, verification on Hedera and performance measurements for real statements are later milestones.
+
+## Local Groth16 proving
+
+`claim-runner prove-local groth16` invokes the actual local CPU prover and Groth16 wrapper. It fails if local Docker is unavailable, generation fails, the mode/public values differ, or independent cryptographic verification fails. It writes no substitute proof. See the [claim profile commands and limits](claim-evidence/README.md#explicit-local-proving).
+
+The former `groth16-scaffold` command has been removed. `native`, `execute` and `self-test` remain non-proof diagnostics and report `zkProof: false`.
+
+Profile V2 requires a newly built guest and independently pinned program key. A historical profile V1 core proof is neither a V2 proof nor zero knowledge. Successful Groth16 generation and acceptance by the intended Hedera verifier must be demonstrated before claiming that integration works.
 
 ## Synthetic fixture
 

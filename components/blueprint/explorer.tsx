@@ -257,7 +257,9 @@ export default function ModuleBlueprint({
           </div>
           <div className="ub-connector">
             <ArrowDown size={18} />
-            <span>Consume claim + reservation · atomic HTS mint adapter</span>
+            <span>
+              Consume claim + reservation · selected atomic mint adapter
+            </span>
           </div>
           {node('token', true)}
           <div className="ub-connector">
@@ -432,10 +434,11 @@ export default function ModuleBlueprint({
       </section>
       <div className="ub-footnote">
         <p>
-          Private PDFs and full signed source capacity stay local. Issued
-          amount, recipient, request identifiers and on-chain reservation
-          capacity are public. One claim is single-use within a gate;
-          institutional snapshots do not establish exclusive physical reserves.
+          PDFs and other source fields stay local. The full exact quantity,
+          recipient and request identifiers become public from reservation
+          broadcast, including cancelled reservations. One claim is single-use
+          within a gate; institutional snapshots do not establish exclusive
+          physical reserves.
         </p>
         <div>
           <a
