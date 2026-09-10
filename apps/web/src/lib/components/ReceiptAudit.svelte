@@ -145,8 +145,8 @@
     >
   </div>
   <p class="field-hint">
-    Obtain trust pins independently. A policy supplied by the receipt's author
-    cannot establish that author's authority.
+    Get this policy from a source independent of the receipt. A policy from the
+    receipt author cannot prove that author was trusted.
   </p>
   <label class="disclosure-control"
     ><input

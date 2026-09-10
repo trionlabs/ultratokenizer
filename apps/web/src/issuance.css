@@ -137,6 +137,7 @@
   margin: 8px -14px 0;
   display: grid;
   place-items: center;
+  overflow: clip;
 }
 .live-orbit-ring {
   position: absolute;
@@ -395,6 +396,15 @@
 .wallet-row p {
   font-size: 11px;
   margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+.bound-recipient {
+  display: block;
+  margin-top: 6px;
+  color: #738067;
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 .check-row strong {
@@ -821,11 +831,41 @@
     padding-inline: 6%;
   }
 }
-@media (max-width: 380px) {
+@media (max-width: 480px) {
+  .issuance-layout {
+    padding-top: 8px;
+  }
+  .issuance-visual {
+    padding-top: 8px;
+  }
+  .issuance-visual h1 {
+    margin-block: 14px 12px;
+    font-size: 44px;
+  }
+  .visual-lede {
+    max-width: 300px;
+    font-size: 13px;
+  }
   .live-orbit {
-    height: 320px;
-    transform: scale(0.82);
-    margin: -8px -30px;
+    height: 270px;
+    margin: -8px -45px;
+    transform: scale(0.72);
+  }
+  .source-boundary {
+    margin-top: -5px;
+  }
+}
+@media (max-width: 380px) {
+  .issuance-layout {
+    gap: 13px;
+  }
+  .live-orbit {
+    height: 225px;
+    transform: scale(0.69);
+    margin: -10px -50px;
+  }
+  .source-boundary {
+    margin-top: -10px;
   }
   .issuance-controls {
     padding: 17px;

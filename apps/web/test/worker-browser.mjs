@@ -325,7 +325,7 @@ try {
   await upload(unsupported, 'Import deployment configuration', deployment);
   await upload(unsupported, 'Import issuance bundle', fixture.bundle);
   await expect(
-    unsupported.getByText(/No injected wallet detected/),
+    unsupported.getByText(/No browser wallet detected/),
   ).toBeVisible();
   await expect(
     unsupported.getByRole('button', { name: 'Connect', exact: true }),

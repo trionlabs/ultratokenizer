@@ -36,7 +36,7 @@ const messages = {
   invalid_signature:
     'An authorization signature does not match the request and accepted signer.',
   invalid_proof: 'The configured verifier rejected the cryptographic proof.',
-  transaction_reverted: 'The transaction reverted; no issuance succeeded.',
+  transaction_reverted: 'The transaction reverted and did not complete.',
   issuance_mismatch:
     'The transaction does not contain the exact expected issuance.',
   transaction_uncertain:

@@ -1,19 +1,19 @@
 <script lang="ts">
   import ReceiptAudit from '$lib/components/ReceiptAudit.svelte';
-  import Glyph from '$lib/prototype/Glyph.svelte';
+  import Glyph from '$lib/visuals/Glyph.svelte';
 </script>
 
 <svelte:head
   ><title>Independent receipt verifier — Ultratokenizer</title><meta
     name="description"
-    content="Check actual issuance receipts against independently supplied trust pins. Local signature and binding checks, with an optional explicit online SP1 proof check."
+    content="Check an issuance receipt against a trust policy obtained separately. Verify local signatures and bindings, with an optional online SP1 proof check."
   /></svelte:head
 >
 <a class="skip-link" href="#verifier">Skip to verifier</a>
 <div class="live-shell">
   <header class="live-header">
     <a class="live-brand" href="/"><span>u</span>ultratokenizer<i>.</i></a><span
-      class="mode-pill">Read-only · caller-controlled trust</span
+      class="mode-pill">Read-only · uses your trust policy</span
     ><a class="text-link" href="/"
       >Issuance workspace <Glyph name="arrow" size={15} /></a
     >
@@ -23,8 +23,8 @@
       <p class="overline">Independent verifier</p>
       <h1>A receipt.<br /><em>A closer look.</em></h1>
       <p>
-        Check a saved issuance receipt against your own trust pins. See each
-        verified fact and each missing piece.
+        Check a saved issuance receipt against a trust policy you obtained
+        separately. See what passed and what remains unverified.
       </p>
     </div>
     <ReceiptAudit />
@@ -32,7 +32,9 @@
       class="verifier-boundary"
       aria-labelledby="verifier-boundary-title"
     >
-      <h2 id="verifier-boundary-title">Verification has distinct layers.</h2>
+      <h2 id="verifier-boundary-title">
+        Each check proves something different.
+      </h2>
       <p>
         Local checks cover request bindings and EOA signatures. Proof bytes are
         checked only when you explicitly enable the pinned RPC verifier. A

@@ -325,7 +325,7 @@ export async function exerciseIssuanceRecovery({
       .getByRole('button', { name: 'Sign request', exact: true })
       .click();
     await page
-      .getByRole('button', { name: 'Run preflight', exact: true })
+      .getByRole('button', { name: 'Check before sending', exact: true })
       .click();
     const issue = page.getByRole('button', {
       name: 'Issue full claim',
@@ -443,6 +443,17 @@ export async function exerciseIssuanceRecovery({
     await expect(
       page.getByRole('button', { name: 'Save issuance receipt', exact: true }),
     ).toHaveCount(finalOutcome === 'confirmed' ? 1 : 0);
+    if (finalOutcome === 'reverted') {
+      await expect(transaction).toContainText(
+        'This transaction did not issue tokens.',
+      );
+      await expect(
+        page.getByRole('button', {
+          name: 'Check transaction outcome',
+          exact: true,
+        }),
+      ).toHaveCount(0);
+    }
     assert.deepEqual(
       await page.evaluate(() => window.issuanceWallet.methods),
       beforeRecovery.methods,

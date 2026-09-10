@@ -110,6 +110,12 @@ try {
     await expect(page.locator('.technical-details')).toContainText(
       'HTS · native token',
     );
+    await expect(page.locator('.network-label')).toHaveText(
+      'Hedera testnet · 296',
+    );
+    await expect(page.locator('.wallet-row')).toContainText(
+      `Claim recipient · ${hts.bundle.request.recipient}`,
+    );
     await expect(page.locator('.claim-quantity')).toHaveText('1.000g');
   }
 

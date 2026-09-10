@@ -13,8 +13,8 @@
     IssuanceClientError,
   } from '../issuance';
   import { resolveEnsRecipient } from '../../../../../packages/issuance/src/index.js';
-  import Glyph from '../prototype/Glyph.svelte';
-  import OrbitField from '../prototype/OrbitField.svelte';
+  import Glyph from '../visuals/Glyph.svelte';
+  import OrbitField from '../visuals/OrbitField.svelte';
 
   const session = createIssuanceSession();
   let snapshot = $state(session.read());
@@ -46,6 +46,13 @@
   let request = $derived(snapshot.bundle?.request);
   let tokenBackend = $derived(
     snapshot.deployment ? getTokenBackend(snapshot.deployment) : undefined,
+  );
+  let networkLabel = $derived(
+    snapshot.deployment
+      ? snapshot.deployment.auditPolicy.chainId === '296'
+        ? 'Hedera testnet · 296'
+        : `Test chain ${snapshot.deployment.auditPolicy.chainId}`
+      : 'No deployment loaded',
   );
   let phase:
     'document' | 'review' | 'authorization' | 'proof' | 'mint' | 'receipt' =
@@ -192,7 +199,7 @@
 <div class="live-shell">
   <header class="live-header">
     <a class="live-brand" href="/"><span>u</span>ultratokenizer<i>.</i></a>
-    <span class="mode-pill">Test source · real transactions</span>
+    <span class="mode-pill">Synthetic source · live wallet actions</span>
     <a class="text-link" href="/verify/"
       >Verify a receipt <Glyph name="arrow" size={15} /></a
     >
@@ -260,17 +267,13 @@
     <section class="issuance-controls" aria-label="Issue a complete claim">
       <div class="control-heading">
         <p class="overline">Prepare your issuance</p>
-        <span class="network-label"
-          >{snapshot.deployment
-            ? `Chain ${snapshot.deployment.auditPolicy.chainId}`
-            : 'No deployment loaded'}</span
-        >
+        <span class="network-label">{networkLabel}</span>
       </div>
       <div class="file-pair">
         <label class="file-control"
-          ><span><b>01</b> Deployment configuration</span><small
+          ><span><b>01</b> Trusted deployment file</span><small
             >{deploymentName ||
-              `Independent trust pins · JSON · ${MAX_DEPLOYMENT_BYTES / 1024} KB max`}</small
+              `Chain and contract settings · JSON · ${MAX_DEPLOYMENT_BYTES / 1024} KB max`}</small
           ><input
             type="file"
             accept=".json,application/json"
@@ -280,9 +283,9 @@
           /></label
         >
         <label class="file-control"
-          ><span><b>02</b> Issuance bundle</span><small
+          ><span><b>02</b> Approved issuance file</span><small
             >{bundleName ||
-              'Bound request, proof and issuer permit · 160 KB max'}</small
+              'Fixed request, proof and issuer approval · 160 KB max'}</small
           ><input
             type="file"
             accept=".json,application/json"
@@ -293,8 +296,8 @@
         >
       </div>
       <p class="field-hint">
-        Choose the deployment from a source you trust independently of the
-        claim. Importing a file does not connect to its RPC.
+        Get the deployment file from a source you trust separately from the
+        claim. Importing it does not contact the RPC.
       </p>
       {#if reading}<p class="status-line" role="status">
           Reading JSON locally…
@@ -361,8 +364,11 @@
               ? snapshot.wallet.address
               : snapshot.providerAvailable
                 ? 'Connect the wallet bound to this claim.'
-                : 'No injected wallet detected. Open this page with an EIP-1193 wallet.'}
+                : 'No browser wallet detected. Open this page in a wallet-enabled browser.'}
           </p>
+          {#if request}<small class="bound-recipient"
+              >Claim recipient · {request.recipient}</small
+            >{/if}
         </div>
         <button
           class="secondary-button"
@@ -376,9 +382,9 @@
 
       <div class="check-row">
         <div>
-          <strong>Source proof & issuer permit</strong><span
+          <strong>Claim proof and issuer approval</strong><span
             >{snapshot.sourceProof === 'accepted'
-              ? 'Accepted by the pinned verifier and current registry checks.'
+              ? 'Accepted by the pinned verifier and current registry.'
               : 'Unchecked. Imported bytes alone do not establish validity.'}</span
           >
         </div>
@@ -428,10 +434,10 @@
         </li>
         <li>
           <span
-            ><b>2</b><strong>Run a preflight call</strong><small
+            ><b>2</b><strong>Check before sending</strong><small
               >{snapshot.simulation === 'passed'
                 ? 'Call succeeded; no transaction sent'
-                : 'Check current Gate execution'}</small
+                : 'Confirm that the Gate can execute now'}</small
             ></span
           ><button
             class="secondary-button"
@@ -439,13 +445,13 @@
               busy ||
               !!snapshot.transaction ||
               unresolved}
-            onclick={() => session.simulate()}>Run preflight</button
+            onclick={() => session.simulate()}>Check before sending</button
           >
         </li>
         <li>
           <span
-            ><b>3</b><strong>Submit for issuance</strong><small
-              >Wallet confirms a real transaction</small
+            ><b>3</b><strong>Issue the claim</strong><small
+              >Your wallet submits the transaction</small
             ></span
           ><button
             class="primary-button"
@@ -515,7 +521,7 @@
           <code>{snapshot.transaction.hash}</code>
           {#if snapshot.receipt}<p>
               {formatGrams(snapshot.receipt.request.amount)} g issued to the bound
-              recipient. The configured Gate's exact issuance event was checked.
+              recipient. The receipt matches the configured Gate event exactly.
             </p>
             <button
               class="secondary-button"
@@ -525,13 +531,18 @@
                   'ultratokenizer-issuance-receipt.json',
                 )}>Save issuance receipt</button
             >
+          {:else if snapshot.transaction.outcome === 'reverted'}<p>
+              This transaction did not issue tokens. Keep the hash as an audit
+              reference, then import the issuance bundle again to start a new
+              checked attempt.
+            </p>
           {:else}<p>
               Keep this hash and this page open until reconciliation completes.
               Sending a transaction is not confirmation.
             </p>
             <button
               class="primary-button"
-              disabled={busy || snapshot.transaction.outcome === 'reverted'}
+              disabled={busy}
               onclick={() => session.confirm()}
               >Check transaction outcome</button
             >{/if}
