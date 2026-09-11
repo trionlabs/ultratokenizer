@@ -151,6 +151,13 @@ replacement artifact was uploaded. Proof retrieval, independent Groth16 verifica
 Gate acceptance remain separate pending checks. The [paid request procedure](network-requester/PAID_REQUEST.md)
 preserves the original request and budget through status uncertainty without resubmission.
 
+The original fixture binds illustrative Gate, token and holder addresses. A proof for it can test
+cryptographic compatibility and the direct verifier; it cannot authorize mint at newly deployed
+addresses. Live issuance requires deploying the actual contract graph first, preparing a separately
+reviewed synthetic allocation/request bound to those addresses and the real test holder, then
+generating that request's proof. Neither editing public values nor relabeling the original proof
+can replace this dependency.
+
 ## Synthetic fixture
 
 `pdf-evidence/fixtures/statement.synthetic.pdf` is a generated test document signed by a synthetic, self-signed RSA certificate. It has no bank authority and represents no asset. The adjacent JSON contains public fingerprints, digests and independently encoded expected output.
