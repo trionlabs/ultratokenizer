@@ -6,6 +6,7 @@ mod paid;
 mod paid_journal;
 mod paid_rpc;
 mod paid_state;
+mod retrieval;
 mod stage;
 
 use serde::Serialize;
@@ -246,6 +247,34 @@ async fn quote(args: &[String]) -> Result<(), &'static str> {
     Ok(())
 }
 
+async fn retrieve_proof(args: &[String]) -> Result<(), &'static str> {
+    let admission: retrieval::OriginAdmission =
+        serde_json::from_slice(&read_bounded(&args[3], 16 * 1024)?)
+            .map_err(|_| "Invalid reviewed artifact origin admission.")?;
+    admission.validate()?;
+    paid_state::lower_hash(&args[2])?;
+    let mut transport = retrieval::HttpsArtifacts::new()?;
+    let mut network = paid_rpc::DirectPaidRpc::connect().await?;
+    let receipt = retrieval::retrieve_once(
+        Path::new(&args[1]),
+        &args[2],
+        &admission,
+        retrieval::OutputPaths {
+            raw: Path::new(&args[4]),
+            normalized: Path::new(&args[5]),
+            receipt: Path::new(&args[6]),
+        },
+        &mut network,
+        &mut transport,
+    )
+    .await?;
+    println!(
+        "{}",
+        serde_json::to_string(&receipt).map_err(|_| "Unable to encode retrieval result.")?
+    );
+    Ok(())
+}
+
 async fn run() -> Result<(), &'static str> {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.first().map(String::as_str) {
@@ -289,8 +318,15 @@ async fn run() -> Result<(), &'static str> {
         Some("recover-request") => Err(
             "Usage: network-requester recover-request <existing-request-journal>",
         ),
+        Some("retrieve-proof") if args.len() == 7 => {
+            initialize_tls()?;
+            retrieve_proof(&args).await
+        }
+        Some("retrieve-proof") => Err(
+            "Usage: network-requester retrieve-proof <fulfilled-request-journal> <expected-journal-sha256> <reviewed-origin-json> <new-raw-proof> <new-normalized-proof> <new-retrieval-receipt>",
+        ),
         _ => Err(
-            "Available commands: quote, stage, inspect-stage, init-budget, prepare-request, submit-request, recover-request. Paid submission requires an explicitly reviewed budget and fresh exact quote.",
+            "Available commands: quote, stage, inspect-stage, init-budget, prepare-request, submit-request, recover-request, retrieve-proof. Paid submission requires an explicitly reviewed budget and fresh exact quote.",
         ),
     }
 }

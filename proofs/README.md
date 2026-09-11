@@ -145,8 +145,11 @@ URIs, credentials, witness bytes and local append-only journals remain ignored.
 
 This staging result closes artifact compatibility and account-access preparation only. It is not a
 Groth16 proof, cryptographic verification, Gate acceptance, Hedera execution, bank authorization or
-asset backing. A fresh quote plus explicit single-request and total-attempt PROVE caps are still
-required before one paid proof request can be implemented and sent.
+asset backing. On 2026-09-12, a fresh quote and immutable single/cumulative caps admitted one paid
+request for that original program. Its exact signed request was acknowledged and recovered; no
+replacement artifact was uploaded. Proof retrieval, independent Groth16 verification and actual
+Gate acceptance remain separate pending checks. The [paid request procedure](network-requester/PAID_REQUEST.md)
+preserves the original request and budget through status uncertainty without resubmission.
 
 ## Synthetic fixture
 

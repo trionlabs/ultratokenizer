@@ -79,6 +79,8 @@ timeout nor an empty search releases the conservative cumulative budget. See the
 
 This package has offline transport and persistence tests; those tests do not demonstrate an actual
 paid request or a genuine proof. Recovery can record that a proof artifact is available but does not
-download or verify it. A separate bounded retrieval and independent SDK/EVM verification step is
-still required. The only admitted remote candidate remains the original synthetic V2 program in the
+download or verify it. The separate `retrieve-proof` command checks the recovered journal and an
+independently reviewed HTTPS origin, retrieves bounded bytes, and records `downloaded_unverified`.
+See the [retrieval procedure](RETRIEVAL.md); independent SDK/EVM verification is still required.
+The only admitted remote candidate remains the original synthetic V2 program in the
 shared request schema; a different Linux build is not admitted by these commands.

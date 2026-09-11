@@ -141,18 +141,21 @@ The unsigned command has a 120-second recovery deadline after connection, at mos
 100 candidates, at most eight transaction-detail reads, and a one-MiB protobuf response limit per
 RPC. It does not retry failed calls or infer absence from reaching a limit or finding zero matches.
 It validates the status transaction hash, deadline and any execution public-values hash before
-recording status. It prints only identifiers and a hash of any proof URI. Fulfilled status remains
-`proofVerified: false`; there is no artifact download or implicit acceptance in this package.
+recording status. An omitted status execution hash can be supplied only by the exact-bound,
+executed request-details response; every returned hash must match the signed expected value.
+It prints only identifiers and a hash of any proof URI. Fulfilled status remains
+`proofVerified: false`; recovery does not download or implicitly accept an artifact.
 
 All request and budget journals must remain intact and private. A torn append, invalid hash chain,
 permissive file mode, lock conflict or clock regression fails closed. This package does not repair
 a damaged journal: retain its exact bytes and the earlier durable signed intent for separate
 reviewed forensic recovery. It never treats that failure as permission for a fresh request.
 
-The next package must retrieve only the exactly recovered artifact with bounded HTTPS responses,
-then verify the serialized proof independently against the admitted ELF/VKey and exact public
-values. The EVM verifier check is a separate step. Neither downloaded bytes nor a network
-`FULFILLED` response is a genuine-proof acceptance result.
+The separate [retrieval command](RETRIEVAL.md) accepts only the exactly recovered artifact using
+an independently reviewed origin and bounded HTTPS responses. Verify the serialized proof
+independently against the admitted ELF/VKey and exact public values. The EVM verifier check is a
+separate step. Neither downloaded bytes nor a network `FULFILLED` response is a genuine-proof
+acceptance result.
 
 ## Pinned upstream basis and validation scope
 
