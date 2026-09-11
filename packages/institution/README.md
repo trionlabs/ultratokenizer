@@ -84,6 +84,45 @@ the exact canonical transaction/event or definitive released-unused contract
 state before calling a terminal method. It must preserve unresolved allocations
 on uncertain outcomes and prevent issuance outside this authoritative ledger.
 
+## Trusted RPC accounting bridge
+
+`createInstitutionChainBridge({ ledger, pins })` supplies a Node-only read path into the
+existing ledger. Pins explicitly select test purpose, chain 296 (or local chain 31337), an
+operator-trusted RPC URL, Gate address/runtime hash, admitted program VKey, immutable deployment
+block number/hash, and a positive confirmation margin. There are no default addresses or keys.
+The bridge neither opens reservations nor signs or sends transactions. It never accepts an
+observer's arbitrary terminal-observation object as chain evidence.
+
+`settleIssued(requestDigest, transactionHash)` reads the exact transaction and successful receipt,
+strictly decodes/re-encodes the issuance call, binds its request/permit/public values and one exact
+Gate event, checks the independently pinned VKey, and requires matching reservation consumption
+and request/claim/request-ID/holder-nonce/permit-nonce flags. Receipt and transaction hashes, block
+numbers/hashes, transaction indices, sender agreement, destination and value must agree. The
+sender may be a relayer; the Gate authorization nonce is distinct from the EVM transaction nonce.
+Later revocation or pause does not erase a valid earlier issuance.
+
+`settleUnused(requestDigest)` reads the exact existing reservation at one numeric block selected
+by the configured confirmation margin. It requires released state, zero use, unused request and
+claim, and either actual revocation or an expired reservation. Time passing, an absent reservation,
+a reverted transaction or a missing response cannot release the local allocation. Unrelated
+requests consuming a holder nonce are not treated as consumption of this claim.
+
+Both paths check Gate runtime, chain and deployment anchor and recheck the target block after
+dependent reads. A 120-second monotonic operation deadline is checked before any ledger mutation;
+each RPC has a ten-second timeout, no retry and a 512-KiB response bound. There is no history-to-latest
+fallback. Exact terminal retries return the original persisted observation rather than a new block
+anchor; opposite outcomes or different issuance hashes conflict. All uncertain/mismatched reads
+leave pending exposure unchanged, and provider errors are not copied into diagnostics.
+
+This authenticates consistency under the explicitly trusted RPC service, not consensus inclusion.
+A coherent malicious provider can fabricate code, state and receipts. Hedera's relay maps `safe`
+and `finalized` to the latest mirror block; the bridge uses numeric blocks and calls confirmations
+an observation margin, not extra consensus finality. See the
+[reviewed official relay implementation](https://github.com/hiero-ledger/hiero-json-rpc-relay/blob/e187b2e6773f7ac53d974aabdabe0707eeedee3c/src/relay/lib/services/ethService/ethCommonService/CommonService.ts#L133).
+Physical backing, independent proof verification, honest historical governance and cross-Gate
+continuity remain separate obligations. Direct ledger terminal methods remain trusted operator
+APIs; arbitrary Node code can bypass the bridge. Keep operational settlement behind this boundary.
+
 ## Private storage and operational limits
 
 Public snapshots omit `recordReference` and `claimId`. `privateClaimIdentity(rightId)`

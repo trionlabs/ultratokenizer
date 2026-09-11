@@ -1,4 +1,9 @@
 export { openInstitutionLedger, InstitutionLedgerError } from './ledger.js';
+export {
+  createInstitutionChainBridge,
+  InstitutionChainError,
+} from './chain-bridge.js';
+export type { InstitutionChainPins } from './chain-bridge.js';
 export type {
   InstitutionLedger,
   InstitutionRight,
