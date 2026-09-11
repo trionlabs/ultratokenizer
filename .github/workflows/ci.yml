@@ -29,9 +29,11 @@ jobs:
             package-lock.json
             apps/web/package-lock.json
             workers/issuance/package-lock.json
+            packages/hedera-provisioning/package-lock.json
       - run: npm ci --no-audit
       - run: npm --prefix apps/web ci --no-audit
       - run: npm --prefix workers/issuance ci --no-audit
+      - run: npm --prefix packages/hedera-provisioning ci --ignore-scripts --no-audit
       - run: npm run check
       - run: npm run build
       - run: npm run build:web
@@ -86,14 +88,20 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             contracts/ats/package-lock.json
+            packages/hedera-provisioning/package-lock.json
       - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
         with:
           version: v1.8.1
       - run: npm ci --no-audit
       - run: npm --prefix contracts/ats ci --ignore-scripts --no-audit
+      - run: npm --prefix packages/hedera-provisioning ci --ignore-scripts --no-audit
       - run: npm --prefix contracts/ats run compiler:fetch
       - name: Test Gate and ATS state transitions with an isolated test verifier
         run: npm run check:ats
+      - name: Check native HFS signing, uncertainty and actual ATS input hydration
+        run: |
+          npm run check:hedera-provisioning
+          npm run check:ats:hfs
 
   contracts:
     runs-on: ubuntu-latest

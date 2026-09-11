@@ -84,8 +84,11 @@ npm run check:evidence
 npm run check:parity
 # Additional actual ATS lane; install its locked compiler package first:
 npm --prefix contracts/ats ci --ignore-scripts --no-audit
+npm --prefix packages/hedera-provisioning ci --ignore-scripts --no-audit
 npm --prefix contracts/ats run compiler:fetch
 npm run check:ats
+npm run check:hedera-provisioning
+npm run check:ats:hfs
 ```
 
 The main check covers hygiene, root format/lint/types, domain, audit, issuance, institution, web and worker modules. The separate ATS CI job rebuilds the pinned ATS contracts and tests local Gate/ATS state transitions using an isolated test verifier. It does not establish SP1 proof acceptance. Rust, Solidity and request parity have independent checks; parity rebuilds the Rust runner before comparing it with TypeScript. Contracts pin Solidity 0.8.30; CI pins Foundry 1.8.1. Native Rust uses 1.96.0; SP1 uses its separately pinned guest toolchain. Browser integration is documented in apps/web. CI configuration does not establish a successful remote CI run.
@@ -110,7 +113,7 @@ The worker build is a local deployment dry run; the web build produces static fi
 1. Configure the actual institution signer and connect the durable stable-right ledger to verified chain outcomes and the wallet workflow. Define represented rights, current entitlement and exclusive custody/reservation procedures.
 2. Complete and approve the real source profile, source-key lifecycle and authenticated field extraction. Visual extraction, a scanned authority document or a synthetic certificate cannot substitute for these.
 3. Generate and independently verify the final request-bound Groth16 proof, then accept it through the pinned direct verifier and Gate on a measured host.
-4. Complete ATS provisioning/admission and exercise the selected backend on Hedera with fees, exact mint/transfer, rollback and invalid proofs. The normal-source profile builds locally, but its 31,759-byte creation input exceeds the documented inline creation-data limit; the HFS-backed direct-creation route remains unimplemented. Native HTS association is a separate backend requirement. Record deployed identities and transactions.
+4. Complete ATS provisioning/admission and exercise the selected backend on Hedera with fees, exact mint/transfer, rollback and invalid proofs. The normal-source profile builds locally, but its 31,759-byte creation input exceeds the documented inline creation-data limit; the HFS builders and guarded per-operation submit/recovery path now exist in `packages/hedera-provisioning`. Sequential deployment orchestration, aggregate fee accounting and live acceptance remain open. Native HTS association is a separate backend requirement. Record deployed identities and transactions.
 5. Complete wallet, institution, local prover, observation and audit integration; test revocation, unresolved transactions and recovery in that environment.
 6. Review persistent supply authority, redemption obligations, governance and incident operations before creating a persistent token. The present mint-only adapter has no redemption or backing-release path.
 

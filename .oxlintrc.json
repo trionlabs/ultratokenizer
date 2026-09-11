@@ -42,7 +42,9 @@
     ".scratch/**",
     "context/**",
     "contexts/**",
-    "public/ultratokenizer-blueprint.html"
+    "public/ultratokenizer-blueprint.html",
+    "packages/hedera-provisioning/node_modules/**",
+    "packages/hedera-provisioning/journals/**"
   ],
   "rules": {
     "no-array-constructor": "error",

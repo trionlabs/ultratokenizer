@@ -39,6 +39,7 @@
     "work",
     ".scratch",
     "context",
-    "contexts"
+    "contexts",
+    "packages/hedera-provisioning"
   ]
 }

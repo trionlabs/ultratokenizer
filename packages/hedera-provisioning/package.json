@@ -1,0 +1,22 @@
+{
+  "name": "@ultratokenizer/hedera-provisioning",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@hiero-ledger/sdk": "2.88.0",
+    "viem": "2.56.3"
+  },
+  "overrides": {
+    "@hiero-ledger/proto": {
+      "protobufjs": "8.8.0"
+    },
+    "ws": "8.21.3"
+  }
+}
