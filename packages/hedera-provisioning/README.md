@@ -29,11 +29,67 @@ One journal path identifies one operation. Reusing it cannot resend, even after 
 
 A process crash can leave a `.lock` sibling. Confirm that the owning provisioning process has stopped before removing **only that lock**, then call recovery with the same journal. Never delete the journal or retry an uncertain append under a new native ID. A partial journal fails closed and needs manual reconciliation against the preserved signed operation; it is not automatically repaired or treated as unused.
 
-## Live deployment still required
+## Sequential creation controller
 
-This package is an operation transport, not a complete deployment scheduler. Before live use, the controller must retain a unique mapping from deployment step to journal/native ID, enforce sequential successful file operations, read back the file, account for the aggregate native fees plus Ethereum gas and relay allowance, and retain all graph admission evidence. The Ethereum fee envelope alone does not cap the total HBAR spent across file operations. The funded payer/file-key signer, EVM sender and holder configuration remain external inputs.
+One controller owns one signed Ethereum creation and its HFS operations. It does not schedule the complete ATS deployment graph or reserve a budget across that graph; those require separate aggregate planning and admission.
 
-No file upload, contract deployment or funded-account transaction was performed by the local tests. Testnet reset, RPC/mirror disagreement, mutable files and signer compromise remain explicit operational trust boundaries. A changed file cannot authorize different Ethereum creation bytes because the original signature binds the full input; it can still cause failure and consume fees.
+`initializeHfsController({journalPath, input})` validates the original signed creation and creates an offline, hash-linked plan. Keep the journal and its sibling operation journals inside the ignored `journals/` directory. Initialization returns the `planSha256` required by every subsequent call. The plan fixes its filesystem location, creation policy, signer public key, payer, node, file lifetime, and fee ceilings. It accepts exactly these input fields:
+
+| Field                        | Meaning                                                             |
+| ---------------------------- | ------------------------------------------------------------------- |
+| `deploymentId`               | A distinct nonzero lowercase 64-character identifier                |
+| `signedTransaction`          | The original signed EIP-1559 creation accepted by the builder       |
+| `creationPolicy`             | The builder's independent testnet creation policy                   |
+| `payer`, `node`, `publicKey` | Explicit native payer, selected testnet node and payer/file signer  |
+| `fileLifetimeSeconds`        | Canonical decimal string between `3600` and `86400`                 |
+| `fees`                       | The exact fee settings below, all canonical decimal tinybar strings |
+
+The fee fields are `fileCreateMaxFeeTinybar`, `fileAppendMaxFeeTinybar`, `readbackMaxFeeTinybar`, `readbackPaymentTinybar`, `ethereumMaxFeeTinybar`, `maxGasAllowanceTinybar`, and `totalBudgetTinybar`. Each must be positive except the relay gas allowance, which may be zero. Initialization refuses a total budget smaller than the conservative funding envelope for every planned operation.
+
+`advanceHfsController({journalPath, expectedPlanSha256, signer})` advances one operation: file create, each ordered append, one paid file readback, then the Ethereum wrapper. Supply `signer(bytes)` as the institution's signing callback; no requester key, operator-bearing client or alternate network endpoint is accepted. The signer receives a copy of the exact native body and its returned signature is verified. The controller records and syncs the step, unique journal name, explicit native ID, body hash and maximum cost reservation before any signing call. Future calls use that same operation's recovery path; they cannot regenerate its ID, sign again or consume a second reservation.
+
+```js
+const initialized = await initializeHfsController({ journalPath, input });
+const result = await advanceHfsController({
+  journalPath,
+  expectedPlanSha256: initialized.planSha256,
+  signer: signInstitutionTransaction,
+});
+```
+
+Call once per intended next step. `step_succeeded` and `step_recovered` allow another advance. `unresolved` retains the reservation and permits recovery only; `failed` retains the observed terminal failure. A crash before the per-operation signed journal exists stays unresolved rather than obtaining a new signing opportunity. A torn controller journal, changed plan/location, changed signed native body or changed historical observation fails closed. Concurrent advances share one exclusive controller lock. A stale lock requires the same stopped-process review described for operation journals.
+
+Before progressing, the controller rechecks every previously saved native outcome through exact-hash recovery. Missing or conflicting history blocks subsequent signing, including after an observed testnet reset. This detects inconsistent observations, not every possible network reset; downstream deployment admission must still establish the intended chain state. A successfully completed readback is recovered locally from its retained signed query and saved response, and must be no older than five minutes before the Ethereum step. The full returned bytes must equal the expected ASCII hex. A changed file can cause a charged failure, but cannot alter the original signed Ethereum creation.
+
+### Paid file readback
+
+`readHfsContentsOnce` is a separate one-attempt paid query. Its header contains an ordinary signed native transfer from the payer to the selected node. That transfer is **never submitted separately**. The query records its file ID, exact payment, fee cap, native ID, signing intent, signed payment and full query protobuf before dispatch. A fixed TLS testnet client makes one application dispatch with that immutable payment, no operator and no implicit fee estimation. This limits application attempts; it does not establish exactly one physical RPC transmission or independent node authentication from the SDK's TLS flag. The adapter validates the response header's protobuf semantics, returned file ID, exact byte length and contents hash. The returned bytes and observation time are synced before the controller can create an Ethereum wrapper.
+
+This requires a small private compatibility adapter pinned to SDK `2.88.0`. The ordinary public `FileContentsQuery` path replaces an explicit payment ID during preparation and generates another signed payment when constructing the actual request. The adapter overrides only those two lifecycle hooks to preserve the already recorded official protobuf. Tests exercise the inherited SDK execution loop with only the RPC dispatch intercepted, forbid any `TransactionId.generate` inside readback, and assert one dispatch with the exact durable signed query. Changing the SDK version requires reviewing this adapter; its runtime version check refuses a silent upgrade.
+
+`recoverHfsReadback` never queries or pays again. It can recover a response already saved locally after checking the exact signed payment/query and contents. If the original query was sent but its response was lost, the step remains unresolved and the controller cannot proceed to creation. Readback signatures authorize a payment to a node; they do not independently authenticate the response or bind a file ID. The retained complete query and provider response are operational evidence with `provider_observed` assurance.
+
+### Cumulative fee reservation
+
+The plan reserves these components once, in tinybars, for each unique step:
+
+| Component                            | Conservative reserve                                                   |
+| ------------------------------------ | ---------------------------------------------------------------------- |
+| File operations and Ethereum wrapper | Sum of their explicit native maximum transaction fees                  |
+| Paid readback                        | Its explicit query transfer plus its payment transaction's maximum fee |
+| Ethereum sender gas funding          | `ceil(gasLimit × maxFeePerGas / 10^10)`                                |
+| Relay gas funding                    | The wrapper's explicit `maxGasAllowanceTinybar`                        |
+| Aborted Ethereum execution           | An additional fixed `100000000` tinybars, or 1 HBAR                    |
+
+Ethereum gas price is denominated in weibars; `10^10` weibars equal one tinybar. Integer conversion rounds upward with `BigInt`. Sender gas and relay allowance are separate funding ceilings; there is no additional aggregate gas line that counts them again. The abort cushion covers the separately documented aborted-transaction charge against the relayer. It is deliberately conservative: normal and aborted execution are alternative outcomes, and this reserve is not a claim that both charges occur. The controller never treats the reserve as measured expenditure or returns it to the available budget after an uncertain result. Recovery reads add zero reservations.
+
+The budget is local to this immutable controller and does not control another process using the same payer or a trusted operator who rewrites/recreates the plan. Keep one original controller for the signed creation throughout ambiguity. A hash chain detects drift; it does not authenticate history against its file owner. Local filesystem locking and sync semantics remain operational assumptions.
+
+### Live deployment and graph admission remain separate
+
+`deployment_observed` means the controller retained exact provider observations for the file operations and Ethereum creation. Its result always has `chainGraphAdmitted: false` and `settledCostKnown: false`. The ATS runtime graph, contract address/code, roles, original creation block and downstream Gate registration still need their independent deployment admission checks. The funded payer/file-key signer, EVM sender and holder configuration remain external inputs.
+
+The controller tests use real SDK serialization/signatures and intercepted consensus, mirror and query responses. They cover sequence, crash recovery, concurrent calls, budget limits, configuration/location drift, exact ASCII readback and the single-payment query lifecycle. No file upload, contract deployment or funded-account transaction was performed by those tests.
 
 ## Official references checked
 
@@ -42,3 +98,4 @@ No file upload, contract deployment or funded-account transaction was performed 
 - [Consensus implementation at the reviewed commit](https://github.com/hiero-ledger/hiero-consensus-node/blob/7e0dc44e82999189dcef8635bd4795c366b73350/hedera-node/hedera-smart-contract-service-impl/src/main/java/com/hedera/node/app/service/contract/impl/infra/EthereumCallDataHydration.java): hex decoding of file contents before restoring the signed call data.
 - [Transaction lookup](https://docs.hedera.com/api-reference/transactions/get-transaction-by-id) and [official REST endpoints](https://docs.hedera.com/reference/rest-api): hash/ID/nonce fields and the testnet mirror origin.
 - [Official Hiero JavaScript SDK](https://github.com/hiero-ledger/hiero-sdk-js): package API and transaction retry/signing behavior, checked against the installed 2.88.0 source. The npm package advertises SLSA provenance; a metadata link alone is not independent verification of its attestation.
+- [Pinned gas charging implementation](https://github.com/hiero-ledger/hiero-consensus-node/blob/7e0dc44e82999189dcef8635bd4795c366b73350/hedera-node/hedera-smart-contract-service-impl/src/main/java/com/hedera/node/app/service/contract/impl/exec/gas/CustomGasCharging.java): sender/relay charging and the separately capped one-HBAR aborted-transaction relayer charge used for conservative budgeting.

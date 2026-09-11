@@ -10,6 +10,7 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
+    "@hiero-ledger/proto": "2.31.0",
     "@hiero-ledger/sdk": "2.88.0",
     "viem": "2.56.3"
   },
