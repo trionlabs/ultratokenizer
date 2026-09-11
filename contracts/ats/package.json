@@ -15,5 +15,10 @@
   "devDependencies": {
     "js-sha3": "0.8.0",
     "solc-main": "npm:solc@0.8.30"
+  },
+  "overrides": {
+    "solc-main": {
+      "tmp": "0.2.7"
+    }
   }
 }
