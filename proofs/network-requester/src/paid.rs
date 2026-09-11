@@ -390,19 +390,12 @@ pub async fn recover_once<L: RequestLog, R: PaidRpc>(
         },
         clock()?,
     )?;
-    let status = network.status(request.request_id).await?;
+    let status = network.status(request.request_id.clone()).await?;
     status_values(status.fulfillment_status, status.execution_status)?;
-    if status.request_tx_hash != request.tx_hash
-        || status.deadline != body.deadline
-        || status
-            .public_values_hash
-            .as_ref()
-            .is_some_and(|hash| Some(hash) != body.public_values_hash.as_ref())
-        || (status.execution_status == i32::from(rpc::ExecutionStatus::Executed)
-            && status.public_values_hash.is_none())
-    {
+    if status.request_tx_hash != request.tx_hash || status.deadline != body.deadline {
         return Err("Recovered status does not bind the exact request or expected public values.");
     }
+    validate_execution_commitment(body, &request, &status)?;
     let fulfilled = status.fulfillment_status == i32::from(rpc::FulfillmentStatus::Fulfilled);
     if fulfilled
         && (status.execution_status != i32::from(rpc::ExecutionStatus::Executed)
@@ -439,6 +432,46 @@ pub async fn recover_once<L: RequestLog, R: PaidRpc>(
         "proofUriSha256":uri_hash, "proofDownloaded":false, "proofVerified":false,
         "budgetReleased":false, "automaticRetryAllowed":false}),
     )
+}
+
+// The caller must first bind request details to the exact signed body and nonce.
+// SP1 SDK 6.2.4 auction ProofRequest field 23 is the execution-result hash.
+// The status endpoint may omit its optional field 7 even after execution, so an
+// executed details response can supply it. Conflicting returned hashes always fail.
+// These are RPC observations; neither response proves the computation is valid.
+pub(crate) fn validate_execution_commitment(
+    body: &rpc::RequestProofRequestBody,
+    request: &rpc::ProofRequest,
+    status: &rpc::GetProofRequestStatusResponse,
+) -> Result<(), &'static str> {
+    let expected = body
+        .public_values_hash
+        .as_ref()
+        .filter(|hash| hash.len() == 32)
+        .ok_or("Signed request lacks the expected execution commitment.")?;
+    for hash in [
+        request.public_values_hash.as_ref(),
+        status.public_values_hash.as_ref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if hash != expected {
+            return Err(
+                "Recovered execution commitment differs from the signed expected public values.",
+            );
+        }
+    }
+    if status.execution_status == i32::from(rpc::ExecutionStatus::Executed)
+        && status.public_values_hash.is_none()
+        && !(request.execution_status == i32::from(rpc::ExecutionStatus::Executed)
+            && request.public_values_hash.is_some())
+    {
+        return Err(
+            "Executed request lacks a matching execution commitment in both RPC responses.",
+        );
+    }
+    Ok(())
 }
 
 fn exact_request(

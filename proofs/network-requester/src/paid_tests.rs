@@ -712,6 +712,65 @@ async fn recovery_pages_and_transaction_detail_reads_are_bounded() {
     assert!(RequestState::read(log.events()).unwrap().known.is_none());
 }
 
+#[tokio::test]
+async fn executed_recovery_requires_a_matching_commitment_and_rejects_either_response_conflict() {
+    // Real auction RPC can omit status field 7 while details field 23 contains
+    // the execution result. This is recoverable without treating an echo from
+    // unexecuted details as execution or accepting a contradictory second hash.
+    for (status_hash, details_hash, details_executed, accepted) in [
+        (None, Some(true), true, true),
+        (Some(true), None, true, true),
+        (Some(true), Some(true), true, true),
+        (None, None, true, false),
+        (None, Some(true), false, false),
+        (Some(false), Some(true), true, false),
+        (Some(true), Some(false), true, false),
+        (None, Some(false), true, false),
+        (Some(false), None, true, false),
+    ] {
+        let directory = Directory::new();
+        let signer = Signer::fixture();
+        let (value, mut log) = setup(&directory, &signer);
+        let expected = hex::decode(&value.preparation.public_values_sha256).unwrap();
+        let hash = |matching: bool| {
+            if matching {
+                expected.clone()
+            } else {
+                vec![0x99; 32]
+            }
+        };
+        let mut network = Network::fixture(&value, directory.path("request.jsonl"));
+        submit_once(&mut log, &mut network, &signer, || Ok(NOW))
+            .await
+            .unwrap();
+        network.index_sent();
+        network.status.fulfillment_status = rpc::FulfillmentStatus::Assigned.into();
+        network.status.execution_status = rpc::ExecutionStatus::Executed.into();
+        network.status.public_values_hash = status_hash.map(hash);
+        network.candidates[0].execution_status = if details_executed {
+            rpc::ExecutionStatus::Executed.into()
+        } else {
+            rpc::ExecutionStatus::Unexecuted.into()
+        };
+        network.candidates[0].public_values_hash = details_hash.map(hash);
+        let result = recover_once(&mut log, &mut network, || Ok(NOW + 1)).await;
+        assert_eq!(result.is_ok(), accepted);
+        if let Ok(value) = result {
+            assert_eq!(value["proofAvailable"], false);
+            assert_eq!(value["proofVerified"], false);
+            assert_eq!(value["budgetReleased"], false);
+        }
+        assert_eq!(network.sends.len(), 1);
+        assert_eq!(signer.calls.get(), 1);
+        assert_eq!(network.nonce_calls, 1);
+        assert!(RequestState::read(log.events()).unwrap().known.is_some());
+        assert!(submit_once(&mut log, &mut network, &signer, || Ok(NOW + 2))
+            .await
+            .is_err());
+        assert_eq!(network.sends.len(), 1);
+    }
+}
+
 fn staged_events(plan: &Plan) -> Vec<crate::journal::StageEvent> {
     let kind = "synthetic_private_stdin".to_owned();
     let body = vec![
