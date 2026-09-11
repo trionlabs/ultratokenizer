@@ -1,5 +1,6 @@
 /target/
 /network-requester/target/
+/network-journals/
 /elf/
 /.env*
 /fixtures/private/
