@@ -15,7 +15,7 @@ forge test --root contracts
 npm --prefix packages/domain test
 ```
 
-The last command requires the root `npm ci`. Local tests cover signatures, shared request/evidence vectors, exact reservation binding, pending/outstanding exposure, expiry/revocation, replay, reentrancy, rejection of legacy profile policies, exact mint delivery and rollback. Real-verifier negative tests reject malformed envelopes and invalid pairings; they contain no successful application proof. HTS tests install an explicitly synthetic system-contract model at `0x167` in the local EVM. `test/HtsFork.t.sol` covers token creation, treasury/association, mint, transfer, fee/shortfall rollback and supply-key behavior against that model. Setting `HEDERA_RPC_URL` or `HEDERA_FORK_URL` selects an optional native-HTS smoke test with a test verifier. A complete real-proof/native-network acceptance test remains separate.
+The last command requires the root `npm ci`. Local tests cover signatures, shared request/evidence vectors, exact reservation binding, pending/outstanding exposure, expiry/revocation, replay, reentrancy, rejection of legacy profile policies, exact mint delivery and rollback. Real-verifier negative tests reject malformed envelopes and invalid pairings; they contain no successful application proof. HTS tests install an explicitly synthetic system-contract model at `0x167` in the local EVM. `test/HtsFork.t.sol` covers token creation, treasury/association, mint, transfer, fee/shortfall rollback and supply-key behavior against that model. Setting `ULTRATOKENIZER_HTS_FORK_URL` selects an optional native-HTS smoke test with a test verifier. A complete real-proof/native-network acceptance test remains separate.
 
 ## Explicit deployment configuration
 

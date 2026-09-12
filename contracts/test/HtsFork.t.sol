@@ -10,8 +10,8 @@ import {IHts, IHtsFungible} from "../src/interfaces/IHts.sol";
 /// HTS integration harness for HederaMintAdapter.
 ///
 /// By default it runs with zero network access against a faithful local model of the
-/// native HTS system contract installed at 0x167 via vm.etch. If HEDERA_RPC_URL or
-/// HEDERA_FORK_URL is set, it selects that fork and the real 0x167 precompile is used
+/// native HTS system contract installed at 0x167 via vm.etch. If
+/// ULTRATOKENIZER_HTS_FORK_URL is set, it selects that fork and the real 0x167 precompile is used
 /// instead; the mock-only tests are skipped and a single clearly-labeled smoke test
 /// exercises the real precompile. The fork path has NOT been validated against a live
 /// Hedera endpoint and is provided as scaffolding only.
@@ -193,7 +193,7 @@ contract HtsForkTest {
         holder = vm.addr(HOLDER_KEY);
         issuer = vm.addr(ISSUER_KEY);
 
-        string memory forkUrl = vm.envOr("HEDERA_RPC_URL", vm.envOr("HEDERA_FORK_URL", ""));
+        string memory forkUrl = vm.envOr("ULTRATOKENIZER_HTS_FORK_URL", "");
         if (bytes(forkUrl).length != 0) {
             vm.createSelectFork(forkUrl);
             forking = true;
@@ -376,7 +376,7 @@ contract HtsForkTest {
         MockHtsService(HTS).mintToken(token, 1, new bytes[](0));
     }
 
-    /// Real-precompile smoke test. Runs only when HEDERA_RPC_URL / HEDERA_FORK_URL is set.
+    /// Real-precompile smoke test. Runs only when ULTRATOKENIZER_HTS_FORK_URL is set.
     /// Not validated in this repository; association and fees follow live HTS behavior.
     /// Balance reads use the HTS ERC20 redirect (HIP-218), the same interface the
     /// production adapter relies on for delivery checks.
