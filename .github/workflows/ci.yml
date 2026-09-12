@@ -73,6 +73,7 @@ jobs:
           curl --fail --silent http://127.0.0.1:4173/verify/ > /dev/null
           npm --prefix apps/web run test:browser
           npm --prefix apps/web run test:browser:backends
+          npm --prefix apps/web run test:browser:institution
 
   ats-acceptance:
     runs-on: ubuntu-latest
