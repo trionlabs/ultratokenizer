@@ -159,11 +159,7 @@ export async function observeIssuance(
       !isRecord(transaction) ||
       !isHash(transaction.hash) ||
       !isHash(transaction.blockHash) ||
-      transaction.hash !== hash ||
-      typeof transaction.to !== 'string' ||
-      typeof receipt.to !== 'string' ||
-      !isAddress(transaction.to, { strict: true }) ||
-      !isAddress(receipt.to, { strict: true })
+      transaction.hash !== hash
     )
       throw new Error('Invalid transaction.');
     if (
@@ -171,8 +167,28 @@ export async function observeIssuance(
       quantity(transaction.blockNumber) !== blockNumber
     )
       return { outcome: 'pending', reason: 'not_final' };
-    if (transaction.to.toLowerCase() !== receipt.to.toLowerCase())
-      return await terminal({ outcome: 'rejected', reason: 'gate_mismatch' });
+    if (transaction.to === null && receipt.to === null) {
+      // A constructor can relay the Gate call. Its created address is receipt
+      // metadata; the pinned Gate event below remains the issuance authority.
+      if (
+        typeof receipt.contractAddress !== 'string' ||
+        !isAddress(receipt.contractAddress, { strict: true }) ||
+        /^0x0{40}$/i.test(receipt.contractAddress)
+      )
+        throw new Error('Invalid creation receipt.');
+    } else {
+      if (
+        typeof transaction.to !== 'string' ||
+        typeof receipt.to !== 'string' ||
+        !isAddress(transaction.to, { strict: true }) ||
+        !isAddress(receipt.to, { strict: true }) ||
+        (receipt.contractAddress !== undefined &&
+          receipt.contractAddress !== null)
+      )
+        throw new Error('Invalid transaction destination.');
+      if (transaction.to.toLowerCase() !== receipt.to.toLowerCase())
+        return await terminal({ outcome: 'rejected', reason: 'gate_mismatch' });
+    }
     if (
       typeof code !== 'string' ||
       code.length > 100_002 ||

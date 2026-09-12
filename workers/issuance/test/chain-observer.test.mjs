@@ -263,6 +263,131 @@ void test('a relayer may call internally when the exact pinned gate emits the ma
   );
 });
 
+void test('a creation relayer confirms through the same pinned Gate event and block checks', async () => {
+  const rpc = rpcFixture(request, digest, issuanceEvent, (values) => {
+    values.eth_getTransactionByHash.to = null;
+    values.eth_getTransactionReceipt.to = null;
+    values.eth_getTransactionReceipt.contractAddress = request.token;
+  });
+  assert.equal(
+    (await observeIssuance(request, hash, chainConfig, rpc.fetcher)).outcome,
+    'confirmed',
+  );
+  assert.equal(
+    rpc.calls.filter((call) => call.method === 'eth_getBlockByNumber').length,
+    2,
+  );
+  assert.ok(rpc.calls.every((call) => !call.method.startsWith('eth_send')));
+});
+
+void test('malformed creation and mixed call destinations remain unresolved', async () => {
+  for (const patch of [
+    { transactionTo: null, receiptTo: null, contractAddress: undefined },
+    { transactionTo: null, receiptTo: null, contractAddress: null },
+    { transactionTo: null, receiptTo: null, contractAddress: '0x' },
+    { transactionTo: null, receiptTo: null, contractAddress: 1 },
+    {
+      transactionTo: null,
+      receiptTo: null,
+      contractAddress: `0x${'00'.repeat(20)}`,
+    },
+    {
+      transactionTo: null,
+      receiptTo: request.gate,
+      contractAddress: request.token,
+    },
+    {
+      transactionTo: request.gate,
+      receiptTo: null,
+      contractAddress: request.token,
+    },
+    {
+      transactionTo: undefined,
+      receiptTo: null,
+      contractAddress: request.token,
+    },
+    {
+      transactionTo: null,
+      receiptTo: undefined,
+      contractAddress: request.token,
+    },
+    {
+      transactionTo: request.gate,
+      receiptTo: request.gate,
+      contractAddress: request.token,
+    },
+    {
+      transactionTo: request.gate,
+      receiptTo: request.gate,
+      contractAddress: 1,
+    },
+  ]) {
+    const rpc = rpcFixture(request, digest, issuanceEvent, (values) => {
+      values.eth_getTransactionByHash.to = patch.transactionTo;
+      values.eth_getTransactionReceipt.to = patch.receiptTo;
+      values.eth_getTransactionReceipt.contractAddress = patch.contractAddress;
+    });
+    assert.deepEqual(
+      await observeIssuance(request, hash, chainConfig, rpc.fetcher),
+      { outcome: 'pending', reason: 'rpc_unavailable' },
+      JSON.stringify(patch),
+    );
+  }
+  const normal = rpcFixture(request, digest, issuanceEvent, (values) => {
+    values.eth_getTransactionReceipt.contractAddress = null;
+  });
+  assert.equal(
+    (await observeIssuance(request, hash, chainConfig, normal.fetcher)).outcome,
+    'confirmed',
+  );
+});
+
+void test('creation metadata cannot replace runtime, event or block evidence', async () => {
+  for (const [mutate, expected] of [
+    [
+      (values) => {
+        values.eth_getCode = '0x60016001';
+      },
+      'rejected',
+    ],
+    [
+      (values) => {
+        values.eth_getTransactionReceipt.logs = [];
+      },
+      'rejected',
+    ],
+    [
+      (values) => {
+        values.eth_getTransactionReceipt.logs[0].logIndex = null;
+      },
+      'pending',
+    ],
+    [
+      (values) => {
+        values.eth_getBlockByNumber.hash = `0x${'ee'.repeat(32)}`;
+      },
+      'pending',
+    ],
+    [
+      (values) => {
+        values.eth_getTransactionByHash.blockHash = `0x${'ee'.repeat(32)}`;
+      },
+      'pending',
+    ],
+  ]) {
+    const rpc = rpcFixture(request, digest, issuanceEvent, (values) => {
+      values.eth_getTransactionByHash.to = null;
+      values.eth_getTransactionReceipt.to = null;
+      values.eth_getTransactionReceipt.contractAddress = request.token;
+      mutate(values);
+    });
+    assert.equal(
+      (await observeIssuance(request, hash, chainConfig, rpc.fetcher)).outcome,
+      expected,
+    );
+  }
+});
+
 void test('bounded relayer receipts remain observable beyond 256 total logs', async () => {
   for (const count of [256, 257]) {
     const rpc = rpcFixture(request, digest, issuanceEvent);
