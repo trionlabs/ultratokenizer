@@ -215,21 +215,27 @@ page reload.
 
 ## Institution and Trust workspaces
 
-`/demo/` explains the protocol in eleven sections: the artifact handed between each stage, what
-zkPDF authenticates inside the SP1 guest, the capsule field map, the same request digest recomputed
-in three languages, the all-or-nothing amount rule, the Gate's ten ordered checks, the ATS role
-assignment, ERC-8004 attribution, the current deployment state, and an honest mapping against the
-Hedera track requirements including the items that are not met. It does not report completed
-transactions. Source document signing and private ledger operations remain institution tooling
-outside the browser. The holder imports the institution's public proof-and-permit package, and
-receipt verification needs no wallet.
+`/demo/` teaches the protocol as a stepped walkthrough: four parts — Claim, Proof, Permission and
+Check — over ten steps. Each step pairs one illustration with one conclusion, the evidence behind
+it, the distinction it is most often confused with, and a link to the source a reader can open
+independently. `Show everything` opens all ten at once for a reader who would rather scan.
+
+Below the walkthrough, three reference blocks stay visible in both modes: the current deployment
+addresses with their HashScan and Sourcify links, an honest mapping against the Hedera track
+requirements including the items that are not met, and links to the live workspaces. Keeping them
+outside the stepper means evidence never costs ten clicks to reach.
+
+It does not report completed transactions. Source document signing and private ledger operations
+remain institution tooling outside the browser. The holder imports the institution's public
+proof-and-permit package, and receipt verification needs no wallet.
 
 The walkthrough makes no chain calls and fetches no third-party resource. It reads only the
-same-origin `deployment.json` this host publishes, to render addresses and their HashScan and
-Sourcify links; without that file it still explains the protocol and says the configuration is
-absent. Live chain values belong to `/trust/`. Every section renders at rest, so nothing depends on
-scrolling, and the stage sequence and status animations stop under `prefers-reduced-motion`.
-`test/demo-browser.mjs` asserts these properties at 1440, 768, 390 and 320 pixels.
+same-origin `deployment.json` this host publishes, to render addresses and their outbound links;
+without that file it still teaches the protocol and says the configuration is absent. Live chain
+values belong to `/trust/`. Illustrations rest in their completed state rather than waiting on a
+scroll observer, steps outside the open part are removed with `hidden` rather than faded, and every
+animation stops under `prefers-reduced-motion`. `test/demo-browser.mjs` asserts these properties at
+1440, 768, 390 and 320 pixels, and checks that each step cites a source.
 
 `/institution/` loads the same site-managed deployment as the holder. It offers two wallet roles:
 

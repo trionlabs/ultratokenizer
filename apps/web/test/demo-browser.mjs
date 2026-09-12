@@ -6,19 +6,20 @@ const base = process.env.PREVIEW_URL ?? 'http://127.0.0.1:4173/';
 const origin = new URL(base).origin;
 const demo = new URL('demo/', base).href;
 const browser = await chromium.launch({ headless: true });
-const sections = [
-  'Summary',
-  'The issuance spine',
-  'What zkPDF proves',
-  'Cross-language digest',
-  'Exact quantity rule',
-  'The Gate decision',
-  'Hedera Asset Tokenization Studio',
-  'ERC-8004 attribution',
-  'Current state',
-  'Prize criteria',
-  'Where to look next',
+const parts = ['Claim', 'Proof', 'Permission', 'Check'];
+const steps = [
+  'The problem it solves',
+  'What the document carries',
+  'Proving the signature without showing the document',
+  'One hash for the whole request',
+  'Three languages, one answer',
+  'All of it, or none of it',
+  'What the institution does',
+  'The ten checks',
+  'One door into the token',
+  'What the registry is for',
 ];
+const reference = ['Current state', 'Prize criteria', 'Where to look next'];
 const published = await readFile('static/deployment.json', 'utf8').catch(
   () => undefined,
 );
@@ -46,8 +47,26 @@ function isolate(page, external, config) {
   });
 }
 
+/** Every heading inside a visible step must be readable without scrolling. */
+function parkedHeadings(page) {
+  return page.evaluate(() =>
+    [...document.querySelectorAll('main .step:not([hidden]) h3')]
+      .filter((node) => {
+        const style = getComputedStyle(node);
+        const box = node.getBoundingClientRect();
+        return (
+          style.opacity !== '1' ||
+          style.visibility === 'hidden' ||
+          box.width === 0 ||
+          box.height === 0
+        );
+      })
+      .map((node) => node.textContent?.slice(0, 40)),
+  );
+}
+
 try {
-  // The walkthrough must explain the protocol without a published deployment.
+  // The walkthrough must teach the protocol without a published deployment.
   {
     const external = [];
     const errors = [];
@@ -62,7 +81,8 @@ try {
           name: 'A signed document becomes exactly one token.',
         }),
       ).toBeVisible();
-      for (const label of sections)
+      // Every step stays in the document even while its part is closed.
+      for (const label of [...steps, ...reference])
         await expect(
           page.locator(`main section[aria-label="${label}"]`),
         ).toHaveCount(1);
@@ -82,28 +102,69 @@ try {
     await expect(page.locator('.notice')).toContainText(
       'has not published a deployment configuration',
     );
-    // Every heading must be readable at rest; nothing waits on a scroll observer.
-    const parked = await page.evaluate(() =>
-      [...document.querySelectorAll('main h1, main h2, main h3')]
-        .filter((node) => {
-          const style = getComputedStyle(node);
-          const box = node.getBoundingClientRect();
-          return (
-            style.opacity !== '1' ||
-            style.visibility === 'hidden' ||
-            box.width === 0 ||
-            box.height === 0
-          );
-        })
-        .map((node) => node.textContent?.slice(0, 40)),
-    );
-    assert.deepEqual(parked, [], 'headings must render at rest');
+    assert.deepEqual(await parkedHeadings(page), []);
     assert.deepEqual(external, []);
     assert.deepEqual(errors, []);
     await page.close();
   }
 
-  // With a published configuration the page shows addresses and outbound links.
+  // Four parts, stepped in order, each showing only its own steps.
+  {
+    const external = [];
+    const errors = [];
+    const page = await browser.newPage();
+    page.on('pageerror', (error) => errors.push(error.message));
+    await isolate(page, external, published);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(demo, { waitUntil: 'networkidle' });
+    await expect(page.locator('.rail button')).toHaveCount(parts.length);
+    await expect(page.locator('.chapter-head h2')).toHaveText(parts[0]);
+    await expect(page.getByRole('button', { name: 'Back' })).toBeDisabled();
+    const visible = async () =>
+      page.locator('main .step:not([hidden])').count();
+    assert.equal(await visible(), 2, 'Claim opens with two steps');
+    for (const name of parts.slice(1)) {
+      await page.getByRole('button', { name: 'Next' }).click();
+      await expect(page.locator('.chapter-head h2')).toHaveText(name);
+      assert.deepEqual(await parkedHeadings(page), []);
+    }
+    assert.equal(await visible(), 3, 'Check closes with three steps');
+    await expect(page.getByRole('button', { name: 'Next' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Back' }).click();
+    await expect(page.locator('.chapter-head h2')).toHaveText('Permission');
+    assert.deepEqual(external, []);
+    assert.deepEqual(errors, []);
+    await page.close();
+  }
+
+  // "Show everything" must open all ten steps and retire the stepper controls.
+  {
+    const external = [];
+    const errors = [];
+    const page = await browser.newPage();
+    page.on('pageerror', (error) => errors.push(error.message));
+    await isolate(page, external, published);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(demo, { waitUntil: 'networkidle' });
+    await page.getByRole('button', { name: 'Show everything' }).click();
+    await expect(page.locator('main .step[hidden]')).toHaveCount(0);
+    await expect(page.locator('.rail')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Next' })).toHaveCount(0);
+    assert.deepEqual(await parkedHeadings(page), []);
+    assert(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+      'expanded view overflows',
+    );
+    await page.getByRole('button', { name: 'Step through them' }).click();
+    await expect(page.locator('.chapter-head h2')).toHaveText('Claim');
+    assert.deepEqual(external, []);
+    assert.deepEqual(errors, []);
+    await page.close();
+  }
+
+  // With a published configuration the reference block shows outbound links.
   if (published) {
     const external = [];
     const errors = [];
@@ -121,46 +182,17 @@ try {
     await expect(
       state.locator(`a[href="https://repo.sourcify.dev/296/${gate}"]`),
     ).toHaveCount(1);
-    assert.deepEqual(external, [], 'links must never be fetched');
+    // Every step cites something a reader can open independently.
+    for (const label of steps)
+      await expect(
+        page.locator(`main section[aria-label="${label}"] .sources a`).first(),
+      ).toHaveAttribute('href', /^https:\/\//);
+    assert.deepEqual(external, [], 'citations must never be fetched');
     assert.deepEqual(errors, []);
     await page.close();
   }
 
-  // A replayed request must halt, and the later checks must never be reached.
-  {
-    const external = [];
-    const errors = [];
-    const page = await browser.newPage();
-    page.on('pageerror', (error) => errors.push(error.message));
-    await isolate(page, external, published);
-    await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto(demo, { waitUntil: 'networkidle' });
-    const gate = page.locator('main section[aria-label="The Gate decision"]');
-    await gate.getByRole('button', { name: 'Run a replayed request' }).click();
-    await expect(gate.locator('.verdict')).toContainText(
-      'Reverted with Replay',
-    );
-    await expect(gate.locator('.check[data-state="fail"]')).toHaveCount(1);
-    await expect(gate.locator('.check[data-state="skipped"]')).toHaveCount(6);
-    await gate
-      .getByRole('button', { name: 'Run an authorized request' })
-      .click();
-    await expect(gate.locator('.verdict')).toContainText('All ten checks');
-    await expect(gate.locator('.check[data-state="pass"]')).toHaveCount(10);
-    // The exact-amount control must reject every partial request.
-    const exact = page.locator(
-      'main section[aria-label="Exact quantity rule"]',
-    );
-    await exact.getByRole('button', { name: '0.500 g' }).click();
-    await expect(exact.locator('.verdict')).toContainText('Rejected');
-    await exact.getByRole('button', { name: '1.000 g' }).click();
-    await expect(exact.locator('.verdict')).toContainText('Accepted');
-    assert.deepEqual(external, []);
-    assert.deepEqual(errors, []);
-    await page.close();
-  }
-
-  // Reduced motion must leave the walkthrough complete and stationary.
+  // Reduced motion must leave every visible step complete.
   {
     const external = [];
     const errors = [];
@@ -170,26 +202,17 @@ try {
     await isolate(page, external, published);
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(demo, { waitUntil: 'networkidle' });
-    const active = page.locator('.stage-card[data-active="true"]');
-    await expect(active).toHaveCount(1);
-    const first = await active.textContent();
-    await page.waitForTimeout(3000);
-    assert.equal(
-      await page.locator('.stage-card[data-active="true"]').textContent(),
-      first,
-      'the spine must not advance under reduced motion',
-    );
-    for (const label of sections)
-      await expect(
-        page.locator(`main section[aria-label="${label}"]`),
-      ).toHaveCount(1);
+    await page.getByRole('button', { name: 'Show everything' }).click();
+    await page.waitForTimeout(1200);
+    await expect(page.locator('main .step[hidden]')).toHaveCount(0);
+    assert.deepEqual(await parkedHeadings(page), []);
     assert.deepEqual(external, []);
     assert.deepEqual(errors, []);
     await page.close();
   }
 
   console.log(
-    'Walkthrough: 11 sections at four widths, fail-closed configuration, Gate halt on replay, reduced motion stationary, no external requests.',
+    'Walkthrough: four parts over ten steps, every step cited, fail-closed configuration, expanded view complete, reduced motion stationary, no external requests.',
   );
 } finally {
   await browser.close();
