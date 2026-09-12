@@ -4,7 +4,7 @@
   import '../issuance.css';
   let { children } = $props();
   let frameState = $state<'checking' | 'direct' | 'embedded'>('checking');
-  let directPath = $state('/');
+  let directPath = $state('?reload=1');
   onMount(() => {
     directPath = window.location.origin + window.location.pathname;
     frameState = window.self === window.top ? 'direct' : 'embedded';
@@ -14,10 +14,10 @@
 {#if frameState === 'direct'}
   {@render children()}
 {:else}
-  <main class="direct-tab" aria-busy={frameState === 'checking'}>
+  <main class="direct-tab">
     <p>
       {frameState === 'checking'
-        ? 'Opening Ultratokenizer…'
+        ? 'Loading Ultratokenizer. If this screen stays, the app did not start. Open it in a new tab.'
         : 'Use a direct browser tab to import files or connect a wallet.'}
     </p>
     <a href={directPath} target="_blank" rel="noopener noreferrer"
