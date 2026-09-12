@@ -271,6 +271,33 @@ CREATE UNIQUE INDEX one_allocation_per_reservation_id ON allocations(chain_id, g
 CREATE INDEX allocation_exposure ON allocations(issuer_id, token, state);
 `;
 
+function schemaDefinition(database: DatabaseSync): string {
+  // Compare SQLite's stored definitions, including implicit unique indexes, but
+  // omit SQLite's own ANALYZE statistics tables. Root pages and row data vary.
+  return JSON.stringify(
+    database
+      .prepare(
+        "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT IN ('sqlite_stat1', 'sqlite_stat4') ORDER BY type, name",
+      )
+      .all(),
+  );
+}
+
+let expectedSchema: string | undefined;
+function supportedSchema(): string {
+  if (expectedSchema === undefined) {
+    // Use the same SQLite parser and creation recipe as a real new ledger.
+    const reference = new DatabaseSync(':memory:');
+    try {
+      reference.exec(schema);
+      expectedSchema = schemaDefinition(reference);
+    } finally {
+      reference.close();
+    }
+  }
+  return expectedSchema;
+}
+
 /** Node-only trusted institution module. Observations are caller assertions, not chain authentication. */
 export function openInstitutionLedger(options: {
   path: string;
@@ -341,6 +368,8 @@ export function openInstitutionLedger(options: {
         application !== BigInt(APPLICATION_ID) ||
         version !== BigInt(SCHEMA_VERSION)
       )
+        throw new InstitutionLedgerError('unsupported_database');
+      if (schemaDefinition(database) !== supportedSchema())
         throw new InstitutionLedgerError('unsupported_database');
     });
     // Node 22.17 embeds SQLite 3.50.0, predating the WAL-reset race fix.

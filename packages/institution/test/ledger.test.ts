@@ -698,6 +698,109 @@ await test('older schema files missing replay indexes are rejected without migra
   preserved.close();
 });
 
+await test('current version markers cannot admit missing or altered schema guarantees', async (t) => {
+  function rewriteAllocations(
+    database: DatabaseSync,
+    change: (sql: string) => string,
+  ) {
+    const definition = database
+      .prepare("SELECT sql FROM sqlite_schema WHERE name = 'allocations'")
+      .get()?.sql;
+    assert.equal(typeof definition, 'string');
+    const indexes = database
+      .prepare(
+        "SELECT sql FROM sqlite_schema WHERE type = 'index' AND tbl_name = 'allocations' AND sql IS NOT NULL",
+      )
+      .all();
+    database.exec('DROP TABLE allocations');
+    const changed = change(String(definition));
+    assert.notEqual(changed, definition);
+    database.exec(changed);
+    for (const index of indexes) database.exec(String(index.sql));
+  }
+  const changes: Record<string, (database: DatabaseSync) => void> = {
+    'missing replay index': (database) =>
+      database.exec('DROP INDEX one_live_allocation_per_right'),
+    'nonunique replay index': (database) =>
+      database.exec(
+        "DROP INDEX one_live_allocation_per_right; CREATE INDEX one_live_allocation_per_right ON allocations(right_id) WHERE state IN ('pending', 'issued')",
+      ),
+    'changed replay predicate': (database) =>
+      database.exec(
+        "DROP INDEX one_live_allocation_per_right; CREATE UNIQUE INDEX one_live_allocation_per_right ON allocations(right_id) WHERE state = 'issued'",
+      ),
+    'missing field': (database) =>
+      rewriteAllocations(database, (sql) =>
+        sql
+          .replace('  observation_json TEXT,\n', '')
+          .replace(
+            ",\n  CHECK((state = 'pending' AND observation_json IS NULL) OR (state IN ('issued', 'released') AND observation_json IS NOT NULL))",
+            '',
+          ),
+      ),
+    'missing check constraint': (database) =>
+      rewriteAllocations(database, (sql) =>
+        sql.replace(" CHECK(state IN ('pending', 'issued', 'released'))", ''),
+      ),
+    'missing foreign key': (database) =>
+      rewriteAllocations(database, (sql) =>
+        sql.replace(' REFERENCES asset_rights(right_id)', ''),
+      ),
+    'missing strict typing': (database) =>
+      rewriteAllocations(database, (sql) => sql.replace(/ STRICT$/, '')),
+    'unexpected trigger': (database) =>
+      database.exec(
+        "CREATE TRIGGER alter_cap AFTER INSERT ON allocations BEGIN UPDATE backing_pools SET cap = '0'; END",
+      ),
+  };
+  for (const [name, change] of Object.entries(changes)) {
+    await t.test(name, (t) => {
+      const { path } = storage(t);
+      const ledger = open(t, path);
+      const right = register(ledger);
+      ledger.close();
+      const edited = new DatabaseSync(path);
+      // These empty allocation-table rewrites model faulty migrations, not an untrusted writer.
+      change(edited);
+      const before = edited
+        .prepare('SELECT type, name, sql FROM sqlite_schema ORDER BY name')
+        .all();
+      assert.equal(
+        edited.prepare('PRAGMA user_version').get()?.user_version,
+        2,
+      );
+      edited.close();
+      assert.throws(
+        () => openInstitutionLedger({ path }),
+        hasCode('unsupported_database'),
+      );
+      const preserved = new DatabaseSync(path);
+      assert.deepEqual(
+        preserved
+          .prepare('SELECT type, name, sql FROM sqlite_schema ORDER BY name')
+          .all(),
+        before,
+      );
+      assert.equal(
+        preserved.prepare('SELECT right_id FROM asset_rights').get()?.right_id,
+        right.rightId,
+      );
+      preserved.close();
+    });
+  }
+});
+
+await test('normal SQLite analysis does not invalidate a supported populated ledger', (t) => {
+  const { path } = storage(t);
+  const ledger = open(t, path);
+  const right = register(ledger);
+  ledger.close();
+  const database = new DatabaseSync(path);
+  database.exec('ANALYZE; VACUUM;');
+  database.close();
+  assert.deepEqual(register(open(t, path)), right);
+});
+
 async function race(t: TestContext, jobs: unknown[]) {
   const modulePath = fileURLToPath(new URL('../index.js', import.meta.url));
   const script = `

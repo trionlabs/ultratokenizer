@@ -144,6 +144,14 @@ The database schema is version 2. Earlier schema files are rejected with
 reset. Existing institutional state must be preserved for a separately reviewed
 migration and reconciliation process.
 
+Opening a supported version also compares its complete stored table/index definitions with
+the version's creation recipe, under the initialization transaction. Missing or altered fields,
+constraints, indexes and unexpected schema objects are rejected with `unsupported_database`;
+the ledger does not repair them or change existing rights. Normal SQLite ANALYZE statistics
+are excluded from this comparison. Ad hoc DDL changes require a reviewed migration even when
+they appear equivalent. This detects schema drift, not unauthorized row edits or a malicious
+operator who controls the database and process. Operators must not change DDL while it is open.
+
 Writes use `BEGIN IMMEDIATE`, unique constraints and rollback on failure. The API
 is synchronous and intended for a small institution-local process, with a bounded
 SQLite busy wait. Concurrent processes may share the same database; storage
