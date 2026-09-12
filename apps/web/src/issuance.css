@@ -29,67 +29,6 @@
   background: var(--p-canvas);
 }
 
-.live-header {
-  width: min(100% - 48px, 1400px);
-  min-height: 76px;
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto auto auto;
-  align-items: center;
-  gap: 24px;
-  border-bottom: 1px solid var(--p-line);
-}
-
-.live-brand {
-  justify-self: start;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--p-ink);
-  font-size: 1.08rem;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  text-decoration: none;
-}
-
-.live-brand > span {
-  width: 30px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  padding-bottom: 3px;
-  color: #fdfcfe;
-  background: var(--p-accent);
-  border-radius: 8px 8px 13px 13px;
-  font-size: 1.45rem;
-  font-weight: 650;
-}
-
-.live-brand i {
-  margin-left: -8px;
-  color: var(--p-iris);
-  font-style: normal;
-}
-
-.engine-label,
-.mode-pill {
-  justify-self: center;
-  color: var(--p-muted);
-  font-size: 0.72rem;
-  font-weight: 650;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.workspace-nav {
-  justify-self: end;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.workspace-nav a,
-.header-wallet,
 .text-link {
   min-height: 42px;
   display: inline-flex;
@@ -102,31 +41,6 @@
   font-size: 0.79rem;
   font-weight: 650;
   text-decoration: none;
-}
-
-.workspace-nav a {
-  padding: 8px 12px;
-}
-
-.workspace-nav a:hover,
-.workspace-nav a.active {
-  color: var(--p-ink);
-  background: #ffffff9c;
-}
-
-.header-wallet {
-  margin-left: 8px;
-  padding: 8px 15px;
-  color: white;
-  background: var(--p-accent);
-  border: 1px solid var(--p-accent);
-}
-
-.header-wallet:disabled {
-  color: #7a7483;
-  background: #ece9f0;
-  border-color: #e1dce8;
-  opacity: 1;
 }
 
 .wallet-help {
@@ -1018,25 +932,6 @@
 }
 
 @media (max-width: 980px) {
-  .live-header {
-    grid-template-columns: 1fr auto;
-  }
-
-  .engine-label {
-    display: none;
-  }
-
-  .workspace-nav {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    justify-self: center;
-    padding-bottom: 10px;
-  }
-
-  .header-wallet {
-    justify-self: end;
-  }
-
   .engine-layout {
     grid-template-columns: 1fr;
     gap: 32px;
@@ -1077,30 +972,6 @@
 }
 
 @media (max-width: 640px) {
-  .live-header {
-    width: min(100% - 28px, 1400px);
-    gap: 10px;
-  }
-
-  .live-brand {
-    font-size: 0.98rem;
-  }
-
-  .header-wallet {
-    margin-left: 0;
-    padding: 8px 11px;
-    font-size: 0.72rem;
-  }
-
-  .workspace-nav {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .workspace-nav a {
-    padding: 7px 9px;
-  }
-
   .engine-layout,
   .verifier-main {
     width: min(100% - 28px, 1280px);

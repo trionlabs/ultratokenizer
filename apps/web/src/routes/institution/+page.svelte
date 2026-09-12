@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { zeroAddress, type EIP1193Provider, type Hex } from 'viem';
   import PortalShell from '$lib/components/PortalShell.svelte';
+  import Glyph from '$lib/visuals/Glyph.svelte';
   import { fetchHostedDeployment } from '$lib/application/hosted-deployment';
   import { createIssuanceSession } from '$lib/application/issuance-session';
   import {
@@ -270,6 +271,20 @@
   /></svelte:head
 >
 <PortalShell current="institution">
+  {#snippet actions()}
+    <button
+      class="header-wallet"
+      title={walletState.wallet?.address}
+      onclick={() =>
+        run(async () => {
+          await walletSession.connect();
+        })}
+      disabled={busy || !!walletState.busy}
+      ><Glyph name="wallet" size={15} />{walletState.wallet
+        ? `${walletState.wallet.address.slice(0, 6)}…${walletState.wallet.address.slice(-4)}`
+        : 'Connect wallet'}</button
+    >
+  {/snippet}
   <p class="eyebrow">Institution console</p>
   <h1>Review. Authorize. Issue.</h1>
   <p class="intro">
@@ -295,16 +310,6 @@
       >
     </div>
     <div class="actions">
-      <button
-        onclick={() =>
-          run(async () => {
-            await walletSession.connect();
-          })}
-        disabled={busy || !!walletState.busy}
-        >{walletState.wallet
-          ? `${walletState.wallet.address.slice(0, 6)}…${walletState.wallet.address.slice(-4)}`
-          : 'Connect wallet'}</button
-      >
       {#if walletState.wallet && walletState.wallet.chainId !== '296' && deployment}<button
           class="secondary"
           onclick={() =>

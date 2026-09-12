@@ -39,6 +39,10 @@ unresolved and reverted transactions keep the mint step open. Pointer tilt, rest
 step transitions respect reduced-motion preferences. No animation advances the session.
 
 The right rail reports the network, wallet, exact amount and current-session transaction outcomes.
+All workspaces share `AppHeader`, including the same navigation labels, active-page state and
+responsive layout. Holder and institution wallet controls use its action slot; Trust, Verify and
+the guide remain wallet-free. Switching between Tokenize and Transfer on the holder page preserves
+the tab's query string and session.
 Deployment overrides are available only in the explicit operator view. Transfer remains a separate
 view. Errors and recovery stay beside their action. The setup dialog supports Escape, local error
 feedback and focus return.

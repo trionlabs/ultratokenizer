@@ -1,6 +1,6 @@
 <script lang="ts">
   import ReceiptAudit from '$lib/components/ReceiptAudit.svelte';
-  import Glyph from '$lib/visuals/Glyph.svelte';
+  import AppHeader from '$lib/components/AppHeader.svelte';
 </script>
 
 <svelte:head
@@ -11,13 +11,7 @@
 >
 <a class="skip-link" href="#verifier">Skip to verifier</a>
 <div class="live-shell">
-  <header class="live-header">
-    <a class="live-brand" href="/"><span>u</span>ultratokenizer<i>.</i></a><span
-      class="mode-pill">Read-only</span
-    ><a class="text-link" href="/"
-      >Issuance workspace <Glyph name="arrow" size={15} /></a
-    >
-  </header>
+  <AppHeader current="verify" />
   <main id="verifier" tabindex="-1" class="verifier-main">
     <div class="verifier-intro">
       <p class="scene-kicker">Independent verifier</p>

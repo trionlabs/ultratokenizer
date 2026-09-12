@@ -1,32 +1,20 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import AppHeader from './AppHeader.svelte';
   let {
     current,
     children,
-  }: { current: 'institution' | 'trust' | 'demo'; children: Snippet } =
-    $props();
+    actions,
+  }: {
+    current: 'institution' | 'trust' | 'demo';
+    children: Snippet;
+    actions?: Snippet;
+  } = $props();
 </script>
 
 <a class="skip-link" href="#portal">Skip to {current}</a>
 <div class="live-shell portal-shell">
-  <header class="portal-header">
-    <a class="live-brand" href="/"><span>u</span>ultratokenizer<i>.</i></a>
-    <nav aria-label="Workspace">
-      <a href="/">Tokenize</a>
-      <a
-        href="/institution/"
-        aria-current={current === 'institution' ? 'page' : undefined}
-        >Institution</a
-      >
-      <a href="/trust/" aria-current={current === 'trust' ? 'page' : undefined}
-        >Trust</a
-      >
-      <a href="/verify/">Verify</a>
-      <a href="/demo/" aria-current={current === 'demo' ? 'page' : undefined}
-        >How it works</a
-      >
-    </nav>
-  </header>
+  <AppHeader {current} {actions} />
   <main id="portal" tabindex="-1">{@render children()}</main>
   <footer>
     Hedera testnet · Synthetic source. No bank or regulatory endorsement.
@@ -34,32 +22,6 @@
 </div>
 
 <style>
-  .portal-header {
-    width: min(100% - 40px, 1180px);
-    margin: auto;
-    min-height: 80px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 24px;
-    border-bottom: 1px solid var(--p-line);
-  }
-  nav {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  nav a {
-    padding: 9px 12px;
-    border-radius: 24px;
-    text-decoration: none;
-    color: var(--p-muted);
-    font-size: 0.82rem;
-  }
-  nav a[aria-current] {
-    background: var(--p-accent-soft);
-    color: var(--p-ink);
-  }
   main {
     width: min(100% - 40px, 1120px);
     margin: auto;
@@ -140,7 +102,7 @@
   :global(.portal-shell .mono) {
     font-size: 0.75rem;
   }
-  :global(.portal-shell button),
+  :global(.portal-shell main button),
   :global(.portal-shell .portal-button) {
     display: inline-flex;
     align-items: center;
@@ -224,15 +186,6 @@
     gap: 14px;
   }
   @media (max-width: 700px) {
-    .portal-header {
-      align-items: start;
-      flex-direction: column;
-      padding: 18px 0;
-      gap: 14px;
-    }
-    nav a {
-      padding: 7px 10px;
-    }
     main {
       padding-top: 32px;
     }

@@ -17,6 +17,7 @@
   import { BrowserRpcError } from '../browser-rpc';
   import Glyph from '../visuals/Glyph.svelte';
   import EvidenceArtifact from '../visuals/EvidenceArtifact.svelte';
+  import AppHeader from './AppHeader.svelte';
 
   const session = createIssuanceSession();
   let snapshot = $state(session.read());
@@ -305,28 +306,21 @@
 
 <a class="skip-link" href="#engine">Skip to token engine</a>
 <div class="live-shell">
-  <header class="live-header">
-    <a class="live-brand" href="/"><span>u</span>ultratokenizer<i>.</i></a>
-    <span class="engine-label">zkPDF-backed token issuance</span>
-    <nav class="workspace-nav" aria-label="Workspace">
-      <a class:active={workspaceView === 'issue'} href="#engine">Issue</a>
-      <a class:active={workspaceView === 'transfer'} href="#transfer"
-        >Transfer</a
+  <AppHeader current={workspaceView}>
+    {#snippet actions()}
+      <button
+        class="header-wallet"
+        disabled={busy || unresolved}
+        onclick={connectWallet}
+        title={snapshot.wallet?.address}
+        ><Glyph name="wallet" size={15} />{walletNeedsTestnet
+          ? 'Switch to testnet'
+          : connected
+            ? `${snapshot.wallet?.address.slice(0, 6)}…${snapshot.wallet?.address.slice(-4)}`
+            : 'Connect wallet'}</button
       >
-      <a href="/verify/">Verify receipt <Glyph name="arrow" size={14} /></a>
-    </nav>
-    <button
-      class="header-wallet"
-      disabled={busy || unresolved}
-      onclick={connectWallet}
-      title={snapshot.wallet?.address}
-      ><Glyph name="wallet" size={15} />{walletNeedsTestnet
-        ? 'Switch to testnet'
-        : connected
-          ? `${snapshot.wallet?.address.slice(0, 6)}…${snapshot.wallet?.address.slice(-4)}`
-          : 'Connect wallet'}</button
-    >
-  </header>
+    {/snippet}
+  </AppHeader>
   {#if walletHelp}
     <p class="wallet-help" role="status">
       No browser wallet found. Open this page in an EVM wallet browser or
@@ -1046,18 +1040,15 @@
     {snapshot.deployment
       ? 'You sign in your wallet. Proofs and transaction details are public.'
       : 'Connecting a wallet does not sign or mint.'}
-    <nav aria-label="Institution and trust">
-      <a class="text-link" href="/demo/">How it works</a>
-      <a class="text-link" href="/institution/">Institution</a>
-      <a class="text-link" href="/trust/">Trust</a>
-      {#if operatorMode}
+    {#if operatorMode}
+      <nav aria-label="Operator tools">
         <button
           class="text-link"
           disabled={busy || unresolved}
           onclick={openSetup}>Operator configuration</button
         >
-      {/if}
-    </nav>
+      </nav>
+    {/if}
   </footer>
 </div>
 
