@@ -199,3 +199,36 @@ RPC: lose the returned hash, change account/chain/form fields, reject an old-non
 confirm the original transfer or HTS association with one send. This complements the no-wallet
 backend import checks above. It does not establish live RPC behavior or durable recovery across a
 page reload.
+
+## Institution and Trust workspaces
+
+`/institution/` loads the same site-managed deployment as the holder. It offers two wallet roles:
+
+- The configured issuer imports a strict Groth16 claim-proof export, reviews its exact allocation,
+  opens and reconciles a reservation, then signs and downloads a permit package valid for at most
+  ten minutes. The private stable-right ledger must already have reserved that allocation; the
+  browser acknowledgement does not authenticate or update the Node/SQLite ledger.
+- The Gate governor reviews the configured issuer and can admit its currently unregistered key
+  version, set the issuer/token backing cap, and pause or open issuance. Each operation is simulated,
+  bound to the wallet nonce, and reconciled against its exact transaction calldata and pinned Gate
+  code. Unresolved submissions retain their intent and hash instead of sending automatically again.
+  Source, program, policy and rights bootstrap remains deployment tooling. Review references are
+  local page context, not an on-chain dossier, a signer counter-signature or regulatory approval.
+
+Use separate issuer and governor wallet accounts. No private key is entered into the application.
+If a permit expires while the request and existing reservation are still live, the issuer signs a
+fresh permit for that same proof and reservation; the holder imports the replacement package.
+An expired request needs a new request-bound proof under the stable-right accounting rules.
+Keep original transaction hashes for recovery. Browser memory and review notes do not survive reload.
+
+`/trust/` reads one canonical block through the configured RPC and shows the current issuer,
+program, source, rights and backing records. It compares those records with application pins and
+can export a clearly labelled observation and the app's audit policy. These exports do not
+authenticate their own trust root, prove historical authority or establish physical backing.
+The sealed synthetic PDF/capsule profile is zkPDF-backed; arbitrary bank statement extraction and
+zkEmail are not implemented by this UI.
+
+`npm run test:browser:institution` exercises both new production routes with intercepted synthetic
+RPC: role denial, an exact cap transaction and reconciliation, no automatic sends, and 320px layout.
+It does not establish live Hedera acceptance. `npm test` includes the authority client's canonical
+state, nonce, runtime, amount and submission-failure checks.

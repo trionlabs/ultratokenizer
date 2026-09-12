@@ -14,6 +14,7 @@
     "test": "node --experimental-strip-types --test test/*.test.mjs",
     "test:browser": "node test/hosted-deployment-browser.mjs && node test/worker-browser.mjs && node test/security-browser.mjs",
     "test:browser:backends": "node test/backend-browser.mjs",
+    "test:browser:institution": "node test/institution-browser.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
