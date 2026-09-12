@@ -989,6 +989,87 @@ test('a late wallet hash cannot clear a newer recovery operation busy state', as
   assert.equal(session.read().busy, undefined);
 });
 
+for (const kind of ['issuance', 'association', 'transfer']) {
+  for (const recoveredOutcome of ['confirmed', 'reverted']) {
+    test(`${kind} ${recoveredOutcome} recovery cannot overwrite a conflicting wallet hash returned during verification`, async (t) => {
+      const fixture = await createFixture();
+      const lateHash = `0x${'bb'.repeat(32)}`;
+      assert.notEqual(lateHash, fixture.transactionHash);
+      const entered = deferred();
+      const reply = deferred();
+      const recovery = deferred();
+      let sends = 0;
+      const pending = () => {
+        sends++;
+        entered.resolve();
+        return reply.promise;
+      };
+      const originalReceipt = {
+        ...fixture.receipt,
+        transaction: { ...fixture.receipt.transaction, hash: lateHash },
+      };
+      const wait = (hash) => {
+        if (hash === fixture.transactionHash) return recovery.promise;
+        assert.equal(hash, lateHash);
+        return Promise.resolve(originalReceipt);
+      };
+      const { session } = harness(fixture, {
+        submit: pending,
+        sendTokenTransaction: pending,
+        wait: (_bundle, _signature, hash) => wait(hash),
+        waitTokenTransaction: (hash) => wait(hash),
+      });
+      await ready(session);
+      t.mock.timers.enable({ apis: ['setTimeout'] });
+      const send = () =>
+        kind === 'issuance'
+          ? session.submit()
+          : kind === 'association'
+            ? session.associate()
+            : session.transfer(fixture.policy.issuerAddress, '125');
+      const call = send();
+      await entered.promise;
+      t.mock.timers.tick(120_000);
+      await call;
+      const confirming =
+        kind === 'issuance'
+          ? session.recoverIssuanceHash(fixture.transactionHash)
+          : session.recoverTokenHash(fixture.transactionHash);
+      const current = () =>
+        kind === 'issuance'
+          ? session.read().transaction
+          : session.read().tokenTransaction;
+      reply.resolve(lateHash);
+      await flushLateReply();
+      assert.equal(current().hash, lateHash);
+      assert.equal(session.read().busy, 'confirming');
+      if (recoveredOutcome === 'confirmed') recovery.resolve(fixture.receipt);
+      else recovery.reject(new IssuanceClientError('transaction_reverted'));
+      await confirming;
+      assert.equal(current().hash, lateHash);
+      assert.equal(current().outcome, 'unresolved');
+      assert.equal(session.read().receipt, undefined);
+      assert.equal(session.read().unknownSubmission, undefined);
+      assert.equal(session.read().pendingOperation, undefined);
+      assert.match(session.read().error, /different hash while recovery/);
+      assert.throws(
+        () => session.loadBundle(JSON.stringify(fixture.bundle)),
+        /Reconcile/,
+      );
+      await send();
+      assert.equal(sends, 1);
+      // Reconciliation still uses the original attempt and its retained hash.
+      if (kind === 'issuance') await session.confirm();
+      else await session.confirmToken();
+      assert.equal(current().hash, lateHash);
+      assert.equal(current().outcome, 'confirmed');
+      if (kind === 'issuance')
+        assert.equal(session.read().receipt, originalReceipt);
+      session.dispose();
+    });
+  }
+}
+
 test('expired token preparation cannot resume into a late wallet send', async (t) => {
   const fixture = await createFixture();
   const preparation = deferred();

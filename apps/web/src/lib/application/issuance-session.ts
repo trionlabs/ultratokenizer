@@ -154,6 +154,36 @@ export function createIssuanceSession(
         : { error: undefined }),
     });
   }
+  function preserveRecoveryConflict(
+    kind: 'issuance' | 'token',
+    previousHash: Hex | undefined,
+    candidate: Hex,
+  ) {
+    const transaction = state.transaction;
+    const tokenTransaction = state.tokenTransaction;
+    const current = kind === 'issuance' ? transaction : tokenTransaction;
+    // An explicit recovery may correct an older hash, but cannot silently
+    // replace a different provider hash received while its reader was pending.
+    if (!current || current.hash === previousHash || current.hash === candidate)
+      return false;
+    const error =
+      'The wallet returned a different hash while recovery was running. Reconcile the retained wallet hash before a new action.';
+    if (kind === 'issuance' && transaction)
+      update({
+        unknownSubmission: undefined,
+        transaction: { ...transaction, outcome: 'unresolved' },
+        receipt: undefined,
+        error,
+      });
+    else if (tokenTransaction)
+      update({
+        unknownSubmission: undefined,
+        tokenTransaction: { ...tokenTransaction, outcome: 'unresolved' },
+        balanceMg: undefined,
+        error,
+      });
+    return true;
+  }
   function submissionKind(operation: Operation) {
     if (operation === 'submitting') return 'issuance' as const;
     if (tokenSendStarted && operation === 'associating')
@@ -473,6 +503,7 @@ export function createIssuanceSession(
             'Use the transaction hash from the wallet that submitted this request.',
           );
         const candidate = parseTransactionHash(hash);
+        const previousHash = state.transaction?.hash;
         // Keep the original reference until the captured reader authenticates this call.
         try {
           const receipt = await attempt.client.wait(
@@ -480,6 +511,8 @@ export function createIssuanceSession(
             attempt.signature,
             candidate,
           );
+          if (preserveRecoveryConflict('issuance', previousHash, candidate))
+            return;
           submitted = { ...attempt, hash: candidate };
           update({
             unknownSubmission: undefined,
@@ -487,6 +520,8 @@ export function createIssuanceSession(
             receipt,
           });
         } catch (error) {
+          if (preserveRecoveryConflict('issuance', previousHash, candidate))
+            return;
           // Matching calldata can be replayed in another wallet attempt. Only
           // the retained submitted hash identifies this attempt's own revert.
           if (
@@ -577,10 +612,13 @@ export function createIssuanceSession(
             'Use the transaction hash from the wallet that submitted this token action.',
           );
         const candidate = parseTransactionHash(hash);
+        const previousHash = state.tokenTransaction?.hash;
         // A bad recovery hash cannot replace the original reference or intent.
         try {
           await attempt.client.waitTokenTransaction(candidate, attempt.intent);
         } catch (error) {
+          if (preserveRecoveryConflict('token', previousHash, candidate))
+            return;
           // The client reports a revert only after authenticating this intent.
           if (
             error instanceof IssuanceClientError &&
@@ -597,6 +635,7 @@ export function createIssuanceSession(
           }
           throw error;
         }
+        if (preserveRecoveryConflict('token', previousHash, candidate)) return;
         update({
           unknownSubmission: undefined,
           tokenTransaction: {
