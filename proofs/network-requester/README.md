@@ -77,6 +77,11 @@ Unsigned recovery checks request fields plus the recorded sender, nonce and sign
 timeout nor an empty search releases the conservative cumulative budget. See the
 [paid request procedure](PAID_REQUEST.md) for the exact settings, commands, and failure boundaries.
 
+Run `npm run check:network-requester` from the repository root for the pinned Rust formatting,
+locked tests and clippy checks. The independent CI requester job runs the same command without
+account secrets or live CLI operations. Shared journal-schema tests also run explicitly in the
+native-evidence job. See the [coverage inventory](../../.github/VALIDATION.md).
+
 This package has offline transport and persistence tests; those tests do not demonstrate an actual
 paid request or a genuine proof. Recovery can record that a proof artifact is available but does not
 download or verify it. The separate `retrieve-proof` command checks the recovered journal and an

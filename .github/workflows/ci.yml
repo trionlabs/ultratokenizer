@@ -116,6 +116,23 @@ jobs:
       - run: forge fmt --root contracts --check
       - run: forge test --root contracts
 
+  network-requester:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Install the validated native Rust toolchain
+        run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt --component clippy
+      - name: Check isolated requester with offline transports and synthetic journals
+        run: npm run check:network-requester
+
   native-evidence:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -136,8 +153,8 @@ jobs:
       - name: Install checksum-pinned SP1 CLI and guest Rust
         run: bash .github/scripts/install-sp1.sh
         working-directory: .
-      - run: cargo +1.96.0 test --locked -p ultratokenizer-pdf-evidence -p ultratokenizer-claim-evidence -p ultratokenizer-claim-runner -p ultratokenizer-pdf-runner --all-targets
-      - run: cargo +1.96.0 clippy --locked -p ultratokenizer-pdf-evidence -p ultratokenizer-claim-evidence -p ultratokenizer-claim-runner -p ultratokenizer-pdf-runner --all-targets -- -D warnings
+      - run: cargo +1.96.0 test --locked -p ultratokenizer-pdf-evidence -p ultratokenizer-claim-evidence -p ultratokenizer-claim-runner -p ultratokenizer-pdf-runner -p ultratokenizer-network-request-schema --all-targets
+      - run: cargo +1.96.0 clippy --locked -p ultratokenizer-pdf-evidence -p ultratokenizer-claim-evidence -p ultratokenizer-claim-runner -p ultratokenizer-pdf-runner -p ultratokenizer-network-request-schema --all-targets -- -D warnings
       - name: Check the separate native Enpara extraction profile
         run: |
           cargo +1.96.0 fmt --manifest-path enpara-evidence/Cargo.toml -- --check

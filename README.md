@@ -81,6 +81,7 @@ npm run build:web
 npm run build:workers
 npm run check:contracts
 npm run check:evidence
+npm run check:network-requester
 npm run check:parity
 # Additional actual ATS lane; install its locked compiler package first:
 npm --prefix contracts/ats ci --ignore-scripts --no-audit
