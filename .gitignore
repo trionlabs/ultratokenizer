@@ -132,3 +132,5 @@ skills-lock.json
 # Operator-provided public web configuration; never store secrets here.
 /apps/web/static/deployment.json
 /apps/web/static/deployment.json.pending
+/apps/web/static/discovery.json
+/apps/web/static/discovery.json.pending
