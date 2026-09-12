@@ -16,15 +16,23 @@ async function runtime(
   outboundService = () => {
     throw new Error('No RPC expected');
   },
+  initialNow,
 ) {
+  let currentNow = initialNow;
   const dir = await mkdtemp(join(tmpdir(), 'ultratokenizer-tenant-'));
   const domain = await bundleModule('../../../packages/domain/src/index.ts');
   const code = await build({
     stdin: {
       contents: `import { IssuanceTenantCoordinator, IssuanceCoordinator } from './src/coordinator.ts';
 export { IssuanceTenantCoordinator, IssuanceCoordinator };
+let testNow = ${initialNow ?? 'undefined'};
+if (testNow !== undefined) Date.now = () => testNow;
 export default { async fetch(request, env) {
   const { action, args } = await request.json();
+  if (action === '__setClock' && testNow !== undefined) {
+    testNow = args[0];
+    return Response.json({now: testNow});
+  }
   const stub = env.TENANTS.getByName('tenant');
   try {
     const result = await stub[action](...args);
@@ -77,7 +85,19 @@ export default { async fetch(request, env) {
   };
   let mf = new Miniflare(convertV4MiniflareOptions(options));
   await mf.ready;
+  async function restoreClock() {
+    if (currentNow !== undefined)
+      await mf.dispatchFetch('https://tenant.synthetic.invalid/', {
+        method: 'POST',
+        body: JSON.stringify({ action: '__setClock', args: [currentNow] }),
+      });
+  }
   return {
+    async setNow(now) {
+      assert.notEqual(initialNow, undefined);
+      currentNow = now;
+      await restoreClock();
+    },
     async call(action, ...args) {
       const response = await mf.dispatchFetch(
         'https://tenant.synthetic.invalid/',
@@ -107,6 +127,7 @@ export default { async fetch(request, env) {
       await mf.dispose();
       mf = new Miniflare(convertV4MiniflareOptions(options));
       await mf.ready;
+      await restoreClock();
     },
     async diskRows(query) {
       await mf.dispose();
@@ -429,6 +450,7 @@ void test(
     });
     let blocked = 0;
     let calls = 0;
+    const now = Date.now();
     const r = await runtime(async (request) => {
       const input = await request.json();
       calls++;
@@ -442,7 +464,7 @@ void test(
         id: input.id,
         result: input.method === 'eth_chainId' ? '0x128' : null,
       });
-    });
+    }, now);
     try {
       const states = [];
       for (let index = 1; index <= 5; index++) {
@@ -456,12 +478,12 @@ void test(
         );
       }
       let storage = await r.storage();
-      const expiry = Date.now() + 2_000;
+      const expiry = now + 2_000;
       for (const state of await rows(storage)) {
         const firstBatch = state.id !== states[4].id;
         await checkpoint(storage, {
           ...state,
-          nextCheckAt: Date.now() + (firstBatch ? 0 : 2_500),
+          nextCheckAt: now + (firstBatch ? 0 : 2_500),
           createdAt: firstBatch ? expiry - RETENTION : state.createdAt,
         });
       }
@@ -486,7 +508,9 @@ void test(
       const retiring = saved.filter((state) => state.leaseId !== null);
       // Age was checkpointed before leasing; changing createdAt during a lease
       // would correctly fence its completion as a different tracking lifetime.
-      await eventually(async () => Date.now() >= expiry);
+      // Advance only after all four observers hold durable leases. Host load
+      // cannot consume a two-second acquisition window.
+      await r.setNow(expiry + 1_000);
       assert.equal((await r.call('inspect', 'holder', waiting.id)).status, 200);
       assert.equal((await rows(storage)).length, 5);
       assert.equal(
@@ -523,10 +547,11 @@ void test(
           status: 'checking',
           attempts: 24,
           leaseId: `abandoned-${state.id}`,
-          leaseUntil: Date.now() + 1_500,
-          nextCheckAt: Date.now() + 1_500,
+          leaseUntil: expiry + 2_500,
+          nextCheckAt: expiry + 2_500,
         });
       await r.call('inspect', 'holder', waiting.id);
+      await r.setNow(expiry + 2_501);
       await r.restart();
       storage = await r.storage();
       const prior = calls;
