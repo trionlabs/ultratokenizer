@@ -247,7 +247,7 @@ fn load_witness(preparation: &Preparation, args: &[String]) -> Result<Vec<u8>, &
         let mut signer = [0; 32];
         hex::decode_to_slice(&review.signer_fingerprint, &mut signer)
             .map_err(|_| "Invalid synthetic signer fingerprint.")?;
-        verify_witness(preparation, &pdf, &request, signer)
+        verify_witness(preparation, &pdf, &request, signer, unix_time()?)
     } else {
         if preparation.reviewed_synthetic.is_some() {
             return Err(
@@ -259,7 +259,13 @@ fn load_witness(preparation: &Preparation, args: &[String]) -> Result<Vec<u8>, &
         let mut signer = [0; 32];
         hex::decode_to_slice(&metadata.signer_fingerprint, &mut signer)
             .map_err(|_| "Invalid synthetic signer fingerprint.")?;
-        verify_witness(preparation, FIXTURE_PDF, FIXTURE_REQUEST, signer)
+        verify_witness(
+            preparation,
+            FIXTURE_PDF,
+            FIXTURE_REQUEST,
+            signer,
+            unix_time()?,
+        )
     }
 }
 
@@ -268,6 +274,7 @@ fn verify_witness(
     pdf: &[u8],
     request_bytes: &[u8],
     approved_signer: [u8; 32],
+    now: u64,
 ) -> Result<Vec<u8>, &'static str> {
     if sha256_hex(pdf) != preparation.pdf_sha256
         || sha256_hex(request_bytes) != preparation.request_json_sha256
@@ -283,14 +290,20 @@ fn verify_witness(
     let expected = verify_claim(&input).map_err(|_| "Synthetic claim failed verification.")?;
     if let Some(review) = &preparation.reviewed_synthetic {
         let address = |word: &[u8; 32]| format!("0x{}", hex::encode(&word[12..]));
-        if request.valid_until <= unix_time()?
+        if request.valid_until <= now
             || request.chain_id != ultratokenizer_claim_evidence::request::word_u64(296)
             || address(&request.gate) != review.gate
             || address(&request.token) != review.token
             || address(&request.recipient) != review.recipient
             || format!("0x{}", hex::encode(request.issuer_id)) != review.issuer_id
             || format!("0x{}", hex::encode(expected.source_id)) != review.source_id
-            || request.amount != ultratokenizer_claim_evidence::request::word_u64(1000)
+            || request.amount
+                != ultratokenizer_claim_evidence::request::word_u64(
+                    review
+                        .amount_milligrams
+                        .parse()
+                        .map_err(|_| "Invalid reviewed amount.")?,
+                )
             || format!("0x{}", hex::encode(request.digest())) != review.request_digest
         {
             return Err("Verified claim differs from the authorized deployment and recipient.");
@@ -568,7 +581,8 @@ mod tests {
     #[test]
     fn staging_rederives_exact_witness_and_rejects_mutated_seals_before_credentials() {
         let (preparation, signer) = fixture();
-        let witness = verify_witness(&preparation, FIXTURE_PDF, FIXTURE_REQUEST, signer).unwrap();
+        let witness =
+            verify_witness(&preparation, FIXTURE_PDF, FIXTURE_REQUEST, signer, 1).unwrap();
         assert_eq!(sha256_hex(&witness), preparation.witness_sha256);
         for field in 0..6 {
             let mut changed = preparation.clone();
@@ -580,11 +594,156 @@ mod tests {
                 4 => changed.request_digest = format!("0x{}", "99".repeat(32)),
                 _ => changed.pdf_sha256 = "99".repeat(32),
             }
-            assert!(verify_witness(&changed.seal(), FIXTURE_PDF, FIXTURE_REQUEST, signer).is_err());
+            assert!(
+                verify_witness(&changed.seal(), FIXTURE_PDF, FIXTURE_REQUEST, signer, 1).is_err()
+            );
         }
-        assert!(verify_witness(&preparation, &FIXTURE_PDF[1..], FIXTURE_REQUEST, signer).is_err());
-        assert!(verify_witness(&preparation, FIXTURE_PDF, &FIXTURE_REQUEST[1..], signer).is_err());
-        assert!(verify_witness(&preparation, FIXTURE_PDF, FIXTURE_REQUEST, [0; 32]).is_err());
+        assert!(
+            verify_witness(&preparation, &FIXTURE_PDF[1..], FIXTURE_REQUEST, signer, 1).is_err()
+        );
+        assert!(
+            verify_witness(&preparation, FIXTURE_PDF, &FIXTURE_REQUEST[1..], signer, 1).is_err()
+        );
+        assert!(verify_witness(&preparation, FIXTURE_PDF, FIXTURE_REQUEST, [0; 32], 1).is_err());
         assert!(load_witness(&preparation, &["stage-reviewed-synthetic".into()]).is_err());
+    }
+    #[test]
+    fn authenticated_reviewed_binding_rejects_each_substitution_and_expiry() {
+        // Exercise the reviewed comparison with a genuinely authenticated embedded
+        // claim. This fixture is NOT the separately allowlisted deployment PDF;
+        // full stage admission still rejects it via validate_synthetic/validate_files.
+        let (mut preparation, signer) = fixture();
+        let request = Request::from_json(FIXTURE_REQUEST).unwrap();
+        let input = ClaimInput {
+            approved_signer: signer,
+            request_json: FIXTURE_REQUEST,
+            pdf_bytes: FIXTURE_PDF,
+        };
+        let expected = verify_claim(&input).unwrap();
+        let address = |word: &[u8; 32]| format!("0x{}", hex::encode(&word[12..]));
+        preparation.reviewed_synthetic = Some(ReviewedSynthetic {
+            schema_version: 1,
+            purpose: "authorized-synthetic-testnet-proof".into(),
+            source_kind: "synthetic-signed-pdf-capsule".into(),
+            synthetic: true,
+            production_approved: false,
+            chain_id: "296".into(),
+            gate: address(&request.gate),
+            token: address(&request.token),
+            recipient: address(&request.recipient),
+            issuer_id: format!("0x{}", hex::encode(request.issuer_id)),
+            source_id: format!("0x{}", hex::encode(expected.source_id)),
+            amount_milligrams: "10000".into(),
+            signer_fingerprint: hex::encode(signer),
+            pdf_sha256: preparation.pdf_sha256.clone(),
+            request_json_sha256: preparation.request_json_sha256.clone(),
+            request_digest: preparation.request_digest.clone(),
+        });
+        let now = request.valid_until - 1;
+        assert!(verify_witness(&preparation, FIXTURE_PDF, FIXTURE_REQUEST, signer, now).is_ok());
+        for field in 0..7 {
+            let mut changed = preparation.clone();
+            let review = changed.reviewed_synthetic.as_mut().unwrap();
+            match field {
+                0 => review.gate = format!("0x{}", "99".repeat(20)),
+                1 => review.token = format!("0x{}", "99".repeat(20)),
+                2 => review.recipient = format!("0x{}", "99".repeat(20)),
+                3 => review.issuer_id = format!("0x{}", "99".repeat(32)),
+                4 => review.source_id = format!("0x{}", "99".repeat(32)),
+                5 => review.amount_milligrams = "999".into(),
+                _ => review.request_digest = format!("0x{}", "99".repeat(32)),
+            }
+            assert_eq!(
+                verify_witness(&changed, FIXTURE_PDF, FIXTURE_REQUEST, signer, now).unwrap_err(),
+                "Verified claim differs from the authorized deployment and recipient."
+            );
+        }
+        for now in [request.valid_until, request.valid_until + 1] {
+            assert!(
+                verify_witness(&preparation, FIXTURE_PDF, FIXTURE_REQUEST, signer, now).is_err()
+            );
+        }
+        assert!(load_witness(&preparation.seal(), &["stage-reviewed-synthetic".into()]).is_err());
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn reviewed_stage_rejects_substituted_artifacts_before_key_loading_or_journal_creation() {
+        use std::os::unix::fs::PermissionsExt;
+        use ultratokenizer_network_request_schema::{
+            REVIEWED_PREPARATION_SCHEMA_VERSION, REVIEWED_SYNTHETIC_KIND,
+            REVIEWED_SYNTHETIC_PDF_SHA256, REVIEWED_SYNTHETIC_REQUEST_DIGEST,
+            REVIEWED_SYNTHETIC_REQUEST_SHA256, REVIEWED_SYNTHETIC_SIGNER,
+        };
+        let directory =
+            std::env::temp_dir().join(format!("ut-reviewed-stage-{}", std::process::id()));
+        std::fs::create_dir(&directory).unwrap();
+        let write = |name: &str, data: &[u8]| {
+            let path = directory.join(name);
+            std::fs::write(&path, data).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+            path.to_str().unwrap().to_string()
+        };
+        let (mut preparation, _) = fixture();
+        let review = ReviewedSynthetic {
+            schema_version: 1,
+            purpose: "authorized-synthetic-testnet-proof".into(),
+            source_kind: "synthetic-signed-pdf-capsule".into(),
+            synthetic: true,
+            production_approved: false,
+            chain_id: "296".into(),
+            gate: format!("0x{}", "11".repeat(20)),
+            token: format!("0x{}", "22".repeat(20)),
+            recipient: format!("0x{}", "33".repeat(20)),
+            issuer_id: format!("0x{}", "44".repeat(32)),
+            source_id: format!("0x{}", "55".repeat(32)),
+            amount_milligrams: "1000".into(),
+            signer_fingerprint: REVIEWED_SYNTHETIC_SIGNER.into(),
+            pdf_sha256: REVIEWED_SYNTHETIC_PDF_SHA256.into(),
+            request_json_sha256: REVIEWED_SYNTHETIC_REQUEST_SHA256.into(),
+            request_digest: REVIEWED_SYNTHETIC_REQUEST_DIGEST.into(),
+        };
+        let review_bytes = serde_json::to_vec(&review).unwrap();
+        let review_hash = sha256_hex(&review_bytes);
+        let fake_elf = [0_u8; 100];
+        preparation.schema_version = REVIEWED_PREPARATION_SCHEMA_VERSION;
+        preparation.fixture_kind = REVIEWED_SYNTHETIC_KIND.into();
+        preparation.elf_sha256 = sha256_hex(&fake_elf);
+        preparation.pdf_sha256.clone_from(&review.pdf_sha256);
+        preparation
+            .request_json_sha256
+            .clone_from(&review.request_json_sha256);
+        preparation
+            .request_digest
+            .clone_from(&review.request_digest);
+        preparation.reviewed_synthetic = Some(review);
+        preparation.review_manifest_sha256 = Some(review_hash.clone());
+        preparation = preparation.seal();
+        preparation.validate_synthetic().unwrap();
+        let journal = directory.join("stage.sp1-network-staging.jsonl");
+        let args = vec![
+            "stage-reviewed-synthetic".into(),
+            write(
+                "input.sp1-network-preparation.json",
+                &serde_json::to_vec(&preparation).unwrap(),
+            ),
+            format!("0x{}", "11".repeat(20)),
+            write("guest.elf", &fake_elf),
+            journal.to_str().unwrap().into(),
+            write("review.json", &review_bytes),
+            review_hash,
+            write("substituted.pdf", FIXTURE_PDF),
+            write("substituted.json", FIXTURE_REQUEST),
+        ];
+        let expected = preparation
+            .reviewed_synthetic
+            .as_ref()
+            .unwrap()
+            .validate_files(FIXTURE_PDF, FIXTURE_REQUEST)
+            .unwrap_err();
+        // No environment access or live SP1 operation is necessary for this rejection.
+        assert_eq!(run(&args).await.unwrap_err(), expected);
+        assert!(!journal.exists());
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }

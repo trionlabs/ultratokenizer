@@ -3,7 +3,7 @@
 This standalone crate is the credential-bearing boundary for Succinct mainnet. Its dependency lock
 is separate from the evidence workspace, so enabling the SP1 network stack cannot silently change
 the reviewed guest build. It accepts the integrity-sealed embedded V2 fixture or a separately
-reviewed deployment request for one explicitly allowlisted synthetic PDF. Neither path accepts an
+reviewed deployment request whose exact request-file SHA-256 and EIP-712 digest are pinned in the shared schema, alongside one allowlisted synthetic PDF. Neither path accepts an
 arbitrary document or caller-supplied witness.
 
 The staging operations are:
@@ -15,8 +15,9 @@ The staging operations are:
   proof request. Every external attempt is recorded in a new append-only mode-`0600` journal; an
   ambiguous result must be inspected and never retried by rerunning the command.
 - `stage-reviewed-synthetic` applies the same one-attempt boundary to a schema-2 preparation. It
-  independently rechecks the review-file hash, the allowlisted PDF, request bytes, deployment and
-  recipient bindings, public values and complete witness before loading the requester key.
+  rechecks the review-file integrity hash, the compiled request/PDF authorization pins, authenticated
+  deployment and recipient bindings, public values and the complete witness before loading the requester key.
+  A caller-supplied review file and its hash cannot authorize a different request.
 - `inspect-stage` validates a staging journal without credentials or network access and prints only
   public identifiers plus hashes of artifact URIs.
 
@@ -154,3 +155,13 @@ it does not submit a paid proof request. After staging, use the existing fresh q
 prepare-request, submit-request and recovery procedure. Neither review metadata nor preparation
 asserts chain admission: the operator must independently admit the actual Gate/token graph before
 freezing the request. A changed request requires a new review, preparation, stage and paid plan.
+
+Authorization and test boundary: the review-file hash proves file integrity, not independent
+approval. `REVIEWED_SYNTHETIC_REQUEST_SHA256` and `REVIEWED_SYNTHETIC_REQUEST_DIGEST` in the
+shared schema pin the separately approved request, including Gate, token, recipient, issuer,
+reservation and expiry. Changing that request requires a reviewed source pin update, not just
+resealing CLI inputs. These pins do not attest to bank status or on-chain deployment validity.
+CI exercises authenticated reviewed-field comparisons using the embedded synthetic claim and
+rejects relabeling that witness as the deployment PDF. It does not upload a witness, read a
+requester key or prove live network acceptance. The approved deployment's private artifacts
+remain outside the repository.

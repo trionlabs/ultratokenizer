@@ -432,7 +432,7 @@ fn plan_rejects_wrong_public_values_deadlines_whitelist_and_unknown_settings() {
 }
 
 #[test]
-fn paid_plan_accepts_reviewed_preparation_without_resetting_witness_identity() {
+fn paid_plan_rejects_relabeling_the_embedded_witness_as_the_reviewed_deployment() {
     use ultratokenizer_network_request_schema::{
         ReviewedSynthetic, REVIEWED_PREPARATION_SCHEMA_VERSION, REVIEWED_SYNTHETIC_KIND,
         REVIEWED_SYNTHETIC_PDF_SHA256, REVIEWED_SYNTHETIC_SIGNER,
@@ -468,15 +468,7 @@ fn paid_plan_accepts_reviewed_preparation_without_resetting_witness_identity() {
         .clone_from(&value.preparation.preparation_id);
     value.quote = value.quote.seal();
     value.settings.quote_id.clone_from(&value.quote.quote_id);
-    let value = value.seal().unwrap();
-    value.validate().unwrap();
-    // A review/quote/schema update cannot authorize paying for an identical witness again.
-    assert_eq!(value.request_identity, original.request_identity);
-    assert_ne!(value.plan_id, original.plan_id);
-    let serialized = serde_json::to_vec(&value).unwrap();
-    let recovered: Plan = serde_json::from_slice(&serialized).unwrap();
-    recovered.validate().unwrap();
-    assert_eq!(recovered.plan_id, value.plan_id);
+    assert!(value.seal().unwrap().validate().is_err());
 }
 
 #[tokio::test]

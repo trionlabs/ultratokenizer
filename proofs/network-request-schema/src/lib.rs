@@ -22,6 +22,12 @@ pub const REVIEWED_SYNTHETIC_PDF_SHA256: &str =
     "44dc648ff3a8ab338ffe2a2857fb44668fc8917db292ab25fa384efb2d59bffa";
 pub const REVIEWED_SYNTHETIC_SIGNER: &str =
     "dab715c9d49c43851ab892db3d6a55f7f47d5685570cf340658567ab19fe113f";
+/// Authorization pins for the complete reviewed request, independent of CLI input.
+/// A new deployment/recipient/request requires a separately reviewed pin update.
+pub const REVIEWED_SYNTHETIC_REQUEST_SHA256: &str =
+    "4d253684ba080af2a2486634ba97017666796384595ec084c624a551c9869ead";
+pub const REVIEWED_SYNTHETIC_REQUEST_DIGEST: &str =
+    "0xb3b67a75f974e694aa08d76a4fa7b6627e6392b79946b60e2e41d3734a03a29e";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -61,8 +67,8 @@ impl ReviewedSynthetic {
             || self.amount_milligrams != "1000"
             || self.signer_fingerprint != REVIEWED_SYNTHETIC_SIGNER
             || self.pdf_sha256 != REVIEWED_SYNTHETIC_PDF_SHA256
-            || !is_lower_hex(&self.request_json_sha256, 32, false)
-            || !is_lower_hex(&self.request_digest, 32, true)
+            || self.request_json_sha256 != REVIEWED_SYNTHETIC_REQUEST_SHA256
+            || self.request_digest != REVIEWED_SYNTHETIC_REQUEST_DIGEST
         {
             return Err("Review is not the authorized synthetic testnet input.");
         }
@@ -555,8 +561,8 @@ mod tests {
             amount_milligrams: "1000".into(),
             signer_fingerprint: REVIEWED_SYNTHETIC_SIGNER.into(),
             pdf_sha256: REVIEWED_SYNTHETIC_PDF_SHA256.into(),
-            request_json_sha256: "66".repeat(32),
-            request_digest: format!("0x{}", "77".repeat(32)),
+            request_json_sha256: REVIEWED_SYNTHETIC_REQUEST_SHA256.into(),
+            request_digest: REVIEWED_SYNTHETIC_REQUEST_DIGEST.into(),
         }
     }
 
@@ -605,6 +611,29 @@ mod tests {
         assert!(review
             .validate_files(b"not the approved PDF", b"{}")
             .is_err());
+    }
+
+    #[test]
+    fn caller_cannot_reseal_a_substituted_request_as_independent_authorization() {
+        for substitute_digest in [false, true] {
+            let mut review = reviewed();
+            if substitute_digest {
+                review.request_digest = format!("0x{}", "99".repeat(32));
+            } else {
+                review.request_json_sha256 = "99".repeat(32);
+            }
+            let mut value = preparation();
+            value.schema_version = REVIEWED_PREPARATION_SCHEMA_VERSION;
+            value.fixture_kind = REVIEWED_SYNTHETIC_KIND.into();
+            value.pdf_sha256.clone_from(&review.pdf_sha256);
+            value
+                .request_json_sha256
+                .clone_from(&review.request_json_sha256);
+            value.request_digest.clone_from(&review.request_digest);
+            value.review_manifest_sha256 = Some("88".repeat(32));
+            value.reviewed_synthetic = Some(review);
+            assert!(value.seal().validate_synthetic().is_err());
+        }
     }
 
     #[test]
