@@ -126,3 +126,7 @@ skills-lock.json
 
 # Reproducible standalone preview output.
 /public/ultratokenizer-blueprint.html
+
+# Operator-provided public web configuration; never store secrets here.
+/apps/web/static/deployment.json
+/apps/web/static/deployment.json.pending

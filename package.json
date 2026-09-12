@@ -33,7 +33,8 @@
     "check:enpara": "cargo fmt --manifest-path proofs/enpara-evidence/Cargo.toml -- --check && cargo test --manifest-path proofs/enpara-evidence/Cargo.toml --locked --all-targets && cargo clippy --manifest-path proofs/enpara-evidence/Cargo.toml --locked --all-targets -- -D warnings",
     "check:hedera-provisioning": "npm --prefix packages/hedera-provisioning test",
     "check:ats:hfs": "ULTRATOKENIZER_ATS_LOCAL_ARTIFACTS=contracts/ats/build node --test packages/hedera-provisioning/test/ats-input.test.mjs",
-    "check:network-requester": "cargo +1.96.0 fmt --manifest-path proofs/network-requester/Cargo.toml -- --check && cargo +1.96.0 test --manifest-path proofs/network-requester/Cargo.toml --locked --all-targets && cargo +1.96.0 clippy --manifest-path proofs/network-requester/Cargo.toml --locked --all-targets -- -D warnings"
+    "check:network-requester": "cargo +1.96.0 fmt --manifest-path proofs/network-requester/Cargo.toml -- --check && cargo +1.96.0 test --manifest-path proofs/network-requester/Cargo.toml --locked --all-targets && cargo +1.96.0 clippy --manifest-path proofs/network-requester/Cargo.toml --locked --all-targets -- -D warnings",
+    "prepare:web": "npm --prefix packages/issuance run build && node scripts/prepare-web-config.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

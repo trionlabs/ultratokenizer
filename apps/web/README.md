@@ -12,16 +12,19 @@ npm --prefix apps/web run dev
 
 ## Issuance
 
-The `/` route imports an independent deployment configuration and a separate `ultratokenizer.issuance-bundle.v1` public bundle. Deployment v1 means native HTS; v2 explicitly selects native HTS or the complete admitted ATS profile. Their strict schemas and actual wallet/RPC implementation belong to [packages/issuance](../../packages/issuance/src/index.ts). Deployment files are bounded to64 KiB before reading and imports alone do not call the configured RPC. No deployment, recipient, quantity, proof or successful outcome is supplied by default.
+The `/` route loads operator-provided deployment configuration from same-origin `/deployment.json` and imports a separate `ultratokenizer.issuance-bundle.v1` public bundle. Deployment v1 means native HTS; v2 explicitly selects native HTS or the complete admitted ATS profile. Their strict schemas and actual wallet/RPC implementation belong to [packages/issuance](../../packages/issuance/src/index.ts). Deployment files are bounded to 64 KiB while reading and imports alone do not call the configured RPC. No deployment, recipient, quantity, proof or successful outcome is supplied by default.
 
 The amount is fixed by the canonical request, public values and permit bindings. There is no issuance amount editor: a complete 1 g claim issues exactly 1 g, once. The selected wallet must authorize that bound recipient. Every step is explicit: connect, validate the proof/permit and deployment pins, sign typed data, simulate current execution, submit the actual transaction, and reconcile its receipt and exact Gate event. Preflight success is never presented as a submitted or confirmed transaction.
 
 The centered issuance view shows one current action and six steps: evidence, wallet, verification,
-approval, mint and receipt. Independent network setup lives in a separate native dialog; it is not
-an evidence step. Configuration and proof packages remain separate files. The header wallet control
-requires imported configuration; connecting then validates the deployment through the shared client.
-Only the package's matching recipient completes the wallet step. Configuration remains in memory
-and must be supplied again after a reload.
+signing, mint and receipt. The app loads network configuration automatically before evidence input.
+An advanced operator override lives in a separate native dialog. The fixed configuration URL cannot
+be selected by a proof package or a query parameter. The request omits credentials, disallows
+redirects, bypasses cache and has an eight-second deadline and a 64 KiB streamed limit. A missing
+or invalid response leaves issuance unavailable; there is no sample fallback. Loading configuration
+alone sends no wallet or configured-RPC request. Connecting then validates the deployment through
+the shared client; only the package's matching recipient completes the wallet step. Configuration
+stays in memory and is fetched again after a reload. Manual overrides are not persisted.
 
 The monochrome iris scene adapts the earlier document-to-coin design to actual session state.
 Loading a package shows its exact quantity without claiming verification. A seal appears after a
@@ -69,6 +72,35 @@ locks. Retain the original request, token intent and any wallet hash outside the
 restarting; durable cross-session orchestration is a separate integration requirement.
 
 The currently integrated signing and receipt flow requires EOA signatures. Arbitrary native Ed25519 accounts and contract-wallet issuance are not promised by the UI.
+
+## Operator configuration
+
+Keep the independently admitted deployment export at
+`work/runtime/hedera-testnet/deployment.json` (repository-relative, Git-ignored). Then run:
+
+```sh
+npm run prepare:web
+npm run build:web
+```
+
+Preparation compiles and uses the shared deployment schema, rejects unknown fields, and admits
+only chain 296 with the documented public `https://testnet.hashio.io/api` endpoint. A generic URL
+filter cannot identify secrets in URL paths; another endpoint requires a reviewed code change to
+this export lane. It atomically writes normalized configuration to `apps/web/static/deployment.json`.
+Missing or invalid input fails without replacing an existing export. To withdraw configuration,
+remove that generated static file and rebuild/redeploy; an already served build remains available
+until it is replaced.
+The command validates format, not live contract admission. Do not use illustrative test addresses.
+
+**The static configuration is public**, served at `/deployment.json` and copied into the web build.
+Git-ignore only excludes it from source control. Never put keys, access tokens, source documents,
+private witnesses or journals in the static directory. Serve the file with `application/json` on the
+same trusted origin as the application. A deployment's configuration and its evidence package must
+come from independent trust paths. Protecting the application origin is part of that trust boundary.
+
+The current full ATS testnet graph still needs deployment and admission; no valid default export is
+included. Historical proof/HFS journals stay at their canonical paths and must not be moved for a
+retry. The local runtime README indexes the required artifacts without copying credentials.
 
 ## Independent verification
 
