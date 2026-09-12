@@ -334,9 +334,7 @@
         institutional transactions. Holder accounts do not configure contracts.
       </p>
       <div class="actions">
-        <a class="portal-button secondary" href="/?operator=1">Operator tools</a
-        ><a class="portal-button secondary" href="/trust/">Inspect deployment</a
-        >
+        <a class="portal-button secondary" href="/trust/">Inspect deployment</a>
       </div>
     </section>
   {:else}

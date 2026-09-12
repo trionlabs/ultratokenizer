@@ -38,9 +38,10 @@ successful proof check. The paper morphs into a coin only after receipt reconcil
 unresolved and reverted transactions keep the mint step open. Pointer tilt, restrained motion and
 step transitions respect reduced-motion preferences. No animation advances the session.
 
-The right rail reports the network, wallet, exact amount and current-session transaction outcomes;
-advanced configuration is collapsed. Transfer remains a separate view. Errors and recovery stay
-beside their action. The setup dialog supports Escape, local error feedback and focus return.
+The right rail reports the network, wallet, exact amount and current-session transaction outcomes.
+Deployment overrides are available only in the explicit operator view. Transfer remains a separate
+view. Errors and recovery stay beside their action. The setup dialog supports Escape, local error
+feedback and focus return.
 Switching views does not create a transaction or change session state.
 
 The current accepted source is profile 2's synthetic signed capsule, restricted by the shared client to test deployments. Real cryptography does not make this real bank evidence, asset backing, custody or a redemption promise. This UI imports public proof artifacts; it neither reads private PDF/email evidence nor generates proofs. Actual local proof generation is a separate [proof runner workflow](../../proofs/README.md).
@@ -104,9 +105,10 @@ private witnesses or journals in the static directory. Serve the file with `appl
 same trusted origin as the application. A deployment's configuration and its evidence package must
 come from independent trust paths. Protecting the application origin is part of that trust boundary.
 
-The current full ATS testnet graph still needs deployment and admission; no valid default export is
-included. Historical proof/HFS journals stay at their canonical paths and must not be moved for a
-retry. The local runtime README indexes the required artifacts without copying credentials.
+No deployment export is committed. Prepare the site from the locally admitted deployment; a
+holder-tab override does not configure the institution or trust pages. Historical proof/HFS journals
+stay at their canonical paths and must not be moved for a retry. The local runtime README indexes
+the required artifacts without copying credentials.
 
 ## Independent verification
 
