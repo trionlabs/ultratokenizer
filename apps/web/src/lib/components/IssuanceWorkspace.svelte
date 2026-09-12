@@ -954,8 +954,16 @@
           {#if !snapshot.transaction && !snapshot.tokenTransaction}
             <div class="empty-activity">
               <Glyph name="receipt" size={23} />
-              <p>No transactions yet.</p>
-              <small>Your latest transaction status appears here.</small>
+              <p>
+                {snapshot.unknownSubmission
+                  ? 'Transaction outcome unknown.'
+                  : 'No transactions yet.'}
+              </p>
+              <small>
+                {snapshot.unknownSubmission
+                  ? 'A transaction may have been sent. Check wallet activity.'
+                  : 'Your latest transaction status appears here.'}
+              </small>
             </div>
           {:else}
             {#if snapshot.transaction}<div class="activity-item">

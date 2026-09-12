@@ -390,11 +390,17 @@ export async function exerciseIssuanceRecovery({
       name: 'Issuance transaction',
       exact: true,
     });
-    if (start === 'unknown')
+    if (start === 'unknown') {
       await expect(
         page.getByRole('region', { name: 'Unknown wallet outcome' }),
       ).toBeVisible();
-    else {
+      await expect(page.locator('.activity-rail')).toContainText(
+        'Transaction outcome unknown.',
+      );
+      await expect(page.locator('.activity-rail')).not.toContainText(
+        'No transactions yet.',
+      );
+    } else {
       await expect(transaction).toContainText(originalHash);
       await page
         .getByRole('button', { name: 'Check transaction outcome', exact: true })
