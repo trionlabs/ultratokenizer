@@ -38,6 +38,8 @@ next-env.d.ts
 /outputs/
 /work/
 /proofs/enpara-evidence/target/
+/proofs/enpara-evidence/fixtures/private/
+*.eml
 
 *.tsbuildinfo
 
