@@ -242,6 +242,16 @@ try {
       name: 'Checks completed · history incomplete',
     }),
   ).toBeVisible();
+  await expect(page.locator('.audit-check-details')).not.toHaveAttribute(
+    'open',
+  );
+  await expect(page.locator('.audit-check-summary')).toContainText(
+    `${checked.report.checks.filter((check) => check.status === 'verified').length} Passed`,
+  );
+  await expect(page.locator('.audit-limitations')).toContainText(
+    'do not establish physical gold backing or redemption',
+  );
+  await page.locator('.audit-check-details > summary').click();
   await expect(
     page
       .locator('.audit-checks > div')
@@ -255,6 +265,19 @@ try {
   assert.equal(rpcCalls.length, rpcBeforeAudit);
   assert.equal(workerUrls.length, 1);
   assert.match(workerUrls[0], /receipt\.worker-.*\.js$/);
+  const reportDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Save audit report' }).click();
+  const savedReport = await reportDownload;
+  assert.equal(
+    savedReport.suggestedFilename(),
+    'ultratokenizer-audit-report.json',
+  );
+  const savedReportPath = await savedReport.path();
+  assert.ok(savedReportPath);
+  assert.deepEqual(
+    JSON.parse(await readFile(savedReportPath, 'utf8')),
+    checked.report,
+  );
   await noOverflow(page);
   await page.screenshot({
     path: new URL('../../../.scratch/web-qa/verify-mobile.png', import.meta.url)
@@ -313,6 +336,7 @@ try {
   await expect(page.locator('.audit-report-heading')).toContainText(
     'Explicit online proof check',
   );
+  await page.locator('.audit-check-details > summary').click();
   assert(rpcCalls.length > rpcBeforeAudit);
   await expect(
     page
@@ -330,6 +354,7 @@ try {
   await expect(
     page.getByRole('heading', { name: 'Receipt checks failed' }),
   ).toBeVisible();
+  await expect(page.locator('.audit-check-details')).toHaveAttribute('open');
   await upload(page, 'Choose issuance receipt JSON', oldSample);
   await page.getByRole('button', { name: 'Check receipt offline' }).click();
   await expect(page.locator('.receipt-read-error')).toContainText(

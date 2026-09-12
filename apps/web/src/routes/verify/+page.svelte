@@ -13,7 +13,7 @@
 <div class="live-shell">
   <header class="live-header">
     <a class="live-brand" href="/"><span>u</span>ultratokenizer<i>.</i></a><span
-      class="mode-pill">Read-only · uses your trust policy</span
+      class="mode-pill">Read-only · no wallet needed</span
     ><a class="text-link" href="/"
       >Issuance workspace <Glyph name="arrow" size={15} /></a
     >
@@ -23,8 +23,8 @@
       <p class="overline">Independent verifier</p>
       <h1>A receipt.<br /><em>A closer look.</em></h1>
       <p>
-        Check a saved issuance receipt against a trust policy you obtained
-        separately. See what passed and what remains unverified.
+        Open a saved receipt. Check it against your own trust policy. See what
+        passed, what failed and what is still unknown.
       </p>
     </div>
     <ReceiptAudit />
@@ -32,26 +32,21 @@
       class="verifier-boundary"
       aria-labelledby="verifier-boundary-title"
     >
-      <h2 id="verifier-boundary-title">
-        Each check proves something different.
-      </h2>
+      <h2 id="verifier-boundary-title">Know what the result means.</h2>
       <p>
-        Local checks cover request bindings and EOA signatures. Proof bytes are
-        checked only when you explicitly enable the pinned RPC verifier. A
-        transaction hash does not establish chain inclusion, historical
-        authority, reserve consumption or finality.
+        Offline checks compare the receipt's fields and wallet signatures.
+        Enable the optional online check to test the proof against the verifier
+        in your policy. Neither mode establishes the full history of an
+        issuance.
       </p>
       <p>
-        The current issuance source is a synthetic test capsule. Cryptographic
-        validity grants no real gold backing or redemption right. This page
-        accepts actual issuance receipt format; former sample receipts are
-        rejected.
+        The current source is a synthetic test claim. A valid signature or proof
+        does not establish real gold backing or a redemption right.
       </p>
       <p>
-        Files are read in this browser. Offline mode needs the page and worker
-        assets from the host, but no application backend, account or wallet.
-        Nothing is uploaded unless you explicitly enable the public-proof RPC
-        check.
+        Files are read in this browser. The default check sends no receipt data
+        to an application backend or RPC. The online option shares only public
+        proof inputs with the provider you choose.
       </p>
     </section>
   </main>

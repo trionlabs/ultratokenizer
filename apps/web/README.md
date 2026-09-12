@@ -16,6 +16,11 @@ The `/` route imports an independent deployment configuration and a separate `ul
 
 The amount is fixed by the canonical request, public values and permit bindings. There is no issuance amount editor: a complete 1 g claim issues exactly 1 g, once. The selected wallet must authorize that bound recipient. Every step is explicit: connect, validate the proof/permit and deployment pins, sign typed data, simulate current execution, submit the actual transaction, and reconcile its receipt and exact Gate event. Preflight success is never presented as a submitted or confirmed transaction.
 
+The form groups these actions into expandable setup, review and signing steps. Opening a step does
+not run its checks or change the transaction state. Errors, pending-wallet recovery and transaction
+outcomes remain outside those groups. Orbit follows the actual session progress; its mobile layout
+uses a compact progress list. The transfer panel also serves holders who already own the token.
+
 The current accepted source is profile 2's synthetic signed capsule, restricted by the shared client to test deployments. Real cryptography does not make this real bank evidence, asset backing, custody or a redemption promise. This UI imports public proof artifacts; it neither reads private PDF/email evidence nor generates proofs. Actual local proof generation is a separate [proof runner workflow](../../proofs/README.md).
 
 The full quantity, recipient and request data become public at onchain reservation/submission, even before successful issuance. Validation also sends the public proof to the explicitly configured RPC. The page never asks for a private document or private key.
@@ -65,6 +70,11 @@ state, and a receipt cannot supply its own backend admission.
 An explicit optional RPC setting uses the caller-pinned SP1 verifier after checking its chain and runtime code. This sends public proof bytes, public values and the program key to that provider. It is online verification and does not establish historical registry state, reservation/supply/replay effects or transaction inclusion. Receipt authors cannot select a verifier or RPC through the receipt itself.
 
 Every verification job runs in a dedicated Web Worker. UTF-8 bounds are checked before posting and inside the worker. Correlation IDs, cancellation, a 45-second timeout and disposal terminate workers and reject stale results. Worker failures do not fall back to the UI thread. Imported files stay in memory; the user may save the resulting audit report. The static page and worker assets must be available from the host; no offline cache is installed.
+
+The report first shows passed, failed and unverified counts with its overall limits. Individual
+checks are expandable and open automatically when a check fails. Completed online observations
+have a separate references panel; the saved report retains all checks and evidence regardless of
+which panels are open.
 
 Worker replies must have bounded report fields and a receipt identical to the normalized input.
 The v2 report must contain all 18 known checks and a `proofVerification` field. Completed RPC proof

@@ -120,10 +120,17 @@
 </script>
 
 <section class="audit-controls" aria-label="Receipt verification inputs">
+  <div class="audit-input-heading">
+    <h2>Two files. One independent check.</h2>
+    <p class="field-hint">
+      Add your receipt and a trust policy obtained separately. No wallet is
+      needed.
+    </p>
+  </div>
   <div class="file-pair">
     <label class="file-control"
       ><span><b>01</b> Issuance receipt</span><small
-        >{receiptName || 'Public receipt JSON · 256 KB max'}</small
+        >{receiptName || 'Saved after issuance · JSON, 256 KB max'}</small
       ><input
         type="file"
         accept=".json,application/json"
@@ -134,7 +141,8 @@
     >
     <label class="file-control"
       ><span><b>02</b> Independent trust policy</span><small
-        >{policyName || 'Caller policy JSON · 8 KB max'}</small
+        >{policyName ||
+          'Trusted contract and issuer settings · JSON, 8 KB max'}</small
       ><input
         type="file"
         accept=".json,application/json"
@@ -145,8 +153,8 @@
     >
   </div>
   <p class="field-hint">
-    Get this policy from a source independent of the receipt. A policy from the
-    receipt author cannot prove that author was trusted.
+    Get the policy from a source you trust independently of this receipt. The
+    receipt cannot establish who to trust.
   </p>
   <label class="disclosure-control"
     ><input
@@ -158,8 +166,8 @@
         rpcEnabled = event.currentTarget.checked;
       }}
     /><span
-      >Enable an online proof check using my explicit RPC. This sends public
-      proof bytes, public values and the program key to that provider.</span
+      ><strong>Enable an online proof check</strong><br />Optional. Send the
+      public proof, public values and program key to an RPC provider you choose.</span
     ></label
   >
   {#if rpcEnabled}<label class="text-field"
@@ -175,12 +183,11 @@
       /></label
     >
     <p class="field-hint">
-      The worker checks the configured chain and pinned verifier code, then
-      calls the real SP1 verifier. This is an online check; historical registry
-      and transaction evidence remain incomplete.
+      The check uses the chain and verifier in your trust policy. It does not
+      establish transaction inclusion or authority at the time of issuance.
     </p>{:else}<p class="field-hint">
-      Offline mode checks canonical bindings and EOA signatures. Proof
-      cryptography and chain history remain unverified. No RPC is contacted.
+      Offline by default: checks matching fields and wallet signatures without
+      contacting an RPC. Proof validity and chain history remain unverified.
     </p>{/if}
   <div class="audit-actions">
     <button
@@ -202,7 +209,7 @@
       >{/if}
   </div>
   {#if reading || busy}<p class="status-line" role="status">
-      {reading ? 'Reading JSON locally…' : 'Checking in a dedicated worker…'}
+      {reading ? 'Reading the file locally…' : 'Checking your receipt…'}
     </p>{/if}
   {#if error}<p class="inline-error receipt-read-error" role="alert">
       {error}
@@ -227,21 +234,52 @@
       </div>
       <span class="status-pill">{result.report.status}</span>
     </div>
-    <dl class="audit-checks">
-      {#each result.report.checks as check}<div>
-          <dt>{label(check.id)}</dt>
-          <dd class="check-status" data-status={check.status}>
-            {check.status === 'unverified'
-              ? 'Unverified'
-              : check.status === 'verified'
-                ? 'Verified'
-                : 'Failed'}
-          </dd>
-          <dd class="check-detail">{check.detail}</dd>
-        </div>{/each}
-    </dl>
+    <p class="audit-check-summary" role="status">
+      {#each ['verified', 'failed', 'unverified'] as status}
+        <span class="status-pill" data-status={status}
+          ><strong
+            >{result.report.checks.filter((check) => check.status === status)
+              .length}</strong
+          >
+          {status === 'verified'
+            ? 'Passed'
+            : status === 'failed'
+              ? 'Failed'
+              : 'Unverified'}</span
+        >
+      {/each}
+    </p>
+    <details
+      class="audit-check-details"
+      open={result.report.status === 'invalid'}
+    >
+      <summary>Review each check</summary>
+      <dl class="audit-checks">
+        {#each result.report.checks as check}<div>
+            <dt>{label(check.id)}</dt>
+            <dd class="check-status" data-status={check.status}>
+              {check.status === 'unverified'
+                ? 'Unverified'
+                : check.status === 'verified'
+                  ? 'Verified'
+                  : 'Failed'}
+            </dd>
+            <dd class="check-detail">{check.detail}</dd>
+          </div>{/each}
+      </dl>
+    </details>
     <div class="audit-limitations">
-      {#each result.report.limitations as limitation}<p>{limitation}</p>{/each}
+      <p>
+        This report remains incomplete. Transaction inclusion, authority at
+        issuance and token balances have not been independently verified. These
+        checks do not establish physical gold backing or redemption.
+      </p>
+      <details class="technical-details">
+        <summary>Limits of this report</summary>
+        {#each result.report.limitations as limitation}<p>
+            {limitation}
+          </p>{/each}
+      </details>
       <details class="technical-details">
         <summary>Request and transaction references</summary>
         <dl class="data-list">
@@ -259,6 +297,24 @@
           </div>
         </dl>
       </details>
+      {#if result.report.proofVerification}
+        <details class="technical-details">
+          <summary>Online proof check references</summary>
+          <p class="field-hint">
+            These references are included in the saved report. They record a
+            result from your chosen RPC; they are not independent chain
+            evidence.
+          </p>
+          <dl class="data-list">
+            {#each [['RPC origin', result.report.proofVerification.rpcOrigin], ['Chain ID', result.report.proofVerification.chainId], ['Block number', result.report.proofVerification.blockNumber], ['Block hash', result.report.proofVerification.blockHash], ['Verifier', result.report.proofVerification.verifierAddress], ['Verifier code hash', result.report.proofVerification.verifierCodeHash], ['Verifier version', result.report.proofVerification.outerVersion], ['Program key', result.report.proofVerification.programVKey], ['Public values hash', result.report.proofVerification.publicValuesHash], ['Proof bytes hash', result.report.proofVerification.proofBytesHash], ['Verifier result', result.report.proofVerification.result]] as [name, value]}
+              <div>
+                <dt>{name}</dt>
+                <dd>{value}</dd>
+              </div>
+            {/each}
+          </dl>
+        </details>
+      {/if}
     </div>
   </section>
 {/if}
