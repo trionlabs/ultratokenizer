@@ -4,6 +4,7 @@
   background: #f6f5f0;
   font-synthesis: none;
   font-weight: 400;
+  line-height: 1.5;
   --ink: #242d29;
   --muted: #677069;
   --line: #dfe2d9;
@@ -41,7 +42,7 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 summary:focus-visible {
-  outline: 3px solid #8eab76;
+  outline: 3px solid #315e44;
   outline-offset: 4px;
 }
 a {

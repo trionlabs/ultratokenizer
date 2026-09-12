@@ -6,7 +6,7 @@
   <title>Ultratokenizer — A new form</title>
   <meta
     name="description"
-    content="Issue one complete signed claim through a configured verifier, institution permit and your wallet. Current source profile is synthetic and test-only."
+    content="Issue the full quantity of one gold claim, then transfer in whole milligrams. Review each wallet action and save its receipt. Current source is synthetic and test-only."
   />
 </svelte:head>
 <IssuanceWorkspace />

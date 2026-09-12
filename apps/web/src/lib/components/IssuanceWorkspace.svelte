@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import type { EIP1193Provider } from 'viem';
   import { createIssuanceSession } from '../application/issuance-session';
   import {
@@ -29,6 +29,7 @@
   let resolving = $state(false);
   let transferError = $state('');
   let recoveryHash = $state('');
+  let reviewSummary: HTMLElement | undefined;
   let ens = $state<Awaited<ReturnType<typeof resolveEnsRecipient>>>();
   let resolutionVersion = 0;
   function clearEns() {
@@ -85,6 +86,31 @@
       steps.findIndex((step) => !step.done),
     ),
   );
+  let nextAction = $derived(
+    snapshot.pendingOperation
+      ? 'The original call is still pending. Review its status below before another action.'
+      : unresolved
+        ? 'Resolve the wallet outcome below before starting another action.'
+        : snapshot.receipt
+          ? 'Save your receipt, then use the transfer panel below.'
+          : snapshot.transaction?.outcome === 'reverted'
+            ? 'No tokens were issued. Import the bundle again for a new attempt.'
+            : !snapshot.deployment
+              ? 'Start with trusted chain and contract settings.'
+              : !request
+                ? 'Import the approved file for the right you want to issue.'
+                : !connected
+                  ? 'Review the quantity and recipient, then connect that wallet.'
+                  : snapshot.sourceProof !== 'accepted'
+                    ? 'Check the proof and approval before signing.'
+                    : !snapshot.disclosed
+                      ? 'Read and acknowledge the test-source notice.'
+                      : !snapshot.signature
+                        ? 'Sign the fixed request in your wallet.'
+                        : snapshot.simulation !== 'passed'
+                          ? 'Check that the transaction can execute before sending.'
+                          : 'Ready for your wallet to review the issuance transaction.',
+  );
 
   onMount(() => {
     const unsubscribe = session.subscribe((value) => {
@@ -134,6 +160,8 @@
       } else {
         session.loadBundle(text);
         bundleName = file.name;
+        await tick();
+        reviewSummary?.focus();
       }
     } catch (error) {
       fileError =
@@ -204,9 +232,12 @@
   <header class="live-header">
     <a class="live-brand" href="/"><span>u</span>ultratokenizer<i>.</i></a>
     <span class="mode-pill">Synthetic source · live wallet actions</span>
-    <a class="text-link" href="/verify/"
-      >Verify a receipt <Glyph name="arrow" size={15} /></a
-    >
+    <nav class="workspace-nav" aria-label="Workspace">
+      <a class="text-link" href="#transfer">Transfer</a>
+      <a class="text-link" href="/verify/"
+        >Verify a receipt <Glyph name="arrow" size={15} /></a
+      >
+    </nav>
   </header>
 
   <main id="issuance" tabindex="-1" class="issuance-layout">
@@ -214,8 +245,8 @@
       <p class="overline">One complete right. One issuance.</p>
       <h1 id="issuance-title">A right.<br /><em>A new form.</em></h1>
       <p class="visual-lede">
-        Issue exactly the quantity in your signed claim. After issuance,
-        transfer any whole milligram.
+        Turn one complete gold claim into tokens. Issue its exact quantity once,
+        then transfer in whole milligrams.
       </p>
       <div class="live-orbit" aria-label="Issuance progress">
         <OrbitField stage={phase} />
@@ -262,7 +293,7 @@
       </div>
       <p class="source-boundary">
         <Glyph name="shield" size={17} /><span
-          >Current profile: synthetic signed capsule. No real bank
+          >Synthetic test source. Real wallet actions; no real bank
           authorization, gold backing or redemption is established.</span
         >
       </p>
@@ -270,39 +301,54 @@
 
     <section class="issuance-controls" aria-label="Issue a complete claim">
       <div class="control-heading">
-        <p class="overline">Prepare your issuance</p>
+        <p class="overline">Issue your gold claim</p>
         <span class="network-label">{networkLabel}</span>
       </div>
-      <div class="file-pair">
-        <label class="file-control"
-          ><span><b>01</b> Trusted deployment file</span><small
-            >{deploymentName ||
-              `Chain and contract settings · JSON · ${MAX_DEPLOYMENT_BYTES / 1024} KB max`}</small
-          ><input
-            type="file"
-            accept=".json,application/json"
-            aria-label="Import deployment configuration"
-            disabled={busy || unresolved}
-            onchange={(event) => importFile(event, 'deployment')}
-          /></label
-        >
-        <label class="file-control"
-          ><span><b>02</b> Approved issuance file</span><small
-            >{bundleName ||
-              'Fixed request, proof and issuer approval · 160 KB max'}</small
-          ><input
-            type="file"
-            accept=".json,application/json"
-            aria-label="Import issuance bundle"
-            disabled={!snapshot.deployment || busy || unresolved}
-            onchange={(event) => importFile(event, 'bundle')}
-          /></label
-        >
-      </div>
-      <p class="field-hint">
-        Get the deployment file from a source you trust separately from the
-        claim. Importing it does not contact the RPC.
-      </p>
+      <p class="next-action" role="status">{nextAction}</p>
+      <details class="workflow-step" open={!request}>
+        <summary>
+          <span class="workflow-step-title"><b>01</b> Load your files</span>
+          <span class="workflow-step-state"
+            >{request ? 'Loaded' : 'Start here'}</span
+          >
+        </summary>
+        <div class="workflow-step-body">
+          <div class="file-pair">
+            <label class="file-control"
+              ><span>Trusted deployment file</span><small
+                >{deploymentName ||
+                  `Chain and contract settings · JSON · ${MAX_DEPLOYMENT_BYTES / 1024} KB max`}</small
+              ><input
+                type="file"
+                accept=".json,application/json"
+                aria-label="Import deployment configuration"
+                disabled={busy || unresolved}
+                onchange={(event) => importFile(event, 'deployment')}
+              /></label
+            >
+            <label class="file-control"
+              ><span>Approved issuance file</span><small
+                >{bundleName ||
+                  `Request, proof and approval · JSON · ${MAX_BUNDLE_BYTES / 1024} KB max`}</small
+              ><input
+                type="file"
+                accept=".json,application/json"
+                aria-label="Import issuance bundle"
+                disabled={!snapshot.deployment || busy || unresolved}
+                onchange={(event) => importFile(event, 'bundle')}
+              /></label
+            >
+          </div>
+          <p class="field-hint">
+            Get the deployment settings independently from a trusted source. The
+            claim cannot supply its own trust settings. Both imports stay local.
+          </p>
+          <p class="field-hint">
+            Use public JSON files here. PDF and email evidence must be prepared
+            before this step.
+          </p>
+        </div>
+      </details>
       {#if reading}<p class="status-line" role="status">
           Reading JSON locally…
         </p>{/if}
@@ -360,119 +406,179 @@
         </details>
       {/if}
 
-      <div class="wallet-row">
-        <div>
-          <span class="overline">Your wallet</span>
-          <p>
-            {snapshot.wallet
-              ? snapshot.wallet.address
-              : snapshot.providerAvailable
-                ? 'Connect the wallet bound to this claim.'
-                : 'No browser wallet detected. Open this page in a wallet-enabled browser.'}
-          </p>
-          {#if request}<small class="bound-recipient"
-              >Claim recipient · {request.recipient}</small
-            >{/if}
-        </div>
-        <button
-          class="secondary-button"
-          disabled={!snapshot.providerAvailable ||
-            !snapshot.deployment ||
-            busy ||
-            !!snapshot.pendingOperation}
-          onclick={() => session.connect()}
-          ><Glyph name="wallet" size={16} />{connected
-            ? 'Reconnect'
-            : 'Connect'}</button
-        >
-      </div>
-
-      <div class="check-row">
-        <div>
-          <strong>Claim proof and issuer approval</strong><span
+      <details class="workflow-step" open={!!snapshot.deployment}>
+        <summary bind:this={reviewSummary}>
+          <span class="workflow-step-title"><b>02</b> Review the claim</span>
+          <span class="workflow-step-state"
             >{snapshot.sourceProof === 'accepted'
-              ? 'Accepted by the pinned verifier and current registry.'
-              : 'Unchecked. Imported bytes alone do not establish validity.'}</span
+              ? 'Checked'
+              : request
+                ? 'Ready to review'
+                : snapshot.deployment
+                  ? 'Connect your wallet'
+                  : 'Waiting for settings'}</span
           >
+        </summary>
+        <div class="workflow-step-body">
+          {#if request}
+            <div class="claim-review">
+              <span class="overline">Full claim quantity</span>
+              <strong class="claim-review-amount"
+                >{formatGrams(request.amount)} <small>g gold</small></strong
+              >
+              <p class="field-hint">
+                {request.amount} mg · This entire right is issued once. The amount
+                cannot be changed.
+              </p>
+            </div>
+          {/if}
+          <div class="wallet-row">
+            <div>
+              <span class="overline">Your wallet</span>
+              <p>
+                {snapshot.wallet
+                  ? snapshot.wallet.address
+                  : snapshot.providerAvailable
+                    ? 'Connect the claim recipient’s wallet.'
+                    : 'No browser wallet detected. Open this page in a wallet-enabled browser.'}
+              </p>
+              {#if request}<small class="bound-recipient"
+                  >Claim recipient · {request.recipient}</small
+                >{/if}
+            </div>
+            <button
+              class="secondary-button"
+              disabled={!snapshot.providerAvailable ||
+                !snapshot.deployment ||
+                busy ||
+                !!snapshot.pendingOperation}
+              onclick={() => session.connect()}
+              ><Glyph name="wallet" size={16} />{connected
+                ? 'Reconnect'
+                : 'Connect'}</button
+            >
+          </div>
+
+          <div class="check-row">
+            <div>
+              <strong>Claim proof and issuer approval</strong><span
+                >{snapshot.sourceProof === 'accepted'
+                  ? 'Accepted by the pinned verifier and current registry.'
+                  : 'Unchecked. Verify the proof, approval and contract settings through your configured RPC.'}</span
+              >
+            </div>
+            <button
+              class="secondary-button"
+              disabled={!connected ||
+                !request ||
+                busy ||
+                !!snapshot.transaction ||
+                unresolved}
+              onclick={() => session.check()}>Check bundle</button
+            >
+          </div>
         </div>
+      </details>
+
+      <details
+        class="workflow-step"
+        open={snapshot.sourceProof === 'accepted' && !snapshot.transaction}
+      >
+        <summary>
+          <span class="workflow-step-title"><b>03</b> Authorize issuance</span>
+          <span class="workflow-step-state"
+            >{snapshot.pendingOperation
+              ? 'Call still pending'
+              : snapshot.unknownSubmission
+                ? 'Outcome unknown'
+                : snapshot.transaction
+                  ? snapshot.transaction.outcome === 'confirmed'
+                    ? 'Issued'
+                    : snapshot.transaction.outcome === 'reverted'
+                      ? 'Reverted'
+                      : snapshot.transaction.outcome === 'unresolved'
+                        ? 'Outcome unresolved'
+                        : 'Submitted'
+                  : snapshot.simulation === 'passed'
+                    ? 'Ready to send'
+                    : snapshot.signature
+                      ? 'Signed'
+                      : snapshot.sourceProof === 'accepted'
+                        ? 'Ready to sign'
+                        : 'Check the claim first'}</span
+          >
+        </summary>
+        <div class="workflow-step-body">
+          <label class="disclosure-control"
+            ><input
+              type="checkbox"
+              checked={snapshot.disclosed}
+              disabled={busy || !!snapshot.transaction || unresolved}
+              onchange={(event) =>
+                session.disclose(event.currentTarget.checked)}
+            /><span
+              >I understand this test source grants no real gold rights. The
+              full claim quantity, wallet and request data are public from
+              onchain reservation or submission, even if issuance fails.</span
+            ></label
+          >
+
+          <ol class="action-list">
+            <li>
+              <span
+                ><b>1</b><strong>Sign the fixed request</strong><small
+                  >{snapshot.signature
+                    ? 'Holder signature checked'
+                    : 'Approve this quantity and recipient; no transaction yet'}</small
+                ></span
+              ><button
+                class="secondary-button"
+                disabled={!connected ||
+                  snapshot.sourceProof !== 'accepted' ||
+                  !snapshot.disclosed ||
+                  busy ||
+                  !!snapshot.transaction ||
+                  unresolved}
+                onclick={() => session.sign()}
+                >{snapshot.signature ? 'Sign again' : 'Sign request'}</button
+              >
+            </li>
+            <li>
+              <span
+                ><b>2</b><strong>Check before sending</strong><small
+                  >{snapshot.simulation === 'passed'
+                    ? 'Call succeeded; no transaction sent'
+                    : 'Check current execution without sending'}</small
+                ></span
+              ><button
+                class="secondary-button"
+                disabled={!snapshot.signature ||
+                  busy ||
+                  !!snapshot.transaction ||
+                  unresolved}
+                onclick={() => session.simulate()}>Check before sending</button
+              >
+            </li>
+          </ol>
+        </div>
+      </details>
+      <div class="issuance-submit">
         <button
-          class="secondary-button"
-          disabled={!connected ||
-            !request ||
+          class="primary-button"
+          disabled={!snapshot.signature ||
+            snapshot.simulation !== 'passed' ||
+            !snapshot.disclosed ||
             busy ||
             !!snapshot.transaction ||
             unresolved}
-          onclick={() => session.check()}>Check bundle</button
+          onclick={() => session.submit()}
+          >Issue full claim <Glyph name="arrow" size={15} /></button
         >
+        <p class="field-hint">
+          Your wallet reviews and submits the transaction. Issuance completes
+          only after its outcome is checked.
+        </p>
       </div>
-
-      <label class="disclosure-control"
-        ><input
-          type="checkbox"
-          checked={snapshot.disclosed}
-          disabled={busy || !!snapshot.transaction || unresolved}
-          onchange={(event) => session.disclose(event.currentTarget.checked)}
-        /><span
-          >I understand that the full quantity, wallet and request data become
-          public at onchain reservation/submission, including before a
-          successful mint. This test source grants no real gold rights.</span
-        ></label
-      >
-
-      <ol class="action-list">
-        <li>
-          <span
-            ><b>1</b><strong>Sign the fixed request</strong><small
-              >{snapshot.signature
-                ? 'Holder signature checked'
-                : 'No amount can be edited'}</small
-            ></span
-          ><button
-            class="secondary-button"
-            disabled={!connected ||
-              snapshot.sourceProof !== 'accepted' ||
-              !snapshot.disclosed ||
-              busy ||
-              !!snapshot.transaction ||
-              unresolved}
-            onclick={() => session.sign()}
-            >{snapshot.signature ? 'Sign again' : 'Sign request'}</button
-          >
-        </li>
-        <li>
-          <span
-            ><b>2</b><strong>Check before sending</strong><small
-              >{snapshot.simulation === 'passed'
-                ? 'Call succeeded; no transaction sent'
-                : 'Confirm that the Gate can execute now'}</small
-            ></span
-          ><button
-            class="secondary-button"
-            disabled={!snapshot.signature ||
-              busy ||
-              !!snapshot.transaction ||
-              unresolved}
-            onclick={() => session.simulate()}>Check before sending</button
-          >
-        </li>
-        <li>
-          <span
-            ><b>3</b><strong>Issue the claim</strong><small
-              >Your wallet submits the transaction</small
-            ></span
-          ><button
-            class="primary-button"
-            disabled={!snapshot.signature ||
-              snapshot.simulation !== 'passed' ||
-              !snapshot.disclosed ||
-              busy ||
-              !!snapshot.transaction ||
-              unresolved}
-            onclick={() => session.submit()}
-            >Issue full claim <Glyph name="arrow" size={15} /></button
-          >
-        </li>
-      </ol>
       {#if snapshot.busy}<p class="status-line" role="status">
           {snapshot.busy === 'confirming'
             ? 'Waiting for the actual transaction outcome…'
@@ -491,7 +597,11 @@
       {/if}
 
       {#if snapshot.unknownSubmission}
-        <section class="transaction-card" aria-label="Unknown wallet outcome">
+        <section
+          id="wallet-outcome"
+          class="transaction-card"
+          aria-label="Unknown wallet outcome"
+        >
           <h2>Wallet outcome unknown</h2>
           <p>
             A transaction may have been sent. Further submissions are paused.
@@ -538,8 +648,14 @@
               {formatGrams(snapshot.receipt.request.amount)} g issued to the bound
               recipient. The receipt matches the configured Gate event exactly.
             </p>
+            <dl class="data-list">
+              <div>
+                <dt>Recipient</dt>
+                <dd>{snapshot.receipt.request.recipient}</dd>
+              </div>
+            </dl>
             <button
-              class="secondary-button"
+              class="primary-button"
               onclick={() =>
                 saveJson(
                   snapshot.receipt,
@@ -581,12 +697,18 @@
       {/if}
     </section>
 
-    <section class="token-workspace" aria-labelledby="token-title">
-      <div>
+    <section
+      id="transfer"
+      class="token-workspace"
+      aria-labelledby="token-title"
+      tabindex="-1"
+    >
+      <div class="token-overview">
         <p class="overline">After issuance</p>
         <h2 id="token-title">A whole claim.<br /><em>Divisible tokens.</em></h2>
         <p>
-          One base unit is one milligram.
+          Send any positive amount in whole milligrams, including part of an
+          issued claim. One base unit is 0.001 g.
           {#if tokenBackend === 'hts'}
             HTS association and transfers are separate wallet transactions.
           {:else if tokenBackend === 'ats'}
@@ -594,6 +716,10 @@
           {:else}
             Import a deployment to use its token.
           {/if}
+        </p>
+        <p class="field-hint">
+          Already hold this token? Load its trusted deployment and connect your
+          wallet to transfer. You do not need a new claim.
         </p>
       </div>
       <div class="token-controls">
@@ -619,73 +745,90 @@
             The chain checks whether it is needed.
           </p>
         {/if}
-        <label class="text-field"
-          >Transfer recipient<input
-            type="text"
-            placeholder="0x… or name.eth"
-            value={transferRecipient}
-            disabled={busy}
-            oninput={(event) => {
-              transferRecipient = event.currentTarget.value;
-              clearEns();
-            }}
-            autocomplete="off"
-            spellcheck="false"
-          /></label
-        >
-        {#if transferRecipient && !transferRecipient.startsWith('0x')}
+        <div class="token-form">
           <label class="text-field"
-            >Ethereum RPC for ENS<input
-              type="url"
-              placeholder="https://…"
-              value={ethereumRpc}
+            >Transfer recipient<input
+              type="text"
+              placeholder="0x… or name.eth"
+              value={transferRecipient}
               disabled={busy}
               oninput={(event) => {
-                ethereumRpc = event.currentTarget.value;
+                transferRecipient = event.currentTarget.value;
                 clearEns();
               }}
+              autocomplete="off"
+              spellcheck="false"
             /></label
-          ><button
-            class="secondary-button"
-            disabled={!snapshot.deployment || !ethereumRpc || busy}
-            onclick={resolveRecipient}>Resolve ENS recipient</button
+          >
+          {#if transferRecipient && !transferRecipient.startsWith('0x')}
+            <label class="text-field"
+              >Ethereum RPC for ENS<input
+                type="url"
+                placeholder="https://…"
+                value={ethereumRpc}
+                disabled={busy}
+                oninput={(event) => {
+                  ethereumRpc = event.currentTarget.value;
+                  clearEns();
+                }}
+              /></label
+            ><button
+              class="secondary-button"
+              disabled={!snapshot.deployment || !ethereumRpc || busy}
+              onclick={resolveRecipient}>Resolve ENS recipient</button
+            >
+            <p class="field-hint">
+              Resolve only when you are ready to send the name to this Ethereum
+              RPC. Check the full returned address before transferring. ENS does
+              not grant institution authority.
+            </p>
+          {/if}
+          {#if ens}<div class="resolved-address">
+              <strong>{ens.normalizedName} → Chain {ens.chainId}</strong><code
+                >{ens.address}</code
+              ><small
+                >Frozen for this transfer. The resolver may use its default EVM
+                address. Ethereum block {ens.blockNumber.toString()}.</small
+              >
+            </div>{/if}
+          <label class="text-field"
+            >Transfer amount (g)<input
+              type="text"
+              inputmode="decimal"
+              placeholder="For example, 0.125"
+              bind:value={transferAmount}
+              disabled={busy}
+            /></label
           >
           <p class="field-hint">
-            Explicitly sends this name to your Ethereum RPC. ENS has no
-            institution authority.
+            Up to three decimal places. Your issuance quantity stays unchanged.
           </p>
-        {/if}
-        {#if ens}<div class="resolved-address">
-            <strong>{ens.normalizedName} → Chain {ens.chainId}</strong><code
-              >{ens.address}</code
-            ><small
-              >Frozen for this transfer. The resolver may use its default EVM
-              address. Ethereum block {ens.blockNumber.toString()}.</small
+          <button
+            class="primary-button"
+            disabled={!connected ||
+              !transferRecipient ||
+              !transferAmount ||
+              (!transferRecipient.startsWith('0x') && !ens) ||
+              busy ||
+              unresolved}
+            onclick={transfer}
+            >Review transfer in wallet <Glyph name="arrow" size={15} /></button
+          >
+          {#if transferError || snapshot.error}<p
+              class="inline-error"
+              role={transferError ? 'alert' : undefined}
             >
-          </div>{/if}
-        <label class="text-field"
-          >Transfer amount (g)<input
-            type="text"
-            inputmode="decimal"
-            placeholder="Up to three decimal places"
-            bind:value={transferAmount}
-            disabled={busy}
-          /></label
-        >
-        <button
-          class="primary-button"
-          disabled={!connected ||
-            !transferRecipient ||
-            !transferAmount ||
-            (!transferRecipient.startsWith('0x') && !ens) ||
-            busy ||
-            unresolved}
-          onclick={transfer}
-          >Review transfer in wallet <Glyph name="arrow" size={15} /></button
-        >
-        {#if transferError}<p class="inline-error" role="alert">
-            {transferError}
-          </p>{/if}
+              {transferError || snapshot.error}
+            </p>{/if}
+          {#if snapshot.unknownSubmission}
+            <p class="status-line">
+              New transfers are paused. <a
+                class="text-link"
+                href="#wallet-outcome">Review the wallet outcome</a
+              > before continuing.
+            </p>
+          {/if}
+        </div>
         {#if snapshot.tokenIntent}<div
             class="transaction-card"
             aria-label="Frozen token intent"
@@ -696,8 +839,8 @@
                 : 'Token association'}</strong
             >
             <p>
-              Frozen before sending. Wallet and form changes preserve this
-              intended action for reconciliation.
+              Saved before sending. This is the action we check, even if the
+              wallet or form changes.
             </p>
             <dl class="data-list">
               <div>

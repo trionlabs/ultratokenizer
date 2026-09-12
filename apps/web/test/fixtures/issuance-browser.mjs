@@ -345,6 +345,10 @@ export async function exerciseIssuanceRecovery({
       await expect(issue).toBeEnabled();
     }
     await issue.click();
+    const authorizationSummary = page
+      .locator('.workflow-step > summary')
+      .filter({ hasText: 'Authorize issuance' });
+    await expect(authorizationSummary).not.toContainText('Ready to send');
     const transaction = page.getByRole('region', {
       name: 'Issuance transaction',
       exact: true,
@@ -444,6 +448,9 @@ export async function exerciseIssuanceRecovery({
       await reconcile.click();
     }
     await expect(transaction.locator('.status-pill')).toHaveText(finalOutcome);
+    await expect(authorizationSummary).toContainText(
+      finalOutcome === 'confirmed' ? 'Issued' : 'Reverted',
+    );
     await expect(transaction).toContainText(finalHash);
     await expect(
       page.getByRole('region', { name: 'Unknown wallet outcome' }),

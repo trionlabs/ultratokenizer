@@ -115,8 +115,26 @@ try {
     page.getByRole('button', { name: 'Issue full claim' }),
   ).toBeDisabled();
   await expect(
-    page.getByRole('button', { name: 'Connect', exact: true }),
+    page.getByRole('button', {
+      name: 'Connect',
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeDisabled();
+  // Expanding a future step must not bypass checks or trigger wallet/RPC work.
+  await page
+    .locator('.workflow-step')
+    .filter({ hasText: 'Authorize issuance' })
+    .locator('summary')
+    .click();
+  await expect(
+    page.getByRole('button', { name: 'Sign request', exact: true }),
+  ).toBeDisabled();
+  await page
+    .locator('.workflow-step')
+    .filter({ hasText: 'Authorize issuance' })
+    .locator('summary')
+    .click();
   assert.deepEqual(await page.evaluate(() => window.walletCalls), []);
   assert.deepEqual(rpcCalls, []);
   await expect(page.getByRole('button', { name: 'Try a sample' })).toHaveCount(
@@ -138,6 +156,33 @@ try {
     ).pathname,
     fullPage: true,
   });
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '200%';
+  });
+  await noOverflow(page);
+  await expect(
+    page.getByLabel('Import deployment configuration', { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: new URL(
+      '../../../.scratch/web-qa/issuance-large-text.png',
+      import.meta.url,
+    ).pathname,
+    fullPage: true,
+  });
+  await page.evaluate(() => {
+    document.documentElement.style.removeProperty('font-size');
+  });
+  await page.setViewportSize({ width: 320, height: 640 });
+  await noOverflow(page);
+  const firstUpload = await page
+    .getByLabel('Import deployment configuration', { exact: true })
+    .boundingBox();
+  assert.ok(
+    firstUpload && firstUpload.y + firstUpload.height <= 640,
+    'Mobile setup starts in the first viewport',
+  );
+  await page.setViewportSize({ width: 1280, height: 900 });
 
   const deployment = {
     ...fixture.deployment,
@@ -156,7 +201,11 @@ try {
   );
   assert(rpcCalls.includes('eth_getCode'));
   await expect(
-    page.getByRole('button', { name: 'Sign request', exact: true }),
+    page.getByRole('button', {
+      name: 'Sign request',
+      exact: true,
+      includeHidden: true,
+    }),
   ).toBeDisabled();
   await expect(page.locator('.transaction-card')).toHaveCount(0);
   assert(

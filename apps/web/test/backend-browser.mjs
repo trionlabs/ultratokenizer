@@ -66,7 +66,11 @@ try {
   });
   await page.goto(base.href, { waitUntil: 'networkidle' });
   const associate = page.getByRole('button', { name: 'Associate this token' });
-  const connect = page.getByRole('button', { name: 'Connect', exact: true });
+  const connect = page.getByRole('button', {
+    name: 'Connect',
+    exact: true,
+    includeHidden: true,
+  });
   const tokenWorkspace = page.locator('.token-workspace');
   await expect(associate).toHaveCount(0);
   await expect(connect).toBeDisabled();
@@ -95,6 +99,10 @@ try {
     },
   ]) {
     await upload(page, 'Import deployment configuration', deployment);
+    // Existing holders can connect before supplying any new issuance claim.
+    await expect(connect).toBeVisible();
+    await expect(connect).toBeEnabled();
+    await expect(page.locator('.wallet-row')).toContainText('Your wallet');
     await upload(page, 'Import issuance bundle', hts.bundle);
     await expect(page.locator('.issuance-controls .inline-error')).toHaveCount(
       0,
