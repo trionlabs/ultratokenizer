@@ -84,6 +84,68 @@ try {
   await expect(navigation.locator('[aria-current="page"]')).toHaveText(
     'Tokenize',
   );
+  const scrollY = () => page.evaluate(() => Math.round(window.scrollY));
+  const workspaceLink = (name) =>
+    page
+      .getByRole('navigation', { name: 'Workspace', exact: true })
+      .getByRole('link', { name, exact: true });
+  const expectTopAfterSelect = async (name) => {
+    await page.evaluate(() => window.scrollTo(0, 40));
+    assert.equal(await scrollY(), 40);
+    await workspaceLink(name).click();
+    await expect.poll(scrollY).toBe(0);
+  };
+  // Start with a document entry; navigating to the current fragment again
+  // through page.goto creates native history outside the workspace links.
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.addStyleTag({ content: '.live-shell { min-height: 300vh; }' });
+  await expectTopAfterSelect('Transfer');
+  await page.evaluate(() => window.scrollTo(0, 80));
+  assert.equal(await scrollY(), 80);
+  await page.goBack();
+  await expect(navigation.locator('[aria-current="page"]')).toHaveText(
+    'Tokenize',
+  );
+  assert.equal(new URL(page.url()).search, '?operator=1');
+  await expect.poll(scrollY).toBe(40);
+  await page.goForward();
+  await expect(navigation.locator('[aria-current="page"]')).toHaveText(
+    'Transfer',
+  );
+  assert.equal(new URL(page.url()).search, '?operator=1');
+  await expect.poll(scrollY).toBe(80);
+  await page.goto(base, { waitUntil: 'networkidle' });
+  await page.addStyleTag({ content: '.live-shell { min-height: 300vh; }' });
+  await expectTopAfterSelect('Tokenize');
+  assert.equal(new URL(page.url()).hash, '#engine');
+  const historyLength = await page.evaluate(() => history.length);
+  await expectTopAfterSelect('Tokenize');
+  assert.equal(await page.evaluate(() => history.length), historyLength);
+  await expectTopAfterSelect('Transfer');
+  assert.equal(new URL(page.url()).hash, '#transfer');
+  await expectTopAfterSelect('Transfer');
+  await expectTopAfterSelect('Tokenize');
+  assert.equal(new URL(page.url()).hash, '#engine');
+  await page.goto(new URL('institution/', base).href, {
+    waitUntil: 'networkidle',
+  });
+  await page.addStyleTag({ content: '.live-shell { min-height: 300vh; }' });
+  await expectTopAfterSelect('Transfer');
+  assert.equal(new URL(page.url()).hash, '#transfer');
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Workspace', exact: true })
+      .locator('[aria-current="page"]'),
+  ).toHaveText('Transfer');
+  await page.evaluate(() => window.scrollTo(0, 40));
+  await page.locator('.live-brand').click();
+  await expect.poll(scrollY).toBe(0);
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Workspace', exact: true })
+      .locator('[aria-current="page"]'),
+  ).toHaveText('Tokenize');
+  assert.equal(new URL(page.url()).hash, '');
   await page.addStyleTag({ content: 'html { font-size: 200%; }' });
   assert(
     await page.evaluate(
@@ -96,7 +158,7 @@ try {
   assert.deepEqual(errors, []);
   assert.deepEqual(external, []);
   console.log(
-    'Shared header: 5 routes x 4 widths, navigation, 200% text and hydration passed; no wallet or chain calls.',
+    'Shared header: 5 routes x 4 widths, navigation scroll starts, 200% text and hydration passed; no wallet or chain calls.',
   );
 } finally {
   await browser.close();

@@ -42,7 +42,9 @@ The right rail reports the network, wallet, exact amount and current-session tra
 All workspaces share `AppHeader`, including the same navigation labels, active-page state and
 responsive layout. Holder and institution wallet controls use its action slot; Trust, Verify and
 the guide remain wallet-free. Switching between Tokenize and Transfer on the holder page preserves
-the tab's query string and session.
+the tab's query string and session. Selecting any workspace starts its destination view at the top
+of the page, including selecting the active view again and cross-route navigation. Back and Forward
+between Tokenize and Transfer restore their previous scroll positions.
 Deployment overrides are available only in the explicit operator view. Transfer remains a separate
 view. Errors and recovery stay beside their action. The setup dialog supports Escape, local error
 feedback and focus return.

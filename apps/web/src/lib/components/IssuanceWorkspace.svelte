@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import type { EIP1193Provider } from 'viem';
+  import { afterNavigate, goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { createIssuanceSession } from '../application/issuance-session';
   import { fetchHostedDeployment } from '../application/hosted-deployment';
   import {
@@ -36,7 +38,9 @@
   let transferError = $state('');
   let recoveryHash = $state('');
   let walletHelp = $state(false);
-  let workspaceView = $state<'issue' | 'transfer'>('issue');
+  let workspaceView = $derived<'issue' | 'transfer'>(
+    page.url.hash === '#transfer' ? 'transfer' : 'issue',
+  );
   let setupDialog = $state<HTMLDialogElement>();
   let setupOpen = $state(false);
   let networkStatus = $state<'loading' | 'missing' | 'failed' | 'loaded'>(
@@ -162,6 +166,51 @@
     }
   }
 
+  // A workspace selection always starts its destination view at the top of
+  // the page, both for in-page hash switches and cross-route navigation.
+  // A task (not a microtask) runs after SvelteKit's own fragment restore.
+  function alignViewTop() {
+    setTimeout(() => {
+      if (window.scrollY !== 0) window.scrollTo({ top: 0, left: 0 });
+    }, 0);
+  }
+
+  afterNavigate((navigation) => {
+    const target = navigation.to?.url.hash;
+    if (
+      navigation.type !== 'popstate' &&
+      (target === '#engine' || target === '#transfer')
+    )
+      alignViewTop();
+  });
+
+  function selectWorkspace(event: MouseEvent) {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      !(event.target instanceof Element)
+    )
+      return;
+    const link = event.target.closest<HTMLAnchorElement>('a');
+    if (
+      !link ||
+      !['#engine', '#transfer'].includes(link.getAttribute('href') ?? '')
+    )
+      return;
+    event.preventDefault();
+    // Native same-page fragments bypass navigation hooks. Let SvelteKit own
+    // their history and scroll restoration, including repeated selections.
+    void goto(link.href, {
+      noScroll: true,
+      keepFocus: true,
+      replaceState: link.href === window.location.href,
+    });
+  }
+
   onMount(() => {
     // This only exposes local configuration tools; it grants no chain authority.
     operatorMode =
@@ -175,12 +224,10 @@
       candidate && typeof candidate.request === 'function'
         ? candidate
         : undefined;
-    const syncView = () => {
-      workspaceView =
-        window.location.hash === '#transfer' ? 'transfer' : 'issue';
-    };
-    syncView();
-    window.addEventListener('hashchange', syncView);
+    const navigation = document.querySelector<HTMLElement>(
+      'nav[aria-label="Workspace"]',
+    );
+    navigation?.addEventListener('click', selectWorkspace);
     session.setProvider(provider);
     void loadNetwork();
     const changed = () => {
@@ -195,7 +242,7 @@
       provider?.removeListener?.('accountsChanged', changed);
       provider?.removeListener?.('chainChanged', changed);
       provider?.removeListener?.('disconnect', changed);
-      window.removeEventListener('hashchange', syncView);
+      navigation?.removeEventListener('click', selectWorkspace);
       unsubscribe();
       session.dispose();
       clearEns();
