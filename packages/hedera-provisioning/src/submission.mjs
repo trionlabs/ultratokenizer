@@ -3,13 +3,13 @@ import { open, unlink, lstat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import {
-  Client,
   EthereumTransaction,
   FileAppendTransaction,
   FileCreateTransaction,
   PublicKey,
   Transaction,
 } from '@hiero-ledger/sdk';
+import { testnetClient } from './testnet-client.mjs';
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const fail = () => {
@@ -58,12 +58,6 @@ async function append(handle, event) {
     offset += bytesWritten;
   }
   await handle.sync();
-}
-function testnetClient() {
-  return Client.forTestnet({ scheduleNetworkUpdate: false })
-    .setTransportSecurity(true)
-    .setMaxAttempts(1)
-    .setRequestTimeout(15_000);
 }
 function transactionKind(transaction) {
   if (transaction instanceof FileCreateTransaction) return 'file_create';

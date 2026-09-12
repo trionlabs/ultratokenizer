@@ -4,6 +4,7 @@ import { mkdtemp, readFile, writeFile, stat, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PrivateKey, Transaction } from '@hiero-ledger/sdk';
+import { proto } from '@hiero-ledger/proto';
 import { privateKeyToAccount } from 'viem/accounts';
 import { keccak256 } from 'viem';
 import { prepareHfsCreation } from '../src/creation.mjs';
@@ -74,6 +75,58 @@ async function success(args, changes = {}) {
     ],
   });
 }
+
+await test('official HTTPS gRPC-Web dispatch preserves the durable signed transaction through the real SDK loop', async (t) => {
+  const args = await input();
+  let healthChecks = 0;
+  let submissions = 0;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (String(url).startsWith('https://testnet.mirrornode.hedera.com/'))
+      return success(args);
+    const endpoint = new URL(url);
+    assert.equal(endpoint.origin, 'https://testnet-node00-00-grpc.hedera.com');
+    assert.equal(options.method, 'POST');
+    assert.equal(options.headers['content-type'], 'application/grpc-web+proto');
+    if (endpoint.pathname === '/') {
+      healthChecks++;
+      assert.equal(options.body.length, 0);
+      return new Response(null, { headers: { 'grpc-status': '12' } });
+    }
+    assert.equal(endpoint.pathname, '/proto.FileService/createFile');
+    submissions++;
+    const records = (await readFile(args.journalPath, 'utf8'))
+      .trim()
+      .split('\n')
+      .map(JSON.parse);
+    assert.equal(records[1].kind, 'dispatch');
+    const durable = proto.TransactionList.decode(
+      Buffer.from(records[0].signedBytes, 'base64'),
+    ).transactionList[0];
+    const frame = Buffer.from(options.body);
+    assert.equal(frame[0], 0);
+    assert.equal(frame.readUInt32BE(1), frame.length - 5);
+    const actual = proto.Transaction.decode(frame.subarray(5));
+    assert.deepEqual(
+      actual.signedTransactionBytes,
+      durable.signedTransactionBytes,
+    );
+    const payload = proto.TransactionResponse.encode({
+      nodeTransactionPrecheckCode: 0,
+    }).finish();
+    const response = Buffer.alloc(payload.length + 5);
+    response.writeUInt32BE(payload.length, 1);
+    response.set(payload, 5);
+    return new Response(response, {
+      headers: { 'content-type': 'application/grpc-web+proto' },
+    });
+  });
+  const result = await submitHfsOnce(args);
+  assert.equal(result.kind, 'mirror_observation');
+  assert.equal(result.status, 'SUCCESS');
+  await recoverHfsSubmission(args.journalPath);
+  assert.equal(healthChecks, 1);
+  assert.equal(submissions, 1);
+});
 
 await test('persists exact signed native bytes before one dispatch and never signs or sends twice', async (t) => {
   const args = await input();

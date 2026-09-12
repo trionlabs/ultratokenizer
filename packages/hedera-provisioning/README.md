@@ -1,5 +1,7 @@
 # Hedera HFS creation transport
 
+Native writes and paid readback use the pinned Hiero SDK's published browser client over official testnet HTTPS gRPC-Web endpoints. Only that SDK entry is selected; Node's global `browser` condition is not enabled. The client has no operator, one SDK attempt, and a 15-second request timeout. A transport failure enters recovery for the original native ID; it never switches transports and signs a replacement. The submission test exercises the real SDK execution loop and HTTPS frame with intercepted responses, checking that the dispatched signed body was already saved in the journal. This test does not prove live consensus acceptance.
+
 This Node-only package preserves an independently approved, signed Ethereum creation while moving its large input through Hedera File Service. It uses the official Hiero SDK 2.88.0 and viem 2.56.3, pinned by the package lock. It accepts Hedera testnet (chain 296) only. No default payer, keys, deployed addresses or automatic registration are provided.
 
 The lock also pins `@hiero-ledger/proto` to protobufjs 8.8.0 and all `ws` consumers to 8.21.3 through explicit overrides. The SDK's original dependency tree included versions covered by published advisories. These maintained patches retain the SDK version; the signing, serialization, recovery and actual ATS input tests pass with them. The 2026-09-11 npm audit reported zero known advisories for the resulting 120-package tree. This is a dated dependency check, not a security guarantee.

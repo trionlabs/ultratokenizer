@@ -4,7 +4,6 @@ import { dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import {
   AccountId,
-  Client,
   FileContentsQuery,
   Hbar,
   PublicKey,
@@ -14,6 +13,7 @@ import {
 } from '@hiero-ledger/sdk';
 import { proto } from '@hiero-ledger/proto';
 import sdkPackage from '@hiero-ledger/sdk/package.json' with { type: 'json' };
+import { testnetClient } from './testnet-client.mjs';
 
 const FORMAT = 'ultratokenizer.hfs-readback.v1';
 const MAX_BYTES = 131072;
@@ -312,10 +312,7 @@ export async function readHfsContentsOnce({ journalPath, input, signer }) {
       };
       await append(journal, signed);
       const query = new RecordedPaymentQuery(config, encodedQuery);
-      client = Client.forTestnet({ scheduleNetworkUpdate: false })
-        .setTransportSecurity(true)
-        .setMaxAttempts(1)
-        .setRequestTimeout(15000);
+      client = testnetClient();
       await append(journal, {
         kind: 'dispatch',
         transactionId: config.transactionId,
