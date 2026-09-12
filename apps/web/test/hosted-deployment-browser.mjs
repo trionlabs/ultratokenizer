@@ -51,6 +51,9 @@ try {
     await expect(page.getByRole('dialog')).toHaveCount(0);
     if (scenario === 'ready') {
       await expect(page.locator('.header-wallet')).toBeEnabled();
+      await expect(page.locator('.live-footer')).toContainText(
+        'Proofs and transaction details are public.',
+      );
       await expect(page.locator('.activity-rail')).toContainText(
         'Hedera testnet',
       );
@@ -70,6 +73,9 @@ try {
       await expect(page.locator('.proof-sheet')).toContainText('1.000 g');
     } else {
       await expect(page.locator('.header-wallet')).toBeEnabled();
+      await expect(page.locator('.live-footer')).toContainText(
+        'Connecting a wallet does not sign or mint.',
+      );
       await expect(page.locator('.activity-rail')).toHaveCount(0);
       await expect(
         page.getByLabel('Import issuance bundle', { exact: true }),
@@ -113,6 +119,80 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
   }
+  const switching = await browser.newPage();
+  const switchDeployment = {
+    ...fixture.deployment,
+    rpcUrl: new URL('rpc', base).href,
+  };
+  await switching.addInitScript((recipient) => {
+    let chain = '0x1';
+    let known = false;
+    window.walletCalls = [];
+    window.ethereum = {
+      async request({ method }) {
+        window.walletCalls.push(method);
+        if (method === 'eth_requestAccounts' || method === 'eth_accounts')
+          return [recipient];
+        if (method === 'eth_chainId') return chain;
+        if (method === 'wallet_switchEthereumChain') {
+          if (!known) throw { code: 4902 };
+          chain = '0x128';
+          return null;
+        }
+        if (method === 'wallet_addEthereumChain') {
+          known = true;
+          return null;
+        }
+        throw new Error(`Unexpected wallet call: ${method}`);
+      },
+    };
+  }, fixture.bundle.request.recipient);
+  await switching.route('**/*', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/deployment.json')
+      return route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify(switchDeployment),
+      });
+    if (url.pathname === '/rpc') {
+      const request = route.request().postDataJSON();
+      return route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: request.id,
+          result: request.method === 'eth_chainId' ? '0x128' : '0x',
+        }),
+      });
+    }
+    return route.continue();
+  });
+  await switching.goto(base, { waitUntil: 'networkidle' });
+  await switching.locator('.header-wallet').click();
+  await expect(switching.locator('.header-wallet')).toHaveText(
+    'Switch to testnet',
+  );
+  await switching.locator('.header-wallet').click();
+  await expect(switching.locator('.header-wallet')).toHaveText(
+    /0x[0-9A-Fa-f]{4}…/,
+  );
+  assert.deepEqual(
+    (await switching.evaluate(() => window.walletCalls)).filter((method) =>
+      method.startsWith('wallet_'),
+    ),
+    [
+      'wallet_switchEthereumChain',
+      'wallet_addEthereumChain',
+      'wallet_switchEthereumChain',
+    ],
+  );
+  assert.equal(
+    (await switching.evaluate(() => window.walletCalls)).some((method) =>
+      method.startsWith('eth_send'),
+    ),
+    false,
+  );
+  await switching.close();
   const stalled = await browser.newPage();
   await stalled.route('**/_app/immutable/entry/start.*.js', (route) =>
     route.abort('failed'),

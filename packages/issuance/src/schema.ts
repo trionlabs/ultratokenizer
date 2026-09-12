@@ -41,6 +41,8 @@ const messages = {
     'Enter the full nonzero 32-byte transaction hash from the wallet that submitted this operation.',
   wallet_rejected:
     'The wallet request was declined. No authorization was returned.',
+  wallet_network_unavailable:
+    'This wallet could not add or switch to Hedera testnet. Select it in your wallet settings, then reconnect.',
   transaction_declined:
     'The wallet reported a transaction rejection without a hash. Retain the original intent and check wallet activity before another submission.',
   transaction_reverted: 'The transaction reverted and did not complete.',

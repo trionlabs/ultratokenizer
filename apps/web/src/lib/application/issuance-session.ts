@@ -95,6 +95,28 @@ export function createIssuanceSession(
   let foreground: symbol | undefined;
   let delayed: { id: symbol; operation: Operation } | undefined;
   const listeners = new Set<(value: IssuanceSnapshot) => void>();
+  function providerCode(error: unknown) {
+    return error && typeof error === 'object' && 'code' in error
+      ? error.code
+      : undefined;
+  }
+  async function observedWallet(
+    currentProvider: EIP1193Provider,
+    requestAccess: boolean,
+  ): Promise<ConnectedWallet> {
+    const addresses = await currentProvider.request({
+      method: requestAccess ? 'eth_requestAccounts' : 'eth_accounts',
+    });
+    if (!Array.isArray(addresses) || !addresses[0])
+      throw new IssuanceClientError('wrong_account');
+    const chainId = await currentProvider.request({ method: 'eth_chainId' });
+    if (typeof chainId !== 'string' || !/^0x[0-9a-f]+$/i.test(chainId))
+      throw new IssuanceClientError('wrong_chain');
+    return Object.freeze({
+      address: getAddress(addresses[0]),
+      chainId: BigInt(chainId).toString(),
+    });
+  }
   function update(patch: Partial<IssuanceSnapshot>) {
     if (disposed) return;
     state = Object.freeze({ ...state, ...patch });
@@ -401,10 +423,7 @@ export function createIssuanceSession(
       canReplace();
       const deployment = parseDeploymentConfig(text);
       parseBrowserRpcUrl(deployment.rpcUrl);
-      const wallet =
-        state.wallet?.chainId === deployment.auditPolicy.chainId
-          ? state.wallet
-          : undefined;
+      const wallet = state.wallet;
       client = undefined;
       tokenAttempted = undefined;
       resetChecks();
@@ -438,24 +457,93 @@ export function createIssuanceSession(
         const currentProvider = provider;
         if (!currentProvider) throw new IssuanceClientError('wrong_account');
         let wallet: ConnectedWallet;
-        if (state.deployment) wallet = await requireClient().connect();
-        else {
-          const addresses = await currentProvider.request({
-            method: 'eth_requestAccounts',
-          });
-          if (!Array.isArray(addresses) || !addresses[0])
-            throw new IssuanceClientError('wrong_account');
-          const chainId = await currentProvider.request({
-            method: 'eth_chainId',
-          });
-          if (typeof chainId !== 'string' || !/^0x[0-9a-f]+$/i.test(chainId))
-            throw new IssuanceClientError('wrong_chain');
-          wallet = Object.freeze({
-            address: getAddress(addresses[0]),
-            chainId: BigInt(chainId).toString(),
-          });
+        if (state.deployment) {
+          try {
+            wallet = await requireClient().connect();
+          } catch (error) {
+            if (
+              error instanceof IssuanceClientError &&
+              error.code === 'wrong_chain'
+            ) {
+              const observed = await observedWallet(currentProvider, false);
+              if (provider === currentProvider && !state.pendingOperation)
+                update({ wallet: observed });
+            }
+            throw error;
+          }
+        } else {
+          wallet = await observedWallet(currentProvider, true);
         }
-        if (unchanged(revision)) update({ wallet });
+        if (provider === currentProvider && unchanged(revision))
+          update({ wallet });
+      });
+    },
+    switchToTestnet() {
+      canReplace();
+      return run('connecting', async () => {
+        const currentProvider = provider;
+        const deployment = state.deployment;
+        const expected = state.wallet;
+        if (
+          !currentProvider ||
+          deployment?.auditPolicy.chainId !== '296' ||
+          !expected
+        )
+          throw new IssuanceClientError('wrong_chain');
+        const chainId = '0x128';
+        const switchChain = () =>
+          currentProvider.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId }],
+          });
+        try {
+          await switchChain();
+        } catch (error) {
+          if (providerCode(error) === 4001)
+            throw new IssuanceClientError('wallet_rejected');
+          if (providerCode(error) !== 4902)
+            throw new IssuanceClientError('wallet_network_unavailable');
+          try {
+            await currentProvider.request({
+              method: 'wallet_addEthereumChain',
+              params: [
+                {
+                  chainId,
+                  chainName: 'Hedera Testnet',
+                  nativeCurrency: {
+                    name: 'HBAR',
+                    symbol: 'HBAR',
+                    decimals: 18,
+                  },
+                  rpcUrls: ['https://testnet.hashio.io/api'],
+                  blockExplorerUrls: ['https://hashscan.io/testnet'],
+                },
+              ],
+            });
+            await switchChain();
+          } catch (addError) {
+            if (providerCode(addError) === 4001)
+              throw new IssuanceClientError('wallet_rejected');
+            throw new IssuanceClientError('wallet_network_unavailable');
+          }
+        }
+        const observed = await observedWallet(currentProvider, false);
+        if (observed.chainId !== '296')
+          throw new IssuanceClientError('wrong_chain');
+        if (observed.address !== expected.address) {
+          update({ wallet: undefined });
+          throw new IssuanceClientError('wrong_account');
+        }
+        if (provider !== currentProvider || state.deployment !== deployment)
+          throw new IssuanceClientError('wrong_account');
+        update({ wallet: observed });
+        const verified = await requireClient().connect();
+        if (verified.address !== expected.address) {
+          update({ wallet: undefined });
+          throw new IssuanceClientError('wrong_account');
+        }
+        if (provider === currentProvider && state.deployment === deployment)
+          update({ wallet: verified });
       });
     },
     check() {

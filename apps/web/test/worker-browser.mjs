@@ -527,7 +527,7 @@ try {
     unsupported
       .locator('.stage-action')
       .getByRole('button', { name: 'Connect wallet', exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await expect(
     unsupported.getByRole('button', { name: 'Mint 1.000 g' }),
   ).toHaveCount(0);

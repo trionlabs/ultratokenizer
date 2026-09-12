@@ -73,7 +73,7 @@ try {
   const tokenWorkspace = page.locator('.transfer-stage');
   await expect(associate).toHaveCount(0);
   await expect(connect).toHaveText('Connect wallet');
-  await expect(connect).toBeDisabled();
+  await expect(connect).toBeEnabled();
   await page.getByRole('link', { name: 'Transfer', exact: true }).click();
   await expect(tokenWorkspace).toContainText(
     'Send any amount in 0.001 g units.',
@@ -82,12 +82,12 @@ try {
   const invalid = structuredClone(ats.deployment);
   delete invalid.backend.admission;
   await upload(page, 'Import deployment configuration', invalid);
-  await expect(page.locator('.activity-rail .inline-error')).toContainText(
+  await expect(page.locator('.engine-stage .inline-error')).toContainText(
     'An independent, complete deployment configuration is required.',
   );
-  await expect(connect).toBeDisabled();
+  await expect(connect).toBeEnabled();
   await expect(associate).toHaveCount(0);
-  await expect(page.locator('.session-list')).toContainText('Not loaded');
+  await expect(page.locator('.activity-rail')).toHaveCount(0);
 
   for (const deployment of [
     hts.deployment,
@@ -167,7 +167,9 @@ try {
 
   // A rejected replacement cannot change an already imported backend or claim.
   await upload(page, 'Import deployment configuration', invalid);
-  await expect(page.locator('.activity-rail .inline-error')).toBeVisible();
+  await expect(page.locator('.engine-stage .inline-error')).toContainText(
+    'An independent, complete deployment configuration is required.',
+  );
   await expect(associate).toHaveCount(0);
   await expect(page.locator('.technical-details')).toContainText(
     'ATS · EVM token',

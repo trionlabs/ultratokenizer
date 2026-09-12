@@ -114,8 +114,140 @@ test('connecting before deployment requests only wallet access and keeps issuanc
   });
   await wrongChain.connect();
   wrongChain.loadDeployment(JSON.stringify(fixture.deployment));
-  assert.equal(wrongChain.read().wallet, undefined);
+  assert.equal(wrongChain.read().wallet.chainId, '1');
   wrongChain.dispose();
+});
+
+test('explicit Hedera testnet switch adds an unknown chain, switches again and rechecks account and chain', async () => {
+  const fixture = await createFixture();
+  const calls = [];
+  let known = false;
+  let chain = '0x1';
+  let session;
+  let clientChecks = 0;
+  session = createIssuanceSession(() => ({
+    connect: async () => {
+      clientChecks++;
+      return { address: fixture.bundle.request.recipient, chainId: '296' };
+    },
+  }));
+  session.setProvider({
+    async request({ method, params }) {
+      calls.push(method);
+      if (method === 'eth_requestAccounts' || method === 'eth_accounts')
+        return [fixture.bundle.request.recipient];
+      if (method === 'eth_chainId') return chain;
+      if (method === 'wallet_addEthereumChain') {
+        assert.deepEqual(params[0], {
+          chainId: '0x128',
+          chainName: 'Hedera Testnet',
+          nativeCurrency: { name: 'HBAR', symbol: 'HBAR', decimals: 18 },
+          rpcUrls: ['https://testnet.hashio.io/api'],
+          blockExplorerUrls: ['https://hashscan.io/testnet'],
+        });
+        known = true;
+        return null;
+      }
+      if (method === 'wallet_switchEthereumChain') {
+        assert.deepEqual(params, [{ chainId: '0x128' }]);
+        if (!known) throw { code: 4902 };
+        chain = '0x128';
+        session.walletChanged();
+        return null;
+      }
+      throw new Error(`Unexpected method: ${method}`);
+    },
+  });
+  await session.connect();
+  assert.equal(session.read().wallet.chainId, '1');
+  assert.equal(clientChecks, 0);
+  await session.switchToTestnet();
+  assert.equal(
+    calls.filter((method) => method.startsWith('wallet_')).length,
+    0,
+  );
+  session.loadDeployment(JSON.stringify(fixture.deployment));
+  assert.equal(session.read().wallet.chainId, '1');
+  await session.switchToTestnet();
+  assert.deepEqual(
+    calls.filter((method) => method.startsWith('wallet_')),
+    [
+      'wallet_switchEthereumChain',
+      'wallet_addEthereumChain',
+      'wallet_switchEthereumChain',
+    ],
+  );
+  assert.equal(clientChecks, 1);
+  assert.equal(session.read().wallet.chainId, '296');
+  assert.equal(session.read().wallet.address, fixture.bundle.request.recipient);
+  assert.equal(session.read().transaction, undefined);
+  session.dispose();
+});
+
+test('a wrong-chain admitted connect retains the account for an explicit switch', async () => {
+  const fixture = await createFixture();
+  const calls = [];
+  const session = createIssuanceSession(() => ({
+    connect: async () => {
+      throw new IssuanceClientError('wrong_chain');
+    },
+  }));
+  session.setProvider({
+    async request({ method }) {
+      calls.push(method);
+      if (method === 'eth_accounts') return [fixture.bundle.request.recipient];
+      if (method === 'eth_chainId') return '0x1';
+      throw new Error(`Unexpected method: ${method}`);
+    },
+  });
+  session.loadDeployment(JSON.stringify(fixture.deployment));
+  await session.connect();
+  assert.deepEqual(calls, ['eth_accounts', 'eth_chainId']);
+  assert.equal(session.read().wallet.chainId, '1');
+  assert.match(session.read().error, /different chain/);
+  assert.equal(session.read().sourceProof, 'unchecked');
+  session.dispose();
+});
+
+test('declined or ineffective network switch cannot claim the wallet is on testnet', async () => {
+  const fixture = await createFixture();
+  for (const outcome of ['declined', 'unchanged']) {
+    const calls = [];
+    let clientChecks = 0;
+    const session = createIssuanceSession(() => ({
+      connect: async () => {
+        clientChecks++;
+        throw new Error('Should not validate a mismatched chain');
+      },
+    }));
+    session.setProvider({
+      async request({ method }) {
+        calls.push(method);
+        if (method === 'eth_requestAccounts' || method === 'eth_accounts')
+          return [fixture.bundle.request.recipient];
+        if (method === 'eth_chainId') return '0x1';
+        if (method === 'wallet_switchEthereumChain') {
+          if (outcome === 'declined') throw { code: 4001 };
+          return null;
+        }
+        throw new Error(`Unexpected method: ${method}`);
+      },
+    });
+    await session.connect();
+    session.loadDeployment(JSON.stringify(fixture.deployment));
+    await session.switchToTestnet();
+    assert.equal(session.read().wallet.chainId, '1');
+    assert.equal(clientChecks, 0);
+    assert.match(
+      session.read().error,
+      outcome === 'declined' ? /declined/ : /different chain/,
+    );
+    assert.equal(
+      calls.filter((method) => method === 'wallet_addEthereumChain').length,
+      0,
+    );
+    session.dispose();
+  }
 });
 
 test('browser deployment rejects HTTP IPv6 before replacing the imported session', async () => {

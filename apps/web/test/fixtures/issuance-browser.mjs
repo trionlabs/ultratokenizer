@@ -322,7 +322,7 @@ export async function exerciseIssuanceRecovery({
         .getByRole('button', { name: 'Connect wallet', exact: true })
         .click();
       await expect(page.locator('.stage-action')).toContainText(
-        'This wallet does not match.',
+        'The wallet network or address does not match.',
       );
       await expect(
         page.locator('.flow-rail [aria-current="step"]'),

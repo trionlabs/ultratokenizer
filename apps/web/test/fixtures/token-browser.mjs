@@ -262,9 +262,7 @@ export async function exerciseTokenRecovery({
           exact: true,
         }),
       ).toBeDisabled();
-      await expect(
-        page.getByRole('button', { name: 'Reconnect wallet', exact: true }),
-      ).toBeDisabled();
+      await expect(page.locator('.header-wallet')).toBeDisabled();
     }
     if (failure === 'decline')
       await expect(page.locator('.transfer-card .inline-error')).toContainText(

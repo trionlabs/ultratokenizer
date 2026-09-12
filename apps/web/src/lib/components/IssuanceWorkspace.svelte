@@ -52,10 +52,19 @@
       return;
     }
     walletHelp = false;
-    void session.connect();
+    void (walletNeedsTestnet ? session.switchToTestnet() : session.connect());
   }
 
   let connected = $derived(!!snapshot.wallet);
+  let walletNeedsTestnet = $derived(
+    connected &&
+      snapshot.deployment?.auditPolicy.chainId === '296' &&
+      snapshot.wallet?.chainId !== '296',
+  );
+  let walletOnConfiguredChain = $derived(
+    connected &&
+      snapshot.wallet?.chainId === snapshot.deployment?.auditPolicy.chainId,
+  );
   let busy = $derived(
     !!snapshot.busy || reading || resolving || networkStatus === 'loading',
   );
@@ -74,8 +83,7 @@
   );
   let request = $derived(snapshot.bundle?.request);
   let recipientConnected = $derived(
-    connected &&
-      snapshot.wallet?.chainId === snapshot.deployment?.auditPolicy.chainId &&
+    walletOnConfiguredChain &&
       snapshot.wallet?.address.toLowerCase() ===
         request?.recipient.toLowerCase(),
   );
@@ -297,12 +305,14 @@
     </nav>
     <button
       class="header-wallet"
-      disabled={busy || !!snapshot.pendingOperation}
+      disabled={busy || unresolved}
       onclick={connectWallet}
       title={snapshot.wallet?.address}
-      ><Glyph name="wallet" size={15} />{connected
-        ? `${snapshot.wallet?.address.slice(0, 6)}…${snapshot.wallet?.address.slice(-4)}`
-        : 'Connect wallet'}</button
+      ><Glyph name="wallet" size={15} />{walletNeedsTestnet
+        ? 'Switch to testnet'
+        : connected
+          ? `${snapshot.wallet?.address.slice(0, 6)}…${snapshot.wallet?.address.slice(-4)}`
+          : 'Connect wallet'}</button
     >
   </header>
   {#if walletHelp}
@@ -530,22 +540,33 @@
             <div class="action-copy">
               <span>02</span>
               <div>
-                <h2>Connect the recipient wallet</h2>
-                <p>The connected address must match the approved recipient.</p>
+                <h2>
+                  {walletNeedsTestnet
+                    ? 'Switch to Hedera testnet'
+                    : 'Connect the recipient wallet'}
+                </h2>
+                <p>
+                  {walletNeedsTestnet
+                    ? 'Your wallet is connected on another network.'
+                    : 'The connected address must match the approved recipient.'}
+                </p>
               </div>
             </div>
             <button
               class="primary-button wide-button"
-              disabled={!snapshot.providerAvailable || busy || unresolved}
-              onclick={() => session.connect()}
-              ><Glyph name="wallet" size={16} /> Connect wallet</button
+              disabled={busy || unresolved}
+              onclick={connectWallet}
+              ><Glyph name="wallet" size={16} />
+              {walletNeedsTestnet
+                ? 'Switch to Hedera testnet'
+                : 'Connect wallet'}</button
             >
             {#if !snapshot.providerAvailable}
               <p class="field-hint">No browser wallet detected.</p>
-            {:else if connected}
+            {:else if connected && !walletNeedsTestnet}
               <p class="field-hint">
-                This wallet does not match. Switch to the recipient account,
-                then connect again.
+                The wallet network or address does not match. Select the
+                recipient account and configured network, then connect again.
               </p>
             {/if}
             <small class="bound-recipient"
@@ -682,6 +703,13 @@
         </div>
       {:else}
         <div class="transfer-card">
+          {#if walletNeedsTestnet}
+            <button
+              class="secondary-button"
+              disabled={busy || unresolved}
+              onclick={connectWallet}>Switch to Hedera testnet</button
+            >
+          {/if}
           <div class="token-balance">
             <span>Wallet balance</span><strong
               >{snapshot.balanceMg === undefined
@@ -689,7 +717,7 @@
                 : `${formatGrams(snapshot.balanceMg)} g`}</strong
             ><button
               class="text-link"
-              disabled={!connected || busy || !!snapshot.pendingOperation}
+              disabled={!walletOnConfiguredChain || busy || unresolved}
               onclick={() => session.refreshBalance()}>Refresh</button
             >
           </div>
@@ -742,7 +770,7 @@
           {#if tokenBackend === 'hts'}
             <button
               class="secondary-button"
-              disabled={!connected || busy || unresolved}
+              disabled={!walletOnConfiguredChain || busy || unresolved}
               onclick={() => session.associate()}>Associate this token</button
             >
             <p class="field-hint">
@@ -807,7 +835,7 @@
           >
           <button
             class="primary-button wide-button"
-            disabled={!connected ||
+            disabled={!walletOnConfiguredChain ||
               !transferRecipient ||
               !transferAmount ||
               (!transferRecipient.startsWith('0x') && !ens) ||
@@ -991,8 +1019,10 @@
   </dialog>
 
   <footer class="live-footer">
-    <Glyph name="wallet" size={14} /> You sign in your wallet. Proofs and transaction
-    details are public.
+    <Glyph name="wallet" size={14} />
+    {snapshot.deployment
+      ? 'You sign in your wallet. Proofs and transaction details are public.'
+      : 'Connecting a wallet does not sign or mint.'}
     {#if !snapshot.deployment}
       <button class="text-link" onclick={openSetup}>Operator setup</button>
     {/if}
