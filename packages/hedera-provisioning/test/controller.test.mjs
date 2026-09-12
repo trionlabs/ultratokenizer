@@ -85,6 +85,7 @@ function network(t) {
     mirrorUnavailable: false,
     wrongContents: false,
     changedEntity: false,
+    result: 'SUCCESS',
   };
   t.mock.method(Transaction.prototype, 'execute', async function (client) {
     assert.equal(client.ledgerId.toString(), 'testnet');
@@ -125,8 +126,8 @@ function network(t) {
       nonce: 0,
       scheduled: false,
       consensus_timestamp: `${Math.floor(Date.now() / 1000)}.${String(state.nativeCalls).padStart(9, '0')}`,
-      result: 'SUCCESS',
-      entity_id: entityId,
+      result: state.result,
+      entity_id: state.result === 'SUCCESS' ? entityId : null,
     });
     if (state.lostNativeResponse) {
       state.lostNativeResponse = false;
@@ -197,6 +198,30 @@ function network(t) {
   };
   return state;
 }
+
+await test('recovered native failure retains its status and never authorizes another signature', async (t) => {
+  const args = await fixture();
+  const wire = network(t);
+  wire.result = 'INSUFFICIENT_TX_FEE';
+  wire.mirrorUnavailable = true;
+  const initialized = await initializeHfsController(args);
+  const input = {
+    journalPath: args.journalPath,
+    expectedPlanSha256: initialized.planSha256,
+    signer: wire.signer,
+  };
+  assert.equal((await advanceHfsController(input)).kind, 'unresolved');
+  wire.mirrorUnavailable = false;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const result = await advanceHfsController(input);
+    assert.equal(result.kind, 'failed');
+    assert.equal(result.status, 'INSUFFICIENT_TX_FEE');
+    assert.equal(result.completedSteps, 0);
+    assert.equal(result.fileId, null);
+  }
+  assert.equal(wire.signatures, 1);
+  assert.equal(wire.nativeCalls, 1);
+});
 
 await test('durable controller completes ordered ASCII HFS creation with one reservation per operation and read-only completed recovery', async (t) => {
   const args = await fixture();

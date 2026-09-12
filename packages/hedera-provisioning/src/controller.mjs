@@ -670,7 +670,12 @@ export async function advanceHfsController({
           accepted.status && accepted.status !== 'SUCCESS'
             ? 'failed'
             : 'step_recovered',
-          { step: pending.attempt.step },
+          {
+            step: pending.attempt.step,
+            ...(accepted.status && accepted.status !== 'SUCCESS'
+              ? { status: accepted.status }
+              : {}),
+          },
         );
       }
       check(typeof signer === 'function' && Date.now() < deadline);
