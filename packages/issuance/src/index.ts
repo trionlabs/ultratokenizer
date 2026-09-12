@@ -11,12 +11,14 @@ export {
   getTokenBackend,
   parseTransactionHash,
   assertBundleDeployment,
+  parsePreparedIssuanceRequest,
 } from './schema.js';
 export type {
   IssuanceBundle,
   DeploymentConfig,
   ConnectedWallet,
   ClaimProof,
+  PreparedIssuanceRequest,
 } from './schema.js';
 export {
   ISSUANCE_GATE_ABI,

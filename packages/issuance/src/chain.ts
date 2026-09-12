@@ -16,16 +16,23 @@ import {
   type Address,
 } from 'viem';
 import { isExplicitRpcRevert } from '../../audit/src/rpc-proof-verifier.js';
+import {
+  getIssuanceRequestDigest,
+  type IssuanceRequest,
+} from '../../domain/src/index.js';
 import { ISSUANCE_GATE_ABI, SP1_VERIFIER_ABI } from './abi.js';
 import { AtsBackendError, verifyAtsBackend } from './ats.js';
 import {
   parseDeploymentConfig,
   assertProofDeployment,
+  assertRequestDeployment,
+  assertPreparedDeployment,
   IssuanceClientError,
   nonzeroHash,
   parseTransactionHash,
   DEPLOYMENT_V2_FORMAT,
   type ClaimProof,
+  type PreparedIssuanceRequest,
 } from './schema.js';
 
 /** Inspect only bounded, named error links; never execute a provider error getter. */
@@ -289,8 +296,11 @@ export function createChainContext(input: {
       throw new IssuanceClientError('issuance_preflight_unavailable');
     }
   }
-  async function verifyEvidence(proof: ClaimProof) {
-    assertProofDeployment(proof, deployment);
+  async function verifyAuthority(
+    request: IssuanceRequest,
+    allowPaused = false,
+  ) {
+    assertRequestDeployment(request, deployment);
     const checkedBlock = await deploymentMatches();
     const block = checkedBlock ?? (await reader.getBlock());
     if (
@@ -338,12 +348,12 @@ export function createChainContext(input: {
       }),
     ]);
     if (
-      block.timestamp >= BigInt(proof.request.validUntil) ||
+      block.timestamp >= BigInt(request.validUntil) ||
       block.timestamp >= issuer[1]
     )
       throw new IssuanceClientError('expired');
     if (
-      paused ||
+      (paused && !allowPaused) ||
       issuer[2] ||
       getAddress(issuer[0]) !== policy.issuerAddress ||
       selected[4] ||
@@ -384,6 +394,96 @@ export function createChainContext(input: {
       keccak256(adapterCode) !== rights[2]
     )
       throw new IssuanceClientError('deployment_mismatch');
+    await assertCanonical(block);
+    return { block, issuer, pool, selected, rights, gatePaused: paused };
+  }
+
+  async function verifyPrepared(
+    prepared: PreparedIssuanceRequest,
+    reservationMode: 'unreserved' | 'resumable' | 'completed' = 'unreserved',
+  ) {
+    assertPreparedDeployment(prepared, deployment);
+    // Prepared requests never establish proof acceptance. The Gate permits
+    // reservations while paused; verifyEvidence still forbids paused issuance.
+    const snapshot = await verifyAuthority(prepared.request, true);
+    const { block, issuer, pool, selected, rights } = snapshot;
+    if (
+      selected[3] !== prepared.policyTermsHash ||
+      rights[3] !== prepared.rightsTermsHash
+    )
+      throw new IssuanceClientError('deployment_mismatch');
+    if (BigInt(prepared.request.validUntil) > issuer[1])
+      throw new IssuanceClientError('expired');
+    if (reservationMode !== 'completed') {
+      const r = prepared.request;
+      const used = await Promise.all([
+        reader.readContract({
+          address: policy.gate,
+          abi: ISSUANCE_GATE_ABI,
+          functionName: 'usedRequests',
+          args: [getIssuanceRequestDigest(r)],
+          blockNumber: block.number,
+        }),
+        reader.readContract({
+          address: policy.gate,
+          abi: ISSUANCE_GATE_ABI,
+          functionName: 'usedRequestIds',
+          args: [r.requestId],
+          blockNumber: block.number,
+        }),
+        reader.readContract({
+          address: policy.gate,
+          abi: ISSUANCE_GATE_ABI,
+          functionName: 'usedClaims',
+          args: [r.claimUsageId],
+          blockNumber: block.number,
+        }),
+        reader.readContract({
+          address: policy.gate,
+          abi: ISSUANCE_GATE_ABI,
+          functionName: 'usedHolderNonces',
+          args: [r.recipient, BigInt(r.nonce)],
+          blockNumber: block.number,
+        }),
+      ]);
+      if (used.some(Boolean)) throw new IssuanceClientError('already_used');
+      const reservation = await reader.readContract({
+        address: policy.gate,
+        abi: ISSUANCE_GATE_ABI,
+        functionName: 'reservations',
+        args: [r.issuerId, r.reservationId],
+        blockNumber: block.number,
+      });
+      if (reservation[0] === zeroAddress) {
+        if (pool[1] + pool[2] + BigInt(r.amount) > pool[0])
+          throw new IssuanceClientError('capacity_exceeded');
+      } else {
+        if (
+          reservationMode !== 'resumable' ||
+          getAddress(reservation[0]) !== r.recipient ||
+          getAddress(reservation[1]) !== r.token ||
+          reservation[2] !== BigInt(r.amount) ||
+          reservation[3] !== 0n ||
+          reservation[4] !== BigInt(r.validUntil) ||
+          reservation[5] ||
+          reservation[6] !== getIssuanceRequestDigest(r) ||
+          reservation[7] !== r.claimUsageId ||
+          reservation[8]
+        )
+          throw new IssuanceClientError('reservation_mismatch');
+        if (pool[1] < BigInt(r.amount) || pool[1] + pool[2] > pool[0])
+          throw new IssuanceClientError('capacity_exceeded');
+      }
+    }
+    await assertCanonical(block);
+    return snapshot;
+  }
+
+  async function verifyEvidence(proof: ClaimProof) {
+    assertProofDeployment(proof, deployment);
+    const snapshot = await verifyAuthority(proof.request);
+    const { block } = snapshot;
+    const blockNumber = block.number;
     let rejected = false;
     try {
       await reader.readContract({
@@ -400,7 +500,7 @@ export function createChainContext(input: {
     }
     await assertCanonical(block);
     if (rejected) throw new IssuanceClientError('invalid_proof');
-    return { block, issuer, pool };
+    return snapshot;
   }
 
   return {
@@ -416,6 +516,7 @@ export function createChainContext(input: {
     walletPrompt,
     preflight,
     verifyEvidence,
+    verifyPrepared,
     assertCanonical,
   };
 }

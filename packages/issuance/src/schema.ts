@@ -96,6 +96,14 @@ export type ClaimProof = Pick<
   IssuanceBundle,
   'request' | 'publicValues' | 'proofBytes' | 'programVKey'
 >;
+/** Reviewed request context before a proof exists; this is never proof acceptance. */
+export type PreparedIssuanceRequest = Readonly<{
+  request: IssuanceRequest;
+  sourceId: Hex;
+  signerFingerprint: Hex;
+  policyTermsHash: Hex;
+  rightsTermsHash: Hex;
+}>;
 type DeploymentFields = Readonly<{
   purpose: 'test' | 'production';
   rpcUrl: string;
@@ -183,6 +191,60 @@ export function rpcUrl(input: unknown): string {
   )
     throw new Error();
   return url.toString();
+}
+
+export function parsePreparedIssuanceRequest(
+  input: unknown,
+): PreparedIssuanceRequest {
+  try {
+    const value = record(bounded(input, 16 * 1024), [
+      'request',
+      'sourceId',
+      'signerFingerprint',
+      'policyTermsHash',
+      'rightsTermsHash',
+    ]);
+    const request = parseIssuanceRequest(value.request);
+    if (BigInt(request.amount) > 9223372036854775807n) throw new Error();
+    return Object.freeze({
+      request,
+      sourceId: nonzeroHash(value.sourceId),
+      signerFingerprint: nonzeroHash(value.signerFingerprint),
+      policyTermsHash: nonzeroHash(value.policyTermsHash),
+      rightsTermsHash: nonzeroHash(value.rightsTermsHash),
+    });
+  } catch {
+    throw new IssuanceClientError('invalid_bundle');
+  }
+}
+
+export function assertRequestDeployment(
+  request: IssuanceRequest,
+  deployment: DeploymentConfig,
+): void {
+  const p = deployment.auditPolicy;
+  if (
+    request.chainId !== p.chainId ||
+    request.gate !== p.gate ||
+    request.token !== p.token ||
+    request.issuerId !== p.issuerId ||
+    request.policyVersion !== p.policyVersion ||
+    request.rightsVersion !== p.rightsVersion
+  )
+    throw new IssuanceClientError('deployment_mismatch');
+}
+
+export function assertPreparedDeployment(
+  prepared: PreparedIssuanceRequest,
+  deployment: DeploymentConfig,
+): void {
+  assertRequestDeployment(prepared.request, deployment);
+  if (
+    prepared.sourceId !== deployment.auditPolicy.sourceId ||
+    prepared.signerFingerprint !==
+      deployment.auditPolicy.sourceSignerFingerprint
+  )
+    throw new IssuanceClientError('deployment_mismatch');
 }
 
 /** An export's status label is not trusted; the issuer rechecks its proof against pinned contracts. */

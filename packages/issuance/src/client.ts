@@ -11,6 +11,7 @@ import {
   getIssuanceRequestTypedData,
   getIssuerPermitDigest,
   ISSUED_EVENT_ABI,
+  type IssuanceRequest,
 } from '../../domain/src/index.js';
 import { createChainContext } from './chain.js';
 import { createTokenOperations } from './token.js';
@@ -27,6 +28,8 @@ import {
   bytes,
   parseTransactionHash,
   type IssuanceBundle,
+  parsePreparedIssuanceRequest,
+  type PreparedIssuanceRequest,
 } from './schema.js';
 
 /** Real wallet/RPC orchestration. No default accounts, contract pins, proofs or successful states. */
@@ -47,6 +50,7 @@ export function createIssuanceClient(input: {
     send,
     walletPrompt,
     verifyEvidence,
+    verifyPrepared,
     assertCanonical,
     preflight,
   } = context;
@@ -99,14 +103,14 @@ export function createIssuanceClient(input: {
     return bundle;
   }
   async function checkedSignature(
-    bundle: IssuanceBundle,
+    request: IssuanceRequest,
     value: Hex,
   ): Promise<Hex> {
     const signature = bytes(value, 65, 65);
     if (
       !(await reader.verifyHash({
-        address: bundle.request.recipient,
-        hash: getIssuanceRequestDigest(bundle.request),
+        address: request.recipient,
+        hash: getIssuanceRequestDigest(request),
         signature,
       }))
     )
@@ -116,7 +120,7 @@ export function createIssuanceClient(input: {
   async function simulation(value: unknown, holderSignature: Hex) {
     const bundle = await validateBundle(value);
     const account = await activeAccount(bundle.request.recipient);
-    const signature = await checkedSignature(bundle, holderSignature);
+    const signature = await checkedSignature(bundle.request, holderSignature);
     const simulated = await reader.simulateContract({
       account,
       address: policy.gate,
@@ -143,6 +147,69 @@ export function createIssuanceClient(input: {
       });
     },
     validate: (value: unknown) => preflight(() => validateBundle(value)),
+    prepareRequest(
+      value: unknown,
+    ): Promise<
+      Readonly<{ prepared: PreparedIssuanceRequest; gatePaused: boolean }>
+    > {
+      return preflight(async () => {
+        const prepared = parsePreparedIssuanceRequest(value);
+        const { gatePaused } = await verifyPrepared(prepared);
+        await activeAccount(prepared.request.recipient);
+        return Object.freeze({ prepared, gatePaused });
+      });
+    },
+    signRequest(value: unknown): Promise<Hex> {
+      return preflight(async () => {
+        const prepared = parsePreparedIssuanceRequest(value);
+        await verifyPrepared(prepared);
+        const account = await activeAccount(prepared.request.recipient);
+        const signature = await walletPrompt(() =>
+          wallet.signTypedData({
+            account,
+            ...getIssuanceRequestTypedData(prepared.request),
+          }),
+        );
+        const checked = await checkedSignature(prepared.request, signature);
+        await verifyPrepared(prepared);
+        await activeAccount(prepared.request.recipient);
+        return checked;
+      });
+    },
+    restorePreparedRequest(value: unknown, holderSignature: Hex) {
+      return preflight(async () => {
+        const prepared = parsePreparedIssuanceRequest(value);
+        const { gatePaused } = await verifyPrepared(prepared, 'resumable');
+        await activeAccount(prepared.request.recipient);
+        const signature = await checkedSignature(
+          prepared.request,
+          holderSignature,
+        );
+        await activeAccount(prepared.request.recipient);
+        return Object.freeze({ prepared, gatePaused, signature });
+      });
+    },
+    acceptPreparedBundle(
+      value: unknown,
+      preparedValue: unknown,
+      holderSignature: Hex,
+    ): Promise<IssuanceBundle> {
+      return preflight(async () => {
+        const prepared = parsePreparedIssuanceRequest(preparedValue);
+        const bundle = bundleForDeployment(value);
+        if (
+          getIssuanceRequestDigest(bundle.request) !==
+          getIssuanceRequestDigest(prepared.request)
+        )
+          throw new IssuanceClientError('issuance_mismatch');
+        await verifyPrepared(prepared, 'completed');
+        await activeAccount(prepared.request.recipient);
+        await checkedSignature(prepared.request, holderSignature);
+        await validateBundle(bundle);
+        await activeAccount(prepared.request.recipient);
+        return bundle;
+      });
+    },
     sign(value: unknown): Promise<Hex> {
       return preflight(async () => {
         const bundle = await validateBundle(value);
@@ -153,7 +220,7 @@ export function createIssuanceClient(input: {
             ...getIssuanceRequestTypedData(bundle.request),
           }),
         );
-        const checked = await checkedSignature(bundle, signature);
+        const checked = await checkedSignature(bundle.request, signature);
         await activeAccount(bundle.request.recipient);
         return checked;
       });

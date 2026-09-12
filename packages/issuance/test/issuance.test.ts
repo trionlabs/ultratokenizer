@@ -40,6 +40,7 @@ import {
   createIssuanceClient,
   createIssuerClient,
   parseClaimProofExport,
+  parsePreparedIssuanceRequest,
   IssuanceClientError,
   resolveEnsRecipient,
   parseTokenTransactionIntent,
@@ -460,6 +461,11 @@ async function rpcFixture(t: TestContext, version: 'v1' | 'v2' = 'v1') {
     wrongIssuerSignature: false,
     reservedClaim: request.claimUsageId,
     proofError: null as null | { code: number; message: string; data?: string },
+    proofReads: 0,
+    sourceRevoked: false,
+    programRevoked: false,
+    paused: false,
+    signatureValid: true,
     receiptHash: hash,
     receiptTo: request.token,
     canonicalHash: blockHash,
@@ -601,7 +607,7 @@ async function rpcFixture(t: TestContext, version: 'v1' | 'v2' = 'v1') {
                   keccak256(verifierCode),
                   bundle.programVKey,
                   2,
-                  false,
+                  state.programRevoked,
                 ],
               });
               break;
@@ -609,7 +615,7 @@ async function rpcFixture(t: TestContext, version: 'v1' | 'v2' = 'v1') {
               result = encodeFunctionResult({
                 abi: ISSUANCE_GATE_ABI,
                 functionName: 'sourceKeys',
-                result: [word('bb'), false],
+                result: [word('bb'), state.sourceRevoked],
               });
               break;
             case 'rights':
@@ -629,7 +635,7 @@ async function rpcFixture(t: TestContext, version: 'v1' | 'v2' = 'v1') {
               result = encodeFunctionResult({
                 abi: ISSUANCE_GATE_ABI,
                 functionName: 'paused',
-                result: false,
+                result: state.paused,
               });
               break;
             case 'backingPools':
@@ -692,6 +698,7 @@ async function rpcFixture(t: TestContext, version: 'v1' | 'v2' = 'v1') {
               throw new Error('Unexpected Gate read');
           }
         } else if (to === policy.verifierAddress.toLowerCase()) {
+          state.proofReads++;
           assert.equal(
             call.params[1],
             '0x64',
@@ -743,7 +750,7 @@ async function rpcFixture(t: TestContext, version: 'v1' | 'v2' = 'v1') {
               result: true,
             });
           } else throw new Error('Unexpected token read');
-        } else result = '0x01'; // Deployless signature-verifier transport fixture.
+        } else result = state.signatureValid ? '0x01' : '0x00'; // Deployless signature-verifier transport fixture.
       } else if (call.method === 'eth_getTransactionReceipt') {
         result = {
           transactionHash: state.receiptHash,
@@ -1934,5 +1941,313 @@ await test('nonce changes during simulation and preflight RPC loss never request
         ),
       );
       assert.equal(state.sends, 0);
+    });
+});
+
+const preparedRequest = {
+  request,
+  sourceId: policy.sourceId,
+  signerFingerprint: policy.sourceSignerFingerprint,
+  policyTermsHash: word('01'),
+  rightsTermsHash: word('02'),
+};
+
+await test('prepared request authenticates authority and exact holder intent without inventing a proof or transaction', async (t) => {
+  const { state, client, holderSignature } = await rpcFixture(t);
+  state.reservationExists = false;
+  state.pending = 0n;
+  state.proofError = { code: 3, message: 'No proof exists yet' };
+  const parsed = await client.prepareRequest(preparedRequest);
+  assert.deepEqual(parsed, { prepared: preparedRequest, gatePaused: false });
+  assert.ok(Object.isFrozen(parsed));
+  assert.equal(await client.signRequest(parsed.prepared), holderSignature);
+  assert.equal(state.proofReads, 0);
+  assert.equal(state.sends, 0);
+  assert.equal(state.signs, 1);
+  assert.throws(
+    () => parsePreparedIssuanceRequest({ ...preparedRequest, verified: true }),
+    IssuanceClientError,
+  );
+  assert.throws(
+    () =>
+      parsePreparedIssuanceRequest({
+        ...preparedRequest,
+        request: { ...request, amount: '0' },
+      }),
+    IssuanceClientError,
+  );
+});
+
+await test('pre-proof preparation rejects mismatched scope and terms before any holder signature', async (t) => {
+  for (const [index, candidate] of [
+    { ...preparedRequest, request: { ...request, gate: issuer.address } },
+    { ...preparedRequest, sourceId: word('ab') },
+    { ...preparedRequest, signerFingerprint: word('ab') },
+    { ...preparedRequest, policyTermsHash: word('ab') },
+    { ...preparedRequest, rightsTermsHash: word('ab') },
+  ].entries())
+    await t.test(`binding ${index + 1}`, async (subtest) => {
+      const { state, client } = await rpcFixture(subtest);
+      state.reservationExists = false;
+      state.pending = 0n;
+      await assert.rejects(
+        client.signRequest(candidate),
+        hasCode('deployment_mismatch'),
+      );
+      assert.equal(state.signs, 0);
+      assert.equal(state.sends, 0);
+      assert.equal(state.proofReads, 0);
+    });
+});
+
+await test('pre-proof requests cannot bypass source/program admission, replay or caps', async (t) => {
+  for (const flag of [
+    'sourceRevoked',
+    'programRevoked',
+    'issuerRevoked',
+    'used',
+    'requestIdUsed',
+    'holderNonceUsed',
+    'cap',
+    'reservationExists',
+  ] as const)
+    await t.test(flag, async (subtest) => {
+      const { state, client } = await rpcFixture(subtest);
+      state.reservationExists = false;
+      state.pending = 0n;
+      if (flag === 'cap') state.cap = 0n;
+      else state[flag] = true;
+      await assert.rejects(
+        client.signRequest(preparedRequest),
+        IssuanceClientError,
+      );
+      assert.equal(state.signs, 0);
+      assert.equal(state.sends, 0);
+    });
+});
+
+await test('a changed wallet or request signature is rejected after the pre-proof prompt', async (t) => {
+  for (const change of ['wallet', 'signature'] as const)
+    await t.test(change, async (subtest) => {
+      const { state, client } = await rpcFixture(subtest);
+      state.reservationExists = false;
+      state.pending = 0n;
+      state.signatureValid = false;
+      if (change === 'wallet')
+        state.onSign = () => {
+          state.account = issuer.address;
+        };
+      const candidate =
+        change === 'signature'
+          ? {
+              ...preparedRequest,
+              request: {
+                ...request,
+                nonce: String(BigInt(request.nonce) + 1n),
+              },
+            }
+          : preparedRequest;
+      await assert.rejects(
+        client.signRequest(candidate),
+        hasCode(change === 'wallet' ? 'wrong_account' : 'invalid_signature'),
+      );
+      assert.equal(state.sends, 0);
+    });
+});
+
+await test('prepared bundle acceptance reuses one signature and still verifies the actual proof and permit', async (t) => {
+  const { state, client, holderSignature } = await rpcFixture(t);
+  assert.deepEqual(
+    await client.acceptPreparedBundle(bundle, preparedRequest, holderSignature),
+    parseIssuanceBundle(bundle),
+  );
+  assert.equal(state.signs, 0);
+  assert.equal(state.sends, 0);
+  assert.ok(state.proofReads > 0);
+  await assert.rejects(
+    client.acceptPreparedBundle(
+      bundle,
+      {
+        ...preparedRequest,
+        request: { ...request, nonce: String(BigInt(request.nonce) + 1n) },
+      },
+      holderSignature,
+    ),
+    hasCode('issuance_mismatch'),
+  );
+  state.proofError = { code: 3, message: 'execution reverted', data: '0x1234' };
+  await assert.rejects(
+    client.acceptPreparedBundle(bundle, preparedRequest, holderSignature),
+    hasCode('invalid_proof'),
+  );
+});
+
+await test('prepared reservation verifies holder approval and reserves before proof without minting', async (t) => {
+  const { state, issuerClient, holderSignature, hash } = await issuerFixture(
+    t,
+    false,
+  );
+  state.proofError = { code: 3, message: 'No proof exists yet' };
+  assert.equal(
+    await issuerClient.openPreparedReservation(
+      preparedRequest,
+      holderSignature,
+    ),
+    hash,
+  );
+  assert.equal(state.sentData, state.txData);
+  assert.equal(
+    decodeFunctionData({ abi: ISSUANCE_GATE_ABI, data: state.sentData })
+      .functionName,
+    'openReservation',
+  );
+  assert.equal(state.proofReads, 0);
+  assert.equal(state.signs, 0);
+  assert.equal(state.sends, 1);
+  state.reservationExists = true;
+  state.pending = BigInt(request.amount);
+  assert.equal(
+    (await issuerClient.waitPreparedReservation(preparedRequest, hash))
+      .requestDigest,
+    digest,
+  );
+  await assert.rejects(
+    issuerClient.openPreparedReservation(preparedRequest, holderSignature),
+    hasCode('reservation_mismatch'),
+  );
+  assert.equal(state.sends, 1);
+});
+
+await test('pre-proof issuer reservation rejects an absent or foreign holder signature and source', async (t) => {
+  for (const scenario of ['malformed', 'foreign', 'source'] as const)
+    await t.test(scenario, async (subtest) => {
+      const { state, issuerClient, holderSignature } = await issuerFixture(
+        subtest,
+        false,
+      );
+      state.signatureValid = false;
+      const signature =
+        scenario === 'malformed'
+          ? '0x01'
+          : scenario === 'foreign'
+            ? await issuer.signTypedData(getIssuanceRequestTypedData(request))
+            : holderSignature;
+      const candidate =
+        scenario === 'source'
+          ? { ...preparedRequest, sourceId: word('ab') }
+          : preparedRequest;
+      await assert.rejects(
+        issuerClient.openPreparedReservation(candidate, signature),
+        IssuanceClientError,
+      );
+      assert.equal(state.sends, 0);
+      assert.equal(state.signs, 0);
+      assert.equal(state.proofReads, 0);
+    });
+});
+
+await test('paused issuance permits request approval and reservation, never proof acceptance or mint', async (t) => {
+  const { state, client, issuerClient, holderSignature, hash } =
+    await issuerFixture(t, false);
+  state.paused = true;
+  state.account = holder.address;
+  state.signIssuer = false;
+  const preparation = await client.prepareRequest(preparedRequest);
+  assert.equal(preparation.gatePaused, true);
+  assert.equal(await client.signRequest(preparation.prepared), holderSignature);
+  assert.equal(state.proofReads, 0);
+  state.account = issuer.address;
+  assert.equal(
+    await issuerClient.openPreparedReservation(
+      preparedRequest,
+      holderSignature,
+    ),
+    hash,
+  );
+  state.reservationExists = true;
+  state.pending = BigInt(request.amount);
+  assert.equal(
+    (await issuerClient.waitPreparedReservation(preparedRequest, hash))
+      .requestDigest,
+    digest,
+  );
+  state.account = holder.address;
+  await assert.rejects(
+    client.acceptPreparedBundle(bundle, preparedRequest, holderSignature),
+    hasCode('deployment_mismatch'),
+  );
+  await assert.rejects(
+    client.simulate(bundle, holderSignature),
+    hasCode('deployment_mismatch'),
+  );
+  await assert.rejects(
+    client.submit(bundle, holderSignature),
+    hasCode('deployment_mismatch'),
+  );
+  assert.equal(state.sends, 1);
+  assert.equal(state.proofReads, 0);
+});
+
+await test('public job approval restores an exact reserved or unreserved request without prompting or proving', async (t) => {
+  for (const reserved of [true, false])
+    await t.test(String(reserved), async (subtest) => {
+      const { state, client, holderSignature } = await rpcFixture(subtest);
+      state.paused = true;
+      state.reservationExists = reserved;
+      state.pending = reserved ? BigInt(request.amount) : 0n;
+      const restored = await client.restorePreparedRequest(
+        preparedRequest,
+        holderSignature,
+      );
+      assert.deepEqual(restored, {
+        prepared: preparedRequest,
+        signature: holderSignature,
+        gatePaused: true,
+      });
+      assert.equal(state.signs, 0);
+      assert.equal(state.sends, 0);
+      assert.equal(state.proofReads, 0);
+    });
+});
+
+await test('restored approval rejects changed requests, wallets, signatures and other reservations', async (t) => {
+  for (const scenario of [
+    'digest',
+    'wallet',
+    'signature',
+    'claim',
+    'revoked',
+    'consumed',
+    'accounting',
+  ] as const)
+    await t.test(scenario, async (subtest) => {
+      const { state, client, holderSignature } = await rpcFixture(subtest);
+      state.signatureValid = false;
+      if (scenario === 'wallet') state.account = issuer.address;
+      if (scenario === 'claim') state.reservedClaim = word('ab');
+      if (scenario === 'revoked') state.reservationRevoked = true;
+      if (scenario === 'consumed') state.used = true;
+      if (scenario === 'accounting') state.pending = 0n;
+      const candidate =
+        scenario === 'digest'
+          ? {
+              ...preparedRequest,
+              request: {
+                ...request,
+                nonce: String(BigInt(request.nonce) + 1n),
+              },
+            }
+          : preparedRequest;
+      const signature =
+        scenario === 'signature'
+          ? await issuer.signTypedData(getIssuanceRequestTypedData(request))
+          : holderSignature;
+      await assert.rejects(
+        client.restorePreparedRequest(candidate, signature),
+        IssuanceClientError,
+      );
+      assert.equal(state.signs, 0);
+      assert.equal(state.sends, 0);
+      assert.equal(state.proofReads, 0);
     });
 });

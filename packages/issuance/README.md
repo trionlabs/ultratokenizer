@@ -16,7 +16,30 @@ and `ga\u0074e`. This check runs before object validation can lose their textual
 identity. Existing byte limits and sanitized parser error codes remain unchanged;
 valid escaping and field ordering preserve the canonical request digest.
 
-An `ultratokenizer.issuance-bundle.v1` contains only `request`, `permit`, `issuerSignature`, `publicValues`, `proofBytes` and `programVKey`, plus its format. `parseIssuanceBundle` checks structural and request binding; parsing alone does not verify cryptography. The request fixes the whole authenticated quantity, for example 1 g → exactly 1,000 mg. It is not an editable partial-mint amount. The exact on-chain reservation must exist before signing in this client; its recipient, token, full amount, request digest and claim usage ID are public even if issuance never succeeds. Documents and private witness material are not bundle fields.
+An `ultratokenizer.issuance-bundle.v1` contains only `request`, `permit`, `issuerSignature`, `publicValues`, `proofBytes` and `programVKey`, plus its format. `parseIssuanceBundle` checks structural and request binding; parsing alone does not verify cryptography. The request fixes the whole authenticated quantity, for example 1 g → exactly 1,000 mg. It is not an editable partial-mint amount. The bundle-based `sign` path requires the exact on-chain reservation; its recipient, token, full amount, request digest and claim usage ID are public even if issuance never succeeds. Documents and private witness material are not bundle fields.
+
+For document-first orchestration, `prepareRequest` accepts a `PreparedIssuanceRequest`: the canonical
+request, source ID, signer fingerprint and policy/rights terms hashes. It validates those bindings
+against the admitted deployment and current Gate records, replay state and available capacity, then
+returns `{ prepared, gatePaused }`. It does not authenticate document bytes or establish a proof.
+The source service must authenticate the document and its exact quantity independently.
+`signRequest(prepared)` obtains the holder's actual issuance EIP-712 signature before reservation or
+paid proving; it rechecks the account and authority after the prompt. The request's immutable
+policy/rights versions bind the checked terms. There is no separate login signature.
+
+Once the proof and fresh permit exist, `acceptPreparedBundle(bundle, prepared, holderSignature)`
+requires the same canonical request digest and valid holder signature, then performs the existing
+proof/permit/reservation checks. The caller reuses that signature for `simulate` and `submit`.
+Preparation and reservation may proceed while the Gate is paused, as the contract permits; proof
+acceptance, simulation and issuance remain blocked until the operator enables issuance. The web
+session invalidates active preparation and approval on wallet/deployment changes, and preserves
+unresolved transaction recovery before allowing document replacement. For refresh recovery,
+`restorePreparedRequest(prepared, holderSignature)` revalidates a persisted public approval against
+the connected holder, exact request, current authority and either an empty or matching unused
+reservation. It returns `{ prepared, signature, gatePaused }` without signing, sending or accepting
+a proof. Applications may retain that public job context in session storage; source PDFs and
+private witness material must not be included. Consumed, revoked, mismatched or expired jobs
+cannot be restored as new issuance authority.
 
 The supported portable signing/receipt path uses canonical 65-byte EOA signatures. The Gate's separate ERC-1271 support does not imply complete smart-wallet or counterfactual-account support in this browser/offline-audit workflow.
 
@@ -133,6 +156,15 @@ input, not trusted evidence. Existing reservations are never silently overwritte
 Keep the returned hash for `waitReservation(proofExport, hash)`, which checks historical code,
 canonical inclusion, exact calldata, institution sender and one matching `ReservationOpened` event.
 Its `kind: "reservation-opened"` observation is not a successful mint observation.
+
+`openPreparedReservation(prepared, holderSignature)` is the explicit pre-proof alternative for a
+trusted document/ledger service. It checks the holder's exact request signature and the same
+deployment, source, program, issuer, policy, rights, terms, replay and capacity constraints before
+simulating and submitting `openReservation`. It never calls the proof verifier or mints. Its
+caller must authenticate source bytes and reserve the exact stable right in the durable ledger
+first. `waitPreparedReservation(prepared, hash)` authenticates the same historical calldata and
+event, including while issuance is paused. Existing `openReservation` still verifies a real proof;
+the new path cannot supply a substitute proof to `signPermit` or holder issuance.
 
 `signPermit(proofExport, reservationHash, { nonce, validForSeconds })` requires that reservation
 evidence plus a fresh active/unused reservation. The caller supplies a persistent nonce and a

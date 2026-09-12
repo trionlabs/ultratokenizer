@@ -21,9 +21,12 @@ import {
   IssuanceClientError,
   bytes,
   parseClaimProofExport,
+  parsePreparedIssuanceRequest,
+  assertPreparedDeployment,
   parseIssuanceBundle,
   type ClaimProof,
   type IssuanceBundle,
+  type PreparedIssuanceRequest,
 } from './schema.js';
 
 /** Institution wallet operations. The trusted caller must first reserve the stable right in its durable ledger. */
@@ -39,12 +42,13 @@ export function createIssuerClient(input: {
     wallet,
     activeAccount,
     verifyEvidence,
+    verifyPrepared,
     assertCanonical,
     walletPrompt,
     preflight,
   } = context;
 
-  function reservationArgs(proof: ClaimProof) {
+  function reservationArgs(proof: Pick<ClaimProof, 'request'>) {
     const r = proof.request;
     return [
       r.issuerId,
@@ -58,7 +62,10 @@ export function createIssuerClient(input: {
       r.claimUsageId,
     ] as const;
   }
-  async function stateAt(proof: ClaimProof, blockNumber: bigint) {
+  async function stateAt(
+    proof: Pick<ClaimProof, 'request'>,
+    blockNumber: bigint,
+  ) {
     const r = proof.request;
     const [
       reservation,
@@ -109,7 +116,7 @@ export function createIssuerClient(input: {
     };
   }
   function exactReservation(
-    proof: ClaimProof,
+    proof: Pick<ClaimProof, 'request'>,
     reservation: Awaited<ReturnType<typeof stateAt>>['reservation'],
   ) {
     const r = proof.request;
@@ -144,6 +151,13 @@ export function createIssuerClient(input: {
     const proof = parseClaimProofExport(value);
     // Reconciliation works after expiry and without a currently connected institution wallet.
     assertProofDeployment(proof, deployment);
+    return waitRequestReservation(proof, transactionHash);
+  }
+
+  async function waitRequestReservation(
+    proof: Pick<ClaimProof, 'request'>,
+    transactionHash: Hex,
+  ) {
     const receipt = await context.canonicalReceipt(transactionHash);
     const [transaction, code, state] = await Promise.all([
       reader.getTransaction({ hash: receipt.transactionHash }),
@@ -265,6 +279,43 @@ export function createIssuerClient(input: {
         return simulated;
       });
       return context.send((sender) => sender.writeContract(simulated.request));
+    },
+    /** Caller authenticates the document and durable right. This reserves; it cannot mint or certify a proof. */
+    async openPreparedReservation(
+      value: unknown,
+      holderSignature: Hex,
+    ): Promise<Hex> {
+      const simulated = await preflight(async () => {
+        const prepared = parsePreparedIssuanceRequest(value);
+        const { block } = await verifyPrepared(prepared);
+        if (
+          !(await reader.verifyHash({
+            address: prepared.request.recipient,
+            hash: getIssuanceRequestDigest(prepared.request),
+            signature: bytes(holderSignature, 65, 65),
+            blockNumber: block.number,
+          }))
+        )
+          throw new IssuanceClientError('invalid_signature');
+        await assertCanonical(block);
+        const account = await activeAccount(policy.issuerAddress);
+        const simulated = await reader.simulateContract({
+          account,
+          address: policy.gate,
+          abi: ISSUANCE_GATE_ABI,
+          functionName: 'openReservation',
+          args: reservationArgs(prepared),
+        });
+        await activeAccount(policy.issuerAddress);
+        return simulated;
+      });
+      return context.send((sender) => sender.writeContract(simulated.request));
+    },
+    async waitPreparedReservation(value: unknown, transactionHash: Hex) {
+      const prepared: PreparedIssuanceRequest =
+        parsePreparedIssuanceRequest(value);
+      assertPreparedDeployment(prepared, deployment);
+      return waitRequestReservation(prepared, transactionHash);
     },
     waitReservation,
     async signPermit(
