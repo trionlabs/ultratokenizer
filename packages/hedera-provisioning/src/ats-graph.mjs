@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { graphCreationData } from './ats-creation.mjs';
 import { verifyBuild } from '../../../contracts/ats/scripts/verify-build.mjs';
 
 const LIBRARIES = [
@@ -121,6 +122,17 @@ export async function planAtsGraph({
     'ATS graph funding ceilings exceed the total budget.',
   );
 
+  // Address/hash values do not change ABI length; dynamic adapter bytes do.
+  const placeholderAddress = `0x${'11'.repeat(20)}`;
+  const measured = Object.fromEntries(
+    TOP_LEVEL.map((name) => [
+      name,
+      {
+        address: placeholderAddress,
+        runtimeHash: `0x${'22'.repeat(32)}`,
+      },
+    ]),
+  );
   const remaining = new Set(TOP_LEVEL);
   const steps = [];
   while (remaining.size) {
@@ -145,25 +157,33 @@ export async function planAtsGraph({
       name === 'AtsGateProfile'
         ? [...LIBRARIES, ...FACETS, 'IssuanceGate']
         : links(artifact);
+    const creationInputBytes =
+      (graphCreationData({
+        name,
+        artifacts,
+        deployed: measured,
+        governor: placeholderAddress,
+        facetOrder: PROFILE_FACETS,
+        libraryOrder: PROFILE_LIBRARIES,
+      }).length -
+        2) /
+      2;
     steps.push({
       index: steps.length,
       name,
       dependencies,
       artifactSha256: record.sha256,
       creationTemplateBytes: record.creationBytes,
+      creationInputBytes,
       runtimeTemplateBytes: record.runtimeBytes,
       transport:
-        record.creationBytes > 24 * 1024 ? 'hfs_required' : 'inline_candidate',
+        creationInputBytes > 24 * 1024 ? 'hfs_required' : 'inline_candidate',
       maxFundingTinybar: amounts[name].toString(),
     });
     remaining.delete(name);
   }
   assert.equal(steps.length, 16);
   assert.equal(steps.at(-1).name, 'AtsGateProfile');
-  assert.equal(
-    steps.filter((step) => step.transport === 'hfs_required').length,
-    1,
-  );
   const plan = {
     format: 'ultratokenizer.ats-graph-offline.v1',
     chainId: '296',

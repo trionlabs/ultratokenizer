@@ -6,7 +6,6 @@ import { setTimeout } from 'node:timers/promises';
 import {
   createPublicClient,
   createWalletClient,
-  encodeDeployData,
   getAddress,
   getContractAddress,
   http,
@@ -16,6 +15,7 @@ import {
 } from 'viem';
 import { verifyBuild } from '../../../contracts/ats/scripts/verify-build.mjs';
 import { planAtsGraph } from './ats-graph.mjs';
+import { graphCreationData } from './ats-creation.mjs';
 
 async function localEvm() {
   // No dev keys, inherited RPC settings, fork, or external signing provider.
@@ -80,29 +80,6 @@ async function localEvm() {
   throw Error('A fresh local Anvil process could not start.');
 }
 
-function linkCreation(artifact, deployed) {
-  let data = artifact.bytecode.object;
-  for (const libraries of Object.values(artifact.bytecode.linkReferences)) {
-    for (const [name, offsets] of Object.entries(libraries)) {
-      const target = deployed[name]?.address;
-      assert.ok(
-        target,
-        `Library ${name} was not prepared before its consumer.`,
-      );
-      for (const offset of offsets) {
-        assert.equal(offset.length, 20);
-        assert.ok(
-          offset.start >= 0 && 2 + (offset.start + 20) * 2 <= data.length,
-        );
-        const start = 2 + offset.start * 2;
-        data = data.slice(0, start) + target.slice(2) + data.slice(start + 40);
-      }
-    }
-  }
-  assert.match(data, /^0x[0-9a-fA-F]+$/);
-  return data;
-}
-
 /** Execute exact constructors in a fresh local EVM using public identities only.
  * This measures linked runtimes/immutables, not Hedera fees or chain admission.
  */
@@ -139,30 +116,19 @@ export async function prepareAtsGraph({
     await rpc.request({ method: 'anvil_impersonateAccount', params: [sender] });
     const deployed = {};
     const creations = [];
-    const pin = (name) => ({
-      target: deployed[name].address,
-      codeHash: deployed[name].runtimeHash,
-    });
     for (const step of inventory.topLevelCreations) {
       const artifact = artifacts[step.name];
       const nonce = BigInt(startNonce) + BigInt(step.index);
       const address = getContractAddress({ from: sender, nonce });
-      const args =
-        step.name === 'IssuanceGate'
-          ? [governor]
-          : step.name === 'AtsGateProfile'
-            ? [
-                deployed.IssuanceGate.address,
-                inventory.profileConstructorFacetOrder.map(pin),
-                inventory.profileConstructorLibraryOrder.map(pin),
-                artifacts.AtsGateMintAdapter.bytecode.object,
-              ]
-            : [];
-      const data = encodeDeployData({
-        abi: artifact.abi,
-        bytecode: linkCreation(artifact, deployed),
-        args,
+      const data = graphCreationData({
+        name: step.name,
+        artifacts,
+        deployed,
+        governor,
+        facetOrder: inventory.profileConstructorFacetOrder,
+        libraryOrder: inventory.profileConstructorLibraryOrder,
       });
+      assert.equal((data.length - 2) / 2, step.creationInputBytes);
       assert.equal(await rpc.getCode({ address }), undefined);
       const hash = await wallet.sendTransaction({
         account: sender,
