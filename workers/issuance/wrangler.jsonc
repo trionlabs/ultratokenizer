@@ -12,10 +12,16 @@
     "logs": { "enabled": true, "invocation_logs": false },
   },
   "durable_objects": {
-    "bindings": [{ "name": "REQUESTS", "class_name": "IssuanceCoordinator" }],
+    "bindings": [
+      { "name": "TENANTS", "class_name": "IssuanceTenantCoordinator" },
+    ],
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["IssuanceCoordinator"] },
+    {
+      "tag": "v2-tenant-quotas",
+      "new_sqlite_classes": ["IssuanceTenantCoordinator"],
+    },
   ],
   "ratelimits": [
     {

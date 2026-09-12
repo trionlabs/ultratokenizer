@@ -13,7 +13,11 @@ export type AuthConfiguration = Readonly<{
   audience: string;
   jwks: string;
 }>;
-export type Principal = Readonly<{ ownerId: string; wallet: Address }>;
+export type Principal = Readonly<{
+  ownerId: string;
+  tenantId: string;
+  wallet: Address;
+}>;
 
 /** Authenticated API ownership is separate from a contract's issuer authority. */
 export async function authenticate(
@@ -92,6 +96,17 @@ export async function authenticate(
     return Object.freeze({
       ownerId: keccak256(
         stringToHex(JSON.stringify([config.issuer, payload.sub])),
+      ),
+      // All authenticated subjects in this issuer/audience integration share
+      // observation capacity. No user-supplied tenant or institution claim is used.
+      tenantId: keccak256(
+        stringToHex(
+          JSON.stringify([
+            'ultratokenizer.observation-tenant.v1',
+            config.issuer,
+            config.audience,
+          ]),
+        ),
       ),
       wallet: getAddress(payload.wallet),
     });

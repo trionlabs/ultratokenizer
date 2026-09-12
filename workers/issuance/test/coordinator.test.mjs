@@ -4,6 +4,7 @@ import { build } from 'esbuild';
 import { Miniflare, Log, LogLevel, convertV4MiniflareOptions } from 'miniflare';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
+import { keccak256, stringToHex } from 'viem';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -68,7 +69,10 @@ void test(
           compatibilityDate: '2026-09-08',
           compatibilityFlags: ['nodejs_compat'],
           durableObjects: {
-            REQUESTS: { className: 'IssuanceCoordinator', useSQLite: true },
+            TENANTS: {
+              className: 'IssuanceTenantCoordinator',
+              useSQLite: true,
+            },
           },
           ratelimits: {
             API_RATE_LIMIT: {
@@ -124,6 +128,15 @@ void test(
       unsafeInspectDurableObjects: true,
       resourcePersistencePath: dir,
     };
+    const tenantName = keccak256(
+      stringToHex(
+        JSON.stringify([
+          'ultratokenizer.observation-tenant.v1',
+          options.workers[0].bindings.AUTH_ISSUER,
+          options.workers[0].bindings.AUTH_AUDIENCE,
+        ]),
+      ),
+    );
     let mf;
     async function bearer(subject = 'holder', wallet = account.address) {
       const now = Math.floor(Date.now() / 1000);
@@ -200,8 +213,8 @@ void test(
       );
       const persistent = await mf.unsafeGetDurableObjectStorage(
         'issuance-test',
-        'IssuanceCoordinator',
-        { name: digest },
+        'IssuanceTenantCoordinator',
+        { name: tenantName },
       );
       await persistent.exec(
         "CREATE TRIGGER fail_submission BEFORE INSERT ON events WHEN NEW.status = 'submitted' BEGIN SELECT RAISE(ABORT, 'synthetic storage failure'); END",
@@ -319,14 +332,18 @@ void test(
       );
       const storage = await mf.unsafeGetDurableObjectStorage(
         'issuance-test',
-        'IssuanceCoordinator',
-        { name: digest },
+        'IssuanceTenantCoordinator',
+        { name: tenantName },
       );
-      const rows = await storage.exec('SELECT state FROM requests');
+      const rows = await storage.exec(
+        'SELECT state FROM requests WHERE id = ?',
+        digest,
+      );
       assert.equal(rows.length, 1);
       assert.equal(rows[0].state.includes(signature), false);
       const events = await storage.exec(
-        'SELECT sequence, status FROM events ORDER BY sequence',
+        'SELECT sequence, status FROM events WHERE request_id = ? ORDER BY sequence',
+        digest,
       );
       assert.equal(events[0].status, 'awaiting_submission');
       assert.equal(events.at(-1).status, 'confirmed');
@@ -366,16 +383,22 @@ void test(
       );
       const secondStorage = await mf.unsafeGetDurableObjectStorage(
         'issuance-test',
-        'IssuanceCoordinator',
-        { name: secondId },
+        'IssuanceTenantCoordinator',
+        { name: tenantName },
       );
       const checkpoint = JSON.parse(
-        (await secondStorage.exec('SELECT state FROM requests'))[0].state,
+        (
+          await secondStorage.exec(
+            'SELECT state FROM requests WHERE id = ?',
+            secondId,
+          )
+        )[0].state,
       );
       checkpoint.attempts = 23;
       await secondStorage.exec(
-        'UPDATE requests SET state = ? WHERE singleton = 1',
+        'UPDATE requests SET state = ? WHERE id = ?',
         JSON.stringify(checkpoint),
+        secondId,
       );
       let secondState;
       const exhaustedBy = Date.now() + 4_000;
@@ -395,12 +418,18 @@ void test(
         429,
       );
       const cooled = JSON.parse(
-        (await secondStorage.exec('SELECT state FROM requests'))[0].state,
+        (
+          await secondStorage.exec(
+            'SELECT state FROM requests WHERE id = ?',
+            secondId,
+          )
+        )[0].state,
       );
       cooled.updatedAt -= 61_000;
       await secondStorage.exec(
-        'UPDATE requests SET state = ? WHERE singleton = 1',
+        'UPDATE requests SET state = ? WHERE id = ?',
         JSON.stringify(cooled),
+        secondId,
       );
       assert.equal(
         (await call(`/v1/requests/${secondId}/reconcile`, { method: 'POST' }))
@@ -504,16 +533,22 @@ void test(
       );
       const thirdStorage = await mf.unsafeGetDurableObjectStorage(
         'issuance-test',
-        'IssuanceCoordinator',
-        { name: thirdId },
+        'IssuanceTenantCoordinator',
+        { name: tenantName },
       );
       const rejectedCheckpoint = JSON.parse(
-        (await thirdStorage.exec('SELECT state FROM requests'))[0].state,
+        (
+          await thirdStorage.exec(
+            'SELECT state FROM requests WHERE id = ?',
+            thirdId,
+          )
+        )[0].state,
       );
       rejectedCheckpoint.updatedAt -= 61_000;
       await thirdStorage.exec(
-        'UPDATE requests SET state = ? WHERE singleton = 1',
+        'UPDATE requests SET state = ? WHERE id = ?',
         JSON.stringify(rejectedCheckpoint),
+        thirdId,
       );
       await mf.dispose();
       mf = new Miniflare(convertV4MiniflareOptions(options));
@@ -536,11 +571,12 @@ void test(
       assert.deepEqual(thirdState.priorTransactionHashes, []);
       const restoredStorage = await mf.unsafeGetDurableObjectStorage(
         'issuance-test',
-        'IssuanceCoordinator',
-        { name: thirdId },
+        'IssuanceTenantCoordinator',
+        { name: tenantName },
       );
       const reobservedEvents = await restoredStorage.exec(
-        'SELECT sequence, status FROM events ORDER BY sequence',
+        'SELECT sequence, status FROM events WHERE request_id = ? ORDER BY sequence',
+        thirdId,
       );
       assert.ok(reobservedEvents.some((event) => event.status === 'rejected'));
       assert.equal(reobservedEvents.at(-1).status, 'confirmed');

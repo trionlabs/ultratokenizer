@@ -1,16 +1,16 @@
 # Issuance coordination worker
 
-Authenticated request tracking and read-only Hedera reconciliation. The API worker validates request ownership. A SQLite-backed Durable Object owns each canonical request and uses durable alarms to inspect its transaction. It never signs, submits, retries or cancels a chain transaction, authorizes an issuer, or releases a reservation.
+Authenticated request tracking and read-only Hedera reconciliation. The API worker validates request ownership. One SQLite-backed Durable Object holds the bounded request set for each configured identity issuer and API audience, and uses durable alarms to inspect submitted transactions. It never signs, submits, retries or cancels a chain transaction, authorizes an issuer, or releases a reservation.
 
 ## Modules and ownership
 
-| Module              | Responsibility                                                                                | Persistent data                                             |
-| ------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `auth.ts`           | Verify short-lived access tokens against explicitly configured public keys                    | None                                                        |
-| `index.ts`          | Enforce origin, rate limits, bounded JSON, holder signature and subject ownership             | None                                                        |
-| `coordinator.ts`    | Persist request lifecycle, atomic event history, fenced observation leases and alarm recovery | One request per Durable Object; last 128 transition records |
-| `chain-observer.ts` | Validate the configured chain, gate code, canonical block and matching issuance event         | None                                                        |
-| `model.ts`          | Shared lifecycle and observation types; bounded retry policy                                  | None                                                        |
+| Module              | Responsibility                                                                                | Persistent data                                                   |
+| ------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `auth.ts`           | Verify short-lived access tokens against explicitly configured public keys                    | None                                                              |
+| `index.ts`          | Enforce origin, rate limits, bounded JSON, holder signature and subject ownership             | None                                                              |
+| `coordinator.ts`    | Persist request lifecycle, atomic event history, fenced observation leases and alarm recovery | At most 128 requests per tenant; last 128 transitions per request |
+| `chain-observer.ts` | Validate the configured chain, gate code, canonical block and matching issuance event         | None                                                              |
+| `model.ts`          | Shared lifecycle and observation types; bounded retry policy                                  | None                                                              |
 
 Private PDFs, witnesses, account statements, raw identity subjects, access tokens and holder signatures are not stored. The request contains deliberately public issuance fields; the subject is reduced to a namespaced digest for access control. That digest is an identifier, not an anonymity guarantee. Logs contain fixed error/status codes and attempt counts only.
 
@@ -26,7 +26,7 @@ npm --prefix workers/issuance test
 npm --prefix workers/issuance run build
 ```
 
-The domain source resolves its dependencies from the root. Worker tooling and dependencies have a separate lockfile. Wrangler generates binding types from the explicit local configuration. `build` is a deployment dry run; it does not publish a worker. The matching local runtime supplied by Wrangler 4.130.0 is Miniflare 5.20260908.0-alpha, pinned in the lockfile. Runtime tests use its compatibility converter and real workerd/SQLite, with all outbound RPC handled by synthetic fixtures. A deployed Cloudflare acceptance test remains required before release.
+The domain source resolves its dependencies from the root. Worker tooling and dependencies have a separate lockfile. Wrangler generates binding types from the explicit local configuration. `build` is a deployment dry run; it does not publish a worker. The matching local runtime supplied by Wrangler 4.131.0 is Miniflare 5.20260910.0-alpha, pinned in the lockfile. Runtime tests use its compatibility converter and real workerd/SQLite, with all outbound RPC handled by synthetic fixtures. A deployed Cloudflare acceptance test remains required before release.
 
 The integration test concurrently creates the same request, checks cross-subject denial, injects a SQL failure after scheduling an alarm, restarts the runtime while observation is pending, and checks recovery and a matching event. Separate tests cover real JWT/EOA signatures, provider failures, block reorganization, code/event mismatch, redirects and bounded input.
 
@@ -53,7 +53,13 @@ Use `.dev.vars` locally; it is ignored. Keep production and staging bindings, ke
 
 ## HTTP interface
 
-All `/v1/` operations require a bearer access token. Browser requests must use the exact allowed origin. JSON responses are not cached. Rate limits apply before JWT verification by edge IP and afterward by authenticated subject. Edge limits are abuse controls, not transactional quotas or issuer capacity.
+All `/v1/` operations require a bearer access token. Browser requests must use the exact allowed origin. JSON responses are not cached. Rate limits apply before JWT verification by edge IP and afterward by authenticated subject. Edge limits are abuse controls, separate from the transactional observation quotas below. They are not issuer capacity.
+
+A tenant is the configured `AUTH_ISSUER` and `AUTH_AUDIENCE` pair, hashed with a fixed versioned namespace. All authenticated subjects under that integration share **32 open requests, 128 retained requests and four concurrent observation leases**. Subjects keep separate ownership checks; a caller cannot choose a tenant claim or consume another subject's request. This is shared integration capacity, not a per-user allocation or a contract issuer identity. Changing the configured issuer or audience selects a new tenant and requires the state-boundary procedure below.
+
+`confirmed` and `tracking_cancelled` free an open slot. `rejected` and `attention_required` remain open because they support recovery. Terminal records still count toward retained capacity. Quota admission, state, transition history and alarms use one durable storage transaction; retries cannot allocate a second slot or release a slot twice. A quota refusal returns `429 rate_limited`; retrying after 60 seconds does not guarantee capacity.
+
+Every record expires **seven days after registration**, including terminal records. Reading or reconciling does not extend that deadline. Durable alarms delete expired request rows and their event history, including after restart. If an observation lease is still active at the cutoff, the inaccessible record conservatively keeps its quota and lease until that durable lease is cleared or its 90-second deadline expires; physical cleanup follows on a bounded alarm. The same digest cannot be re-registered during that grace period. An expired request returns `404 not_found`; export required evidence before that deadline. Deletion stops observation only: it does not assert transaction failure, free backing, or revoke a request on-chain. After expiry, a still-valid signed request can be registered again for observation under a new local tracking lifetime.
 
 | Method and path                          | Input                                          | Result                                                            |
 | ---------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------- |
@@ -67,11 +73,17 @@ All `/v1/` operations require a bearer access token. Browser requests must use t
 
 ## Failure and recovery semantics
 
-Each alarm persists a unique lease and a future recovery alarm before external I/O. Completion checks the lease and revision again, so a delayed observer cannot overwrite newer state. Alarm scheduling, state and transition history share a storage transaction. Requests survive eviction or process restart. Provider calls have deadlines, streamed responses are bounded, and HTTP redirects are rejected without following them.
+Each alarm persists a unique lease and a future recovery alarm before external I/O. Completion checks the lease, revision and original registration time again, so a delayed observer cannot overwrite newer state. Alarm scheduling, state and transition history share a storage transaction. Unexpired requests survive eviction or process restart. Automatic observations and candidate-hash checks share the four-lease tenant limit. An expired lease can be recovered without resetting the durable attempt counter; a crash on attempt 24 cannot create a twenty-fifth automatic attempt. Provider calls have deadlines, streamed responses are bounded, and HTTP redirects are rejected without following them.
 
-Observation retries use exponential delay up to five minutes. After 24 attempts, `attention_required` preserves the transaction and uncertainty. Authenticated `reconcile` starts another observation cycle after a one-minute cooldown for either `attention_required` or `rejected`. This permits explicit rechecking after a provider or deployment-configuration correction. It preserves the transaction hash and recent transition history; the last observation remains visible until the next check replaces it. Attaching the same hash alone remains idempotent. No retry assumes that a missing receipt means a failed transaction, frees reserve capacity, or submits another mint.
+Observation retries use exponential delay up to five minutes. After 24 attempts in an automatic observation cycle, `attention_required` preserves the transaction and uncertainty. Authenticated `reconcile` starts another observation cycle after a one-minute cooldown for either `attention_required` or `rejected`. This permits explicit rechecking after a provider or deployment-configuration correction. It preserves the transaction hash and recent transition history; the last observation remains visible until the next check replaces it. Attaching the same hash alone remains idempotent. Candidate-hash checks are separate user-triggered observations, bounded by the same leases, retention and edge limits; 24 is not a lifetime RPC limit. No retry assumes that a missing receipt means a failed transaction, frees reserve capacity, or submits another mint.
 
 `confirmed` means a successful transaction contains exactly one matching `Issued` event from the configured gate, whose runtime code hash and canonical block were checked through the configured RPC. Internal gate calls by relayers are supported, including receipts with more than 256 logs. The 512 KiB RPC response limit bounds processing; only logs at the pinned Gate address undergo ABI decoding. This result still depends on RPC honesty and the reviewed gate deployment. It is not independent proof verification, historical registry verification, complete token-supply reconciliation or physical reserve assurance. Use the portable audit module for separately reported cryptographic checks.
+
+## Storage version boundary
+
+The `v2-tenant-quotas` migration adds the fresh `IssuanceTenantCoordinator` SQLite namespace and the `TENANTS` binding. The original `v1` migration and `IssuanceCoordinator` class export remain. No deleted-class migration, automatic import or request-ID-to-tenant remapping is performed. Legacy singleton tables fail closed before any schema mutation; this release cannot read or continue their tracking sessions.
+
+The checked-in worker has never been deployed with an operational configuration. A fresh deployment can apply both migrations. If an operator has deployed the earlier release separately, stop new registrations, export needed tracking state and receipts, and drain or explicitly retire old sessions **using that release before switching**. Keep its namespace and an export available under the operator's retention policy; this migration does not erase legacy data. Document the cutoff and client re-registration process. Requests and receipts remain subject-owned; do not bulk-import them into a different issuer/audience integration without a separately reviewed ownership mapping. Do not roll back a populated tenant namespace into the singleton implementation. Test restoration and the chosen release transition in a separate environment before deployment.
 
 ## Release and operations gates
 

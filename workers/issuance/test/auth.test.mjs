@@ -32,7 +32,26 @@ void test('authenticates a short-lived access token without persisting raw subje
   assert.equal(principal.wallet, requestFixture.recipient);
   assert.match(principal.ownerId, /^0x[0-9a-f]{64}$/);
   assert.equal(JSON.stringify(principal).includes('holder'), false);
-  assert.equal(Object.keys(principal).length, 2);
+  assert.match(principal.tenantId, /^0x[0-9a-f]{64}$/);
+  assert.equal(Object.keys(principal).length, 3);
+});
+
+void test('tenant capacity follows configured issuer and audience while owners remain distinct', async () => {
+  const first = await authenticate(await token(), config, new Date(now * 1000));
+  const second = await authenticate(
+    await token({ sub: 'other-holder', tenantId: 'untrusted' }),
+    config,
+    new Date(now * 1000),
+  );
+  assert.notEqual(first.ownerId, second.ownerId);
+  assert.equal(first.tenantId, second.tenantId);
+  const otherAudience = { ...config, audience: 'other-integration' };
+  const other = await authenticate(
+    await token({ aud: otherAudience.audience }),
+    otherAudience,
+    new Date(now * 1000),
+  );
+  assert.notEqual(first.tenantId, other.tenantId);
 });
 
 void test('rejects expired, future, wrong-scope, missing-wallet and wrong-type tokens', async () => {

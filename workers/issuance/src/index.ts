@@ -1,15 +1,18 @@
 import { verifyTypedData, type Hex } from 'viem';
 import {
   assertIssuanceRequestActive,
-  getIssuanceRequestDigest,
   getIssuanceRequestTypedData,
 } from '../../../packages/domain/src/index.js';
 import { authenticate } from './auth.ts';
 import { isHash, validateChainConfiguration } from './chain-observer.ts';
-import { chainConfiguration, IssuanceCoordinator } from './coordinator.ts';
+import {
+  chainConfiguration,
+  IssuanceCoordinator,
+  IssuanceTenantCoordinator,
+} from './coordinator.ts';
 import { exactKeys, readJson, WorkerError } from './errors.ts';
 
-export { IssuanceCoordinator };
+export { IssuanceCoordinator, IssuanceTenantCoordinator };
 
 function response(value: unknown, status: number, origin?: string): Response {
   const headers = new Headers({
@@ -70,6 +73,7 @@ export default {
       );
       const limit = await env.API_RATE_LIMIT.limit({ key: principal.ownerId });
       if (!limit.success) throw new WorkerError('rate_limited');
+      const tenant = env.TENANTS.getByName(principal.tenantId);
       if (url.search) throw new WorkerError('invalid_request');
       const route =
         /^\/v1\/requests\/(0x[0-9a-f]{64})(?:\/(transactions|cancel|reconcile))?$/.exec(
@@ -117,18 +121,13 @@ export default {
           throw new WorkerError('invalid_request');
         }
         if (!valid) throw new WorkerError('forbidden');
-        const id = getIssuanceRequestDigest(canonical);
-        const result = await env.REQUESTS.getByName(id).create(
-          principal.ownerId,
-          canonical,
-        );
+        const result = await tenant.create(principal.ownerId, canonical);
         return response(result, 200, allowedOrigin);
       }
       if (!route || !isHash(route[1])) throw new WorkerError('not_found');
-      const stub = env.REQUESTS.getByName(route[1]);
       if (request.method === 'GET' && !route[2])
         return response(
-          await stub.inspect(principal.ownerId),
+          await tenant.inspect(principal.ownerId, route[1]),
           200,
           allowedOrigin,
         );
@@ -144,8 +143,9 @@ export default {
         if (!isHash(body.transactionHash))
           throw new WorkerError('invalid_request');
         return response(
-          await stub.submit(
+          await tenant.submit(
             principal.ownerId,
+            route[1],
             body.transactionHash.toLowerCase() as Hex,
           ),
           202,
@@ -154,13 +154,13 @@ export default {
       }
       if (request.method === 'POST' && route[2] === 'cancel')
         return response(
-          await stub.cancel(principal.ownerId),
+          await tenant.cancel(principal.ownerId, route[1]),
           200,
           allowedOrigin,
         );
       if (request.method === 'POST' && route[2] === 'reconcile')
         return response(
-          await stub.reconcile(principal.ownerId),
+          await tenant.reconcile(principal.ownerId, route[1]),
           202,
           allowedOrigin,
         );

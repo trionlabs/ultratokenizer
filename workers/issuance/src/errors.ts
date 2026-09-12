@@ -95,10 +95,12 @@ export async function readJson(
     offset += chunk.byteLength;
   }
   try {
-    return JSON.parse(
+    return parseDuplicateFreeJson(
       new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes),
+      maximum,
     );
   } catch {
     throw new WorkerError('invalid_request');
   }
 }
+import { parseDuplicateFreeJson } from '../../../packages/domain/src/index.js';
