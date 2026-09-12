@@ -48,6 +48,13 @@ working advisory locks and `fsync` semantics.
 
 ## Exact quote and stage admission
 
+This workflow always requests private stdin. Succinct documents this as a
+[gated account feature](https://docs.succinct.xyz/docs/sp1/prover-network/advanced-usage#private-stdin).
+Confirm enablement for the selected requester with Succinct before a new paid dispatch.
+A successful upload, quote, execution or assignment does not establish that the winning prover
+can retrieve private inputs. The requester cannot verify account enablement through its current
+read-only RPC checks. Do not switch existing artifacts to public visibility as an automatic fallback.
+
 Obtain a new quote after staging has definitively completed. The quote must report the program
 registered and sufficient balance. A reviewed settings file with suffix
 `.sp1-network-submission.json` has exactly these fields:
