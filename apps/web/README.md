@@ -16,13 +16,23 @@ The `/` route imports an independent deployment configuration and a separate `ul
 
 The amount is fixed by the canonical request, public values and permit bindings. There is no issuance amount editor: a complete 1 g claim issues exactly 1 g, once. The selected wallet must authorize that bound recipient. Every step is explicit: connect, validate the proof/permit and deployment pins, sign typed data, simulate current execution, submit the actual transaction, and reconcile its receipt and exact Gate event. Preflight success is never presented as a submitted or confirmed transaction.
 
-The centered issuance view shows one current action and a six-step progress line: profile, evidence,
-wallet, verification, issuance and receipt. Network/deployment settings and the public bundle remain
-separate files. A wallet control stays visible in the header, but connection is disabled until a
-deployment profile is loaded and verified. The right rail reports the network, wallet, exact amount
-and actual transaction status; advanced configuration is collapsed. Transfer is a separate view for
-holders who already own the token. Errors, uncertain sends and recovery stay next to the relevant
-action. Switching views does not create a new transaction or change the session state.
+The centered issuance view shows one current action and six steps: evidence, wallet, verification,
+approval, mint and receipt. Independent network setup lives in a separate native dialog; it is not
+an evidence step. Configuration and proof packages remain separate files. The header wallet control
+requires imported configuration; connecting then validates the deployment through the shared client.
+Only the package's matching recipient completes the wallet step. Configuration remains in memory
+and must be supplied again after a reload.
+
+The monochrome iris scene adapts the earlier document-to-coin design to actual session state.
+Loading a package shows its exact quantity without claiming verification. A seal appears after a
+successful proof check. The paper morphs into a coin only after receipt reconciliation; pending,
+unresolved and reverted transactions keep the mint step open. Pointer tilt, restrained motion and
+step transitions respect reduced-motion preferences. No animation advances the session.
+
+The right rail reports the network, wallet, exact amount and current-session transaction outcomes;
+advanced configuration is collapsed. Transfer remains a separate view. Errors and recovery stay
+beside their action. The setup dialog supports Escape, local error feedback and focus return.
+Switching views does not create a transaction or change session state.
 
 The current accepted source is profile 2's synthetic signed capsule, restricted by the shared client to test deployments. Real cryptography does not make this real bank evidence, asset backing, custody or a redemption promise. This UI imports public proof artifacts; it neither reads private PDF/email evidence nor generates proofs. Actual local proof generation is a separate [proof runner workflow](../../proofs/README.md).
 
