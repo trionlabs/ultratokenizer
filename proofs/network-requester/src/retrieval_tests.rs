@@ -365,6 +365,8 @@ async fn recovered_fixture(directory: &Directory) -> (std::path::PathBuf, String
         outer_circuit_version: EXPECTED_OUTER_CIRCUIT_VERSION.into(),
         network_upload_occurred: false,
         proof_request_submitted: false,
+        reviewed_synthetic: None,
+        review_manifest_sha256: None,
     }
     .seal();
     let quote = Quote {

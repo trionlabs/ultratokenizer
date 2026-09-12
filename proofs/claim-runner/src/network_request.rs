@@ -1,8 +1,8 @@
 //! Fail-closed preparation and quoting for one synthetic SP1 Network proof.
 //!
 //! This module deliberately has no generic document input. It can encode only the
-//! repository's reviewed synthetic fixture. Preparation and quote commands do not
-//! upload artifacts or submit a proof request.
+//! repository fixture or an explicitly hash-pinned, allowlisted synthetic PDF.
+//! Preparation does not upload artifacts or submit a proof request.
 
 use super::{local_proof, read_bounded, MAX_CYCLES};
 use serde::{Deserialize, Serialize};
@@ -15,12 +15,15 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use ultratokenizer_claim_evidence::{
-    request::Request, verify_claim, ClaimInput, PROFILE_VERSION, PUBLIC_VALUES_BYTES,
+    request::{Request, MAX_REQUEST_BYTES},
+    verify_claim, ClaimInput, VerifiedClaim, MAX_DOCUMENT_BYTES, PROFILE_VERSION,
+    PUBLIC_VALUES_BYTES,
 };
 use ultratokenizer_network_request_schema::{
-    require_suffix, Preparation, EXPECTED_FIXTURE_PDF_SHA256, EXPECTED_FIXTURE_REQUEST_SHA256,
-    EXPECTED_OUTER_CIRCUIT_VERSION, EXPECTED_PROGRAM_VKEY, PREPARATION_SCHEMA_VERSION,
-    PREPARATION_SUFFIX,
+    read_private_bounded, require_suffix, Preparation, ReviewedSynthetic,
+    EXPECTED_FIXTURE_PDF_SHA256, EXPECTED_FIXTURE_REQUEST_SHA256, EXPECTED_OUTER_CIRCUIT_VERSION,
+    EXPECTED_PROGRAM_VKEY, PREPARATION_SCHEMA_VERSION, PREPARATION_SUFFIX,
+    REVIEWED_PREPARATION_SCHEMA_VERSION, REVIEWED_SYNTHETIC_KIND,
 };
 
 const MAX_MANIFEST_BYTES: usize = 64 * 1024;
@@ -74,6 +77,10 @@ struct FixtureMetadata {
 pub async fn run(args: &[String]) -> Result<(), &'static str> {
     match args.first().map(String::as_str) {
         Some("network-prepare-synthetic") if args.len() == 4 => prepare(args).await,
+        Some("network-prepare-reviewed-synthetic") if args.len() == 8 => prepare(args).await,
+        Some("network-prepare-reviewed-synthetic") => Err(
+            "Usage: claim-runner network-prepare-reviewed-synthetic <elf> <program-manifest-json> <review-json> <review-sha256> <synthetic-pdf> <request-json> <new-preparation-file>",
+        ),
         Some("network-prepare-synthetic") => Err(
             "Usage: claim-runner network-prepare-synthetic <elf> <program-manifest-json> <new-preparation-file>",
         ),
@@ -83,7 +90,9 @@ pub async fn run(args: &[String]) -> Result<(), &'static str> {
 
 async fn prepare(args: &[String]) -> Result<(), &'static str> {
     local_proof::check_runtime()?;
-    require_suffix(&args[3], PREPARATION_SUFFIX)?;
+    let reviewed = args[0] == "network-prepare-reviewed-synthetic";
+    let output = &args[if reviewed { 7 } else { 3 }];
+    require_suffix(output, PREPARATION_SUFFIX)?;
 
     let manifest_bytes = read_bounded(&args[2], MAX_MANIFEST_BYTES)?;
     let manifest: ProgramManifest =
@@ -92,7 +101,22 @@ async fn prepare(args: &[String]) -> Result<(), &'static str> {
 
     let metadata: FixtureMetadata =
         serde_json::from_str(FIXTURE_METADATA).map_err(|_| "Invalid synthetic metadata.")?;
-    validate_fixture_metadata(&metadata)?;
+    let (pdf, request_bytes, review, review_hash) = if reviewed {
+        let bytes = read_private_bounded(&args[3], MAX_MANIFEST_BYTES)?;
+        if !is_lower_hex(&args[4], 32, false) || sha256_hex(&bytes) != args[4] {
+            return Err("Review manifest does not match its independently supplied hash.");
+        }
+        let review: ReviewedSynthetic = serde_json::from_slice(&bytes)
+            .map_err(|_| "Invalid reviewed synthetic input manifest.")?;
+        review.validate()?;
+        let pdf = read_private_bounded(&args[5], MAX_DOCUMENT_BYTES)?;
+        let request_bytes = read_private_bounded(&args[6], MAX_REQUEST_BYTES)?;
+        review.validate_files(&pdf, &request_bytes)?;
+        (pdf, request_bytes, Some(review), Some(args[4].clone()))
+    } else {
+        validate_fixture_metadata(&metadata)?;
+        (FIXTURE_PDF.to_vec(), FIXTURE_REQUEST.to_vec(), None, None)
+    };
 
     let elf_bytes = read_bounded(&args[1], 32 * 1024 * 1024)?;
     let elf_sha256 = sha256_hex(&elf_bytes);
@@ -101,18 +125,27 @@ async fn prepare(args: &[String]) -> Result<(), &'static str> {
     }
 
     let mut approved_signer = [0; 32];
-    hex::decode_to_slice(&metadata.signer_fingerprint, &mut approved_signer)
-        .map_err(|_| "Invalid synthetic signer fingerprint.")?;
-    let request =
-        Request::from_json(FIXTURE_REQUEST).map_err(|_| "Invalid embedded synthetic request.")?;
+    hex::decode_to_slice(
+        review
+            .as_ref()
+            .map_or(metadata.signer_fingerprint.as_str(), |value| {
+                value.signer_fingerprint.as_str()
+            }),
+        &mut approved_signer,
+    )
+    .map_err(|_| "Invalid synthetic signer fingerprint.")?;
+    let request = Request::from_json(&request_bytes).map_err(|_| "Invalid synthetic request.")?;
     let input = ClaimInput {
         approved_signer,
-        request_json: FIXTURE_REQUEST,
-        pdf_bytes: FIXTURE_PDF,
+        request_json: &request_bytes,
+        pdf_bytes: &pdf,
     };
     let expected =
         verify_claim(&input).map_err(|_| "Embedded synthetic claim failed verification.")?;
-    if format!("0x{}", hex::encode(expected.public_values())) != metadata.public_values
+    let request_digest = format!("0x{}", hex::encode(request.digest()));
+    if let Some(review) = &review {
+        validate_reviewed_bindings(review, &request, &expected)?;
+    } else if format!("0x{}", hex::encode(expected.public_values())) != metadata.public_values
         || format!("0x{}", hex::encode(request.digest())) != metadata.request_digest
     {
         return Err("Synthetic metadata does not match verified claim output.");
@@ -146,22 +179,31 @@ async fn prepare(args: &[String]) -> Result<(), &'static str> {
         .ok_or("SP1 did not return a PGU measurement.")?;
     let created_at_unix = unix_time()?;
     let preparation = Preparation {
-        schema_version: PREPARATION_SCHEMA_VERSION,
+        schema_version: if reviewed {
+            REVIEWED_PREPARATION_SCHEMA_VERSION
+        } else {
+            PREPARATION_SCHEMA_VERSION
+        },
         status: "prepared_no_upload".into(),
         preparation_id: String::new(),
         created_at_unix,
         network: "succinct-mainnet".into(),
         proof_mode: "groth16".into(),
-        fixture_kind: "embedded-reviewed-synthetic-v2".into(),
+        fixture_kind: if reviewed {
+            REVIEWED_SYNTHETIC_KIND
+        } else {
+            "embedded-reviewed-synthetic-v2"
+        }
+        .into(),
         program_manifest_sha256: sha256_hex(&manifest_bytes),
         program_v_key: manifest.program_v_key,
         elf_sha256,
         elf_bytes: elf_bytes.len(),
         witness_sha256: sha256_hex(&witness),
         witness_bytes: witness.len(),
-        request_json_sha256: sha256_hex(FIXTURE_REQUEST),
-        pdf_sha256: sha256_hex(FIXTURE_PDF),
-        request_digest: metadata.request_digest,
+        request_json_sha256: sha256_hex(&request_bytes),
+        pdf_sha256: sha256_hex(&pdf),
+        request_digest,
         public_values: format!("0x{}", hex::encode(values.as_slice())),
         public_values_sha256: sha256_hex(values.as_slice()),
         cycle_limit: report.total_instruction_count(),
@@ -170,9 +212,12 @@ async fn prepare(args: &[String]) -> Result<(), &'static str> {
         outer_circuit_version: manifest.outer_circuit_version,
         network_upload_occurred: false,
         proof_request_submitted: false,
+        reviewed_synthetic: review,
+        review_manifest_sha256: review_hash,
     }
     .seal();
-    write_json_new(Path::new(&args[3]), &preparation)?;
+    preparation.validate_synthetic()?;
+    write_json_new(Path::new(output), &preparation)?;
     println!(
         "{}",
         serde_json::json!({
@@ -184,6 +229,27 @@ async fn prepare(args: &[String]) -> Result<(), &'static str> {
             "proofRequestSubmitted": false,
         })
     );
+    Ok(())
+}
+
+fn validate_reviewed_bindings(
+    review: &ReviewedSynthetic,
+    request: &Request,
+    claim: &VerifiedClaim,
+) -> Result<(), &'static str> {
+    let address = |word: &[u8; 32]| format!("0x{}", hex::encode(&word[12..]));
+    if request.valid_until <= unix_time()?
+        || request.chain_id != ultratokenizer_claim_evidence::request::word_u64(296)
+        || address(&request.gate) != review.gate
+        || address(&request.token) != review.token
+        || address(&request.recipient) != review.recipient
+        || format!("0x{}", hex::encode(request.issuer_id)) != review.issuer_id
+        || format!("0x{}", hex::encode(claim.source_id)) != review.source_id
+        || request.amount != ultratokenizer_claim_evidence::request::word_u64(1000)
+        || format!("0x{}", hex::encode(request.digest())) != review.request_digest
+    {
+        return Err("Verified claim differs from the authorized deployment and recipient.");
+    }
     Ok(())
 }
 
@@ -298,6 +364,8 @@ mod tests {
             outer_circuit_version: EXPECTED_OUTER_CIRCUIT_VERSION.into(),
             network_upload_occurred: false,
             proof_request_submitted: false,
+            reviewed_synthetic: None,
+            review_manifest_sha256: None,
         }
         .seal()
     }
@@ -325,5 +393,55 @@ mod tests {
     fn journal_path_is_fail_closed() {
         assert!(require_suffix("preparation.json", PREPARATION_SUFFIX).is_err());
         assert!(require_suffix("run.sp1-network-preparation.json", PREPARATION_SUFFIX).is_ok());
+    }
+
+    #[test]
+    fn reviewed_bindings_reject_each_changed_deployment_field() {
+        let metadata: FixtureMetadata = serde_json::from_str(FIXTURE_METADATA).unwrap();
+        let mut signer = [0; 32];
+        hex::decode_to_slice(metadata.signer_fingerprint, &mut signer).unwrap();
+        let claim = verify_claim(&ClaimInput {
+            approved_signer: signer,
+            request_json: FIXTURE_REQUEST,
+            pdf_bytes: FIXTURE_PDF,
+        })
+        .unwrap();
+        let mut request = Request::from_json(FIXTURE_REQUEST).unwrap();
+        request.amount = ultratokenizer_claim_evidence::request::word_u64(1000);
+        let review = ReviewedSynthetic {
+            schema_version: 1,
+            purpose: "authorized-synthetic-testnet-proof".into(),
+            source_kind: "synthetic-signed-pdf-capsule".into(),
+            synthetic: true,
+            production_approved: false,
+            chain_id: "296".into(),
+            gate: format!("0x{}", hex::encode(&request.gate[12..])),
+            token: format!("0x{}", hex::encode(&request.token[12..])),
+            recipient: format!("0x{}", hex::encode(&request.recipient[12..])),
+            issuer_id: format!("0x{}", hex::encode(request.issuer_id)),
+            source_id: format!("0x{}", hex::encode(claim.source_id)),
+            amount_milligrams: "1000".into(),
+            signer_fingerprint: ultratokenizer_network_request_schema::REVIEWED_SYNTHETIC_SIGNER
+                .into(),
+            pdf_sha256: ultratokenizer_network_request_schema::REVIEWED_SYNTHETIC_PDF_SHA256.into(),
+            request_json_sha256: "66".repeat(32),
+            request_digest: format!("0x{}", hex::encode(request.digest())),
+        };
+        assert!(validate_reviewed_bindings(&review, &request, &claim).is_ok());
+        for field in 0..8 {
+            let mut changed = request.clone();
+            let mut changed_claim = claim.clone();
+            match field {
+                0 => changed.chain_id[31] ^= 1,
+                1 => changed.gate[31] ^= 1,
+                2 => changed.token[31] ^= 1,
+                3 => changed.recipient[31] ^= 1,
+                4 => changed.issuer_id[31] ^= 1,
+                5 => changed_claim.source_id[31] ^= 1,
+                6 => changed.amount[31] ^= 1,
+                _ => changed.nonce[31] ^= 1,
+            }
+            assert!(validate_reviewed_bindings(&review, &changed, &changed_claim).is_err());
+        }
     }
 }

@@ -15,9 +15,13 @@ use sp1_sdk::{
     Elf, HashableKey, Prover, ProverClient, ProvingKey, SP1Stdin,
 };
 use std::{env, path::Path};
-use ultratokenizer_claim_evidence::{verify_claim, ClaimInput};
+use ultratokenizer_claim_evidence::{
+    request::{Request, MAX_REQUEST_BYTES},
+    verify_claim, ClaimInput, MAX_DOCUMENT_BYTES,
+};
 use ultratokenizer_network_request_schema::{
-    normalize_address, require_suffix, Preparation, EXPECTED_PROGRAM_VKEY,
+    normalize_address, read_private_bounded, require_suffix, Preparation, ReviewedSynthetic,
+    EXPECTED_PROGRAM_VKEY,
 };
 
 const FIXTURE_PDF: &[u8] =
@@ -80,25 +84,15 @@ pub async fn run(args: &[String]) -> Result<(), &'static str> {
         return Err("ELF does not match the preparation journal.");
     }
 
-    let metadata: FixtureMetadata =
-        serde_json::from_str(FIXTURE_METADATA).map_err(|_| "Invalid synthetic metadata.")?;
-    let mut approved_signer = [0; 32];
-    hex::decode_to_slice(&metadata.signer_fingerprint, &mut approved_signer)
-        .map_err(|_| "Invalid synthetic signer fingerprint.")?;
-    let input = ClaimInput {
-        approved_signer,
-        request_json: FIXTURE_REQUEST,
-        pdf_bytes: FIXTURE_PDF,
-    };
-    let expected =
-        verify_claim(&input).map_err(|_| "Embedded synthetic claim failed verification.")?;
-    let witness = input
-        .encode()
-        .map_err(|_| "Synthetic witness encoding failed.")?;
-    if sha256_hex(&witness) != preparation.witness_sha256
-        || format!("0x{}", hex::encode(expected.public_values())) != preparation.public_values
-    {
-        return Err("Synthetic witness does not match the preparation journal.");
+    let witness = load_witness(&preparation, args)?;
+
+    let light = ProverClient::builder().light().build().await;
+    let key = light
+        .setup(Elf::from(elf_bytes.clone()))
+        .await
+        .map_err(|_| "Synthetic guest setup failed.")?;
+    if key.verifying_key().bytes32() != EXPECTED_PROGRAM_VKEY {
+        return Err("ELF program key does not match the synthetic V2 pin.");
     }
 
     let private_key = env::var("NETWORK_PRIVATE_KEY")
@@ -110,15 +104,6 @@ pub async fn run(args: &[String]) -> Result<(), &'static str> {
     let requester = format!("{:#x}", signer.address()).to_ascii_lowercase();
     if requester != expected_requester {
         return Err("Requester key does not match the explicitly authorized address.");
-    }
-
-    let light = ProverClient::builder().light().build().await;
-    let key = light
-        .setup(Elf::from(elf_bytes.clone()))
-        .await
-        .map_err(|_| "Synthetic guest setup failed.")?;
-    if key.verifying_key().bytes32() != EXPECTED_PROGRAM_VKEY {
-        return Err("ELF program key does not match the synthetic V2 pin.");
     }
 
     let operation_id = crate::operation_id(&preparation.preparation_id, &requester);
@@ -234,6 +219,95 @@ pub async fn run(args: &[String]) -> Result<(), &'static str> {
         })
     );
     Ok(())
+}
+
+fn load_witness(preparation: &Preparation, args: &[String]) -> Result<Vec<u8>, &'static str> {
+    preparation.validate_synthetic()?;
+    if args[0] == "stage-reviewed-synthetic" {
+        let review = preparation
+            .reviewed_synthetic
+            .as_ref()
+            .ok_or("This command requires a reviewed synthetic preparation.")?;
+        let review_hash = preparation
+            .review_manifest_sha256
+            .as_deref()
+            .ok_or("Missing reviewed synthetic manifest hash.")?;
+        let bytes = read_private_bounded(&args[5], 64 * 1024)?;
+        if args[6] != review_hash || sha256_hex(&bytes) != review_hash {
+            return Err("Review manifest differs from the preparation or explicit authorization.");
+        }
+        let supplied: ReviewedSynthetic =
+            serde_json::from_slice(&bytes).map_err(|_| "Invalid reviewed synthetic manifest.")?;
+        if &supplied != review {
+            return Err("Review manifest differs from the sealed preparation.");
+        }
+        let pdf = read_private_bounded(&args[7], MAX_DOCUMENT_BYTES)?;
+        let request = read_private_bounded(&args[8], MAX_REQUEST_BYTES)?;
+        review.validate_files(&pdf, &request)?;
+        let mut signer = [0; 32];
+        hex::decode_to_slice(&review.signer_fingerprint, &mut signer)
+            .map_err(|_| "Invalid synthetic signer fingerprint.")?;
+        verify_witness(preparation, &pdf, &request, signer)
+    } else {
+        if preparation.reviewed_synthetic.is_some() {
+            return Err(
+                "Reviewed preparations require explicit review, PDF and request input paths.",
+            );
+        }
+        let metadata: FixtureMetadata =
+            serde_json::from_str(FIXTURE_METADATA).map_err(|_| "Invalid synthetic metadata.")?;
+        let mut signer = [0; 32];
+        hex::decode_to_slice(&metadata.signer_fingerprint, &mut signer)
+            .map_err(|_| "Invalid synthetic signer fingerprint.")?;
+        verify_witness(preparation, FIXTURE_PDF, FIXTURE_REQUEST, signer)
+    }
+}
+
+fn verify_witness(
+    preparation: &Preparation,
+    pdf: &[u8],
+    request_bytes: &[u8],
+    approved_signer: [u8; 32],
+) -> Result<Vec<u8>, &'static str> {
+    if sha256_hex(pdf) != preparation.pdf_sha256
+        || sha256_hex(request_bytes) != preparation.request_json_sha256
+    {
+        return Err("Synthetic source or request differs from the sealed preparation.");
+    }
+    let request = Request::from_json(request_bytes).map_err(|_| "Invalid synthetic request.")?;
+    let input = ClaimInput {
+        approved_signer,
+        request_json: request_bytes,
+        pdf_bytes: pdf,
+    };
+    let expected = verify_claim(&input).map_err(|_| "Synthetic claim failed verification.")?;
+    if let Some(review) = &preparation.reviewed_synthetic {
+        let address = |word: &[u8; 32]| format!("0x{}", hex::encode(&word[12..]));
+        if request.valid_until <= unix_time()?
+            || request.chain_id != ultratokenizer_claim_evidence::request::word_u64(296)
+            || address(&request.gate) != review.gate
+            || address(&request.token) != review.token
+            || address(&request.recipient) != review.recipient
+            || format!("0x{}", hex::encode(request.issuer_id)) != review.issuer_id
+            || format!("0x{}", hex::encode(expected.source_id)) != review.source_id
+            || request.amount != ultratokenizer_claim_evidence::request::word_u64(1000)
+            || format!("0x{}", hex::encode(request.digest())) != review.request_digest
+        {
+            return Err("Verified claim differs from the authorized deployment and recipient.");
+        }
+    }
+    let witness = input
+        .encode()
+        .map_err(|_| "Synthetic witness encoding failed.")?;
+    if sha256_hex(&witness) != preparation.witness_sha256
+        || witness.len() != preparation.witness_bytes
+        || format!("0x{}", hex::encode(request.digest())) != preparation.request_digest
+        || format!("0x{}", hex::encode(expected.public_values())) != preparation.public_values
+        || sha256_hex(&expected.public_values()) != preparation.public_values_sha256
+    {
+        return Err("Synthetic witness does not match the preparation journal.");
+    }
+    Ok(witness)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -425,4 +499,92 @@ fn program_hash() -> Result<B256, &'static str> {
         return Err("Pinned program key is malformed.");
     }
     Ok(B256::from_slice(&bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+    use ultratokenizer_network_request_schema::{
+        EXPECTED_FIXTURE_PDF_SHA256, EXPECTED_FIXTURE_REQUEST_SHA256,
+        EXPECTED_OUTER_CIRCUIT_VERSION,
+    };
+
+    fn fixture() -> (Preparation, [u8; 32]) {
+        let metadata: FixtureMetadata = serde_json::from_str(FIXTURE_METADATA).unwrap();
+        let mut signer = [0; 32];
+        hex::decode_to_slice(metadata.signer_fingerprint, &mut signer).unwrap();
+        let input = ClaimInput {
+            approved_signer: signer,
+            request_json: FIXTURE_REQUEST,
+            pdf_bytes: FIXTURE_PDF,
+        };
+        let verified = verify_claim(&input).unwrap();
+        let witness = input.encode().unwrap();
+        let preparation = Preparation {
+            schema_version: 1,
+            status: "prepared_no_upload".into(),
+            preparation_id: String::new(),
+            created_at_unix: 1,
+            network: "succinct-mainnet".into(),
+            proof_mode: "groth16".into(),
+            fixture_kind: "embedded-reviewed-synthetic-v2".into(),
+            program_manifest_sha256: "11".repeat(32),
+            program_v_key: EXPECTED_PROGRAM_VKEY.into(),
+            elf_sha256: "22".repeat(32),
+            elf_bytes: 100,
+            witness_sha256: sha256_hex(&witness),
+            witness_bytes: witness.len(),
+            request_json_sha256: EXPECTED_FIXTURE_REQUEST_SHA256.into(),
+            pdf_sha256: EXPECTED_FIXTURE_PDF_SHA256.into(),
+            request_digest: format!("0x{}", hex::encode(verified.request_digest)),
+            public_values: format!("0x{}", hex::encode(verified.public_values())),
+            public_values_sha256: sha256_hex(&verified.public_values()),
+            cycle_limit: 300,
+            gas_limit_pgu: 400,
+            sp1_sdk_version: "6.2.4".into(),
+            outer_circuit_version: EXPECTED_OUTER_CIRCUIT_VERSION.into(),
+            network_upload_occurred: false,
+            proof_request_submitted: false,
+            reviewed_synthetic: None,
+            review_manifest_sha256: None,
+        }
+        .seal();
+        (preparation, signer)
+    }
+
+    #[test]
+    fn legacy_preparations_round_trip_without_new_fields_or_changed_identity() {
+        let (preparation, _) = fixture();
+        let json = serde_json::to_string(&preparation).unwrap();
+        assert!(!json.contains("reviewedSynthetic"));
+        assert!(!json.contains("reviewManifestSha256"));
+        let decoded: Preparation = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.preparation_id, preparation.preparation_id);
+        decoded.validate_synthetic().unwrap();
+        assert_eq!(decoded.computed_id(), preparation.computed_id());
+    }
+
+    #[test]
+    fn staging_rederives_exact_witness_and_rejects_mutated_seals_before_credentials() {
+        let (preparation, signer) = fixture();
+        let witness = verify_witness(&preparation, FIXTURE_PDF, FIXTURE_REQUEST, signer).unwrap();
+        assert_eq!(sha256_hex(&witness), preparation.witness_sha256);
+        for field in 0..6 {
+            let mut changed = preparation.clone();
+            match field {
+                0 => changed.witness_sha256 = "99".repeat(32),
+                1 => changed.witness_bytes += 1,
+                2 => changed.public_values_sha256 = "99".repeat(32),
+                3 => changed.public_values = format!("0x{}", "99".repeat(224)),
+                4 => changed.request_digest = format!("0x{}", "99".repeat(32)),
+                _ => changed.pdf_sha256 = "99".repeat(32),
+            }
+            assert!(verify_witness(&changed.seal(), FIXTURE_PDF, FIXTURE_REQUEST, signer).is_err());
+        }
+        assert!(verify_witness(&preparation, &FIXTURE_PDF[1..], FIXTURE_REQUEST, signer).is_err());
+        assert!(verify_witness(&preparation, FIXTURE_PDF, &FIXTURE_REQUEST[1..], signer).is_err());
+        assert!(verify_witness(&preparation, FIXTURE_PDF, FIXTURE_REQUEST, [0; 32]).is_err());
+        assert!(load_witness(&preparation, &["stage-reviewed-synthetic".into()]).is_err());
+    }
 }

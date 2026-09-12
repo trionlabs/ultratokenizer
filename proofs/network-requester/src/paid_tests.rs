@@ -87,6 +87,8 @@ fn plan(requester: &str, budget_id: &str) -> Plan {
         outer_circuit_version: EXPECTED_OUTER_CIRCUIT_VERSION.into(),
         network_upload_occurred: false,
         proof_request_submitted: false,
+        reviewed_synthetic: None,
+        review_manifest_sha256: None,
     }
     .seal();
     let quote = Quote {
@@ -427,6 +429,54 @@ fn plan_rejects_wrong_public_values_deadlines_whitelist_and_unknown_settings() {
     let mut json = serde_json::to_value(valid.settings).unwrap();
     json["verifier"] = "0xother".into();
     assert!(serde_json::from_value::<Settings>(json).is_err());
+}
+
+#[test]
+fn paid_plan_accepts_reviewed_preparation_without_resetting_witness_identity() {
+    use ultratokenizer_network_request_schema::{
+        ReviewedSynthetic, REVIEWED_PREPARATION_SCHEMA_VERSION, REVIEWED_SYNTHETIC_KIND,
+        REVIEWED_SYNTHETIC_PDF_SHA256, REVIEWED_SYNTHETIC_SIGNER,
+    };
+    let original = plan(&Signer::fixture().address(), &"bb".repeat(32));
+    let mut value = original.clone();
+    value.preparation.schema_version = REVIEWED_PREPARATION_SCHEMA_VERSION;
+    value.preparation.fixture_kind = REVIEWED_SYNTHETIC_KIND.into();
+    value.preparation.pdf_sha256 = REVIEWED_SYNTHETIC_PDF_SHA256.into();
+    value.preparation.review_manifest_sha256 = Some("88".repeat(32));
+    value.preparation.reviewed_synthetic = Some(ReviewedSynthetic {
+        schema_version: 1,
+        purpose: "authorized-synthetic-testnet-proof".into(),
+        source_kind: "synthetic-signed-pdf-capsule".into(),
+        synthetic: true,
+        production_approved: false,
+        chain_id: "296".into(),
+        gate: format!("0x{}", "11".repeat(20)),
+        token: format!("0x{}", "22".repeat(20)),
+        recipient: format!("0x{}", "33".repeat(20)),
+        issuer_id: format!("0x{}", "44".repeat(32)),
+        source_id: format!("0x{}", "55".repeat(32)),
+        amount_milligrams: "1000".into(),
+        signer_fingerprint: REVIEWED_SYNTHETIC_SIGNER.into(),
+        pdf_sha256: REVIEWED_SYNTHETIC_PDF_SHA256.into(),
+        request_json_sha256: value.preparation.request_json_sha256.clone(),
+        request_digest: value.preparation.request_digest.clone(),
+    });
+    value.preparation = value.preparation.seal();
+    value
+        .quote
+        .preparation_id
+        .clone_from(&value.preparation.preparation_id);
+    value.quote = value.quote.seal();
+    value.settings.quote_id.clone_from(&value.quote.quote_id);
+    let value = value.seal().unwrap();
+    value.validate().unwrap();
+    // A review/quote/schema update cannot authorize paying for an identical witness again.
+    assert_eq!(value.request_identity, original.request_identity);
+    assert_ne!(value.plan_id, original.plan_id);
+    let serialized = serde_json::to_vec(&value).unwrap();
+    let recovered: Plan = serde_json::from_slice(&serialized).unwrap();
+    recovered.validate().unwrap();
+    assert_eq!(recovered.plan_id, value.plan_id);
 }
 
 #[tokio::test]

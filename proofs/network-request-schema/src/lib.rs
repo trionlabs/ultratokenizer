@@ -15,6 +15,94 @@ pub const EXPECTED_FIXTURE_PDF_SHA256: &str =
 pub const EXPECTED_FIXTURE_REQUEST_SHA256: &str =
     "707757f3ffb9808da6bf1707103b336e29f54f31b0cf2e720fcbe95d390f2f81";
 pub const EXPECTED_OUTER_CIRCUIT_VERSION: &str = "v6.1.0";
+pub const REVIEWED_PREPARATION_SCHEMA_VERSION: u32 = 2;
+pub const REVIEWED_SYNTHETIC_KIND: &str = "reviewed-synthetic-deployment-v2";
+/// An explicitly authorized, locally generated test PDF; this is not a generic upload route.
+pub const REVIEWED_SYNTHETIC_PDF_SHA256: &str =
+    "44dc648ff3a8ab338ffe2a2857fb44668fc8917db292ab25fa384efb2d59bffa";
+pub const REVIEWED_SYNTHETIC_SIGNER: &str =
+    "dab715c9d49c43851ab892db3d6a55f7f47d5685570cf340658567ab19fe113f";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReviewedSynthetic {
+    pub schema_version: u32,
+    pub purpose: String,
+    pub source_kind: String,
+    pub synthetic: bool,
+    pub production_approved: bool,
+    pub chain_id: String,
+    pub gate: String,
+    pub token: String,
+    pub recipient: String,
+    pub issuer_id: String,
+    pub source_id: String,
+    pub amount_milligrams: String,
+    pub signer_fingerprint: String,
+    pub pdf_sha256: String,
+    pub request_json_sha256: String,
+    pub request_digest: String,
+}
+
+impl ReviewedSynthetic {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if self.schema_version != 1
+            || self.purpose != "authorized-synthetic-testnet-proof"
+            || self.source_kind != "synthetic-signed-pdf-capsule"
+            || !self.synthetic
+            || self.production_approved
+            || self.chain_id != "296"
+            || self.gate != normalize_address(&self.gate)?
+            || self.token != normalize_address(&self.token)?
+            || self.recipient != normalize_address(&self.recipient)?
+            || self.gate == self.token
+            || !is_lower_hex(&self.issuer_id, 32, true)
+            || !is_lower_hex(&self.source_id, 32, true)
+            || self.amount_milligrams != "1000"
+            || self.signer_fingerprint != REVIEWED_SYNTHETIC_SIGNER
+            || self.pdf_sha256 != REVIEWED_SYNTHETIC_PDF_SHA256
+            || !is_lower_hex(&self.request_json_sha256, 32, false)
+            || !is_lower_hex(&self.request_digest, 32, true)
+        {
+            return Err("Review is not the authorized synthetic testnet input.");
+        }
+        Ok(())
+    }
+
+    fn commitment(&self) -> String {
+        hash_fields(
+            b"ultratokenizer-reviewed-synthetic-v1",
+            &[
+                &self.schema_version.to_be_bytes(),
+                self.purpose.as_bytes(),
+                self.source_kind.as_bytes(),
+                if self.synthetic { b"1" } else { b"0" },
+                if self.production_approved { b"1" } else { b"0" },
+                self.chain_id.as_bytes(),
+                self.gate.as_bytes(),
+                self.token.as_bytes(),
+                self.recipient.as_bytes(),
+                self.issuer_id.as_bytes(),
+                self.source_id.as_bytes(),
+                self.amount_milligrams.as_bytes(),
+                self.signer_fingerprint.as_bytes(),
+                self.pdf_sha256.as_bytes(),
+                self.request_json_sha256.as_bytes(),
+                self.request_digest.as_bytes(),
+            ],
+        )
+    }
+
+    pub fn validate_files(&self, pdf: &[u8], request: &[u8]) -> Result<(), &'static str> {
+        self.validate()?;
+        if hex::encode(Sha256::digest(pdf)) != self.pdf_sha256
+            || hex::encode(Sha256::digest(request)) != self.request_json_sha256
+        {
+            return Err("Input bytes differ from the authorized synthetic review.");
+        }
+        Ok(())
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -43,6 +131,10 @@ pub struct Preparation {
     pub outer_circuit_version: String,
     pub network_upload_occurred: bool,
     pub proof_request_submitted: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reviewed_synthetic: Option<ReviewedSynthetic>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_manifest_sha256: Option<String>,
 }
 
 impl Preparation {
@@ -54,7 +146,7 @@ impl Preparation {
 
     #[must_use]
     pub fn computed_id(&self) -> String {
-        hash_fields(
+        let legacy = hash_fields(
             b"ultratokenizer-sp1-network-preparation-v1",
             &[
                 &self.schema_version.to_be_bytes(),
@@ -93,15 +185,47 @@ impl Preparation {
                     b"0"
                 },
             ],
-        )
+        );
+        match (&self.reviewed_synthetic, &self.review_manifest_sha256) {
+            (None, None) => legacy,
+            (review, hash) => hash_fields(
+                b"ultratokenizer-sp1-network-preparation-v2",
+                &[
+                    legacy.as_bytes(),
+                    review
+                        .as_ref()
+                        .map(ReviewedSynthetic::commitment)
+                        .unwrap_or_default()
+                        .as_bytes(),
+                    hash.as_deref().unwrap_or("").as_bytes(),
+                ],
+            ),
+        }
     }
 
     pub fn validate_synthetic(&self) -> Result<(), &'static str> {
-        if self.schema_version != PREPARATION_SCHEMA_VERSION
+        let valid_input = match (&self.reviewed_synthetic, &self.review_manifest_sha256) {
+            (None, None) => {
+                self.schema_version == PREPARATION_SCHEMA_VERSION
+                    && self.fixture_kind == "embedded-reviewed-synthetic-v2"
+                    && self.request_json_sha256 == EXPECTED_FIXTURE_REQUEST_SHA256
+                    && self.pdf_sha256 == EXPECTED_FIXTURE_PDF_SHA256
+            }
+            (Some(review), Some(hash)) => {
+                self.schema_version == REVIEWED_PREPARATION_SCHEMA_VERSION
+                    && self.fixture_kind == REVIEWED_SYNTHETIC_KIND
+                    && review.validate().is_ok()
+                    && is_lower_hex(hash, 32, false)
+                    && self.pdf_sha256 == review.pdf_sha256
+                    && self.request_json_sha256 == review.request_json_sha256
+                    && self.request_digest == review.request_digest
+            }
+            _ => false,
+        };
+        if !valid_input
             || self.status != "prepared_no_upload"
             || self.network != "succinct-mainnet"
             || self.proof_mode != "groth16"
-            || self.fixture_kind != "embedded-reviewed-synthetic-v2"
             || self.program_v_key != EXPECTED_PROGRAM_VKEY
             || !is_lower_hex(&self.elf_sha256, 32, false)
             || !is_lower_hex(&self.program_manifest_sha256, 32, false)
@@ -109,8 +233,6 @@ impl Preparation {
             || !is_lower_hex(&self.public_values_sha256, 32, false)
             || !is_lower_hex(&self.request_digest, 32, true)
             || !is_lower_hex(&self.public_values, 224, true)
-            || self.request_json_sha256 != EXPECTED_FIXTURE_REQUEST_SHA256
-            || self.pdf_sha256 != EXPECTED_FIXTURE_PDF_SHA256
             || self.sp1_sdk_version != "6.2.4"
             || self.outer_circuit_version != EXPECTED_OUTER_CIRCUIT_VERSION
             || self.network_upload_occurred
@@ -256,6 +378,41 @@ pub fn require_suffix(path: &str, suffix: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
+/// Review and witness inputs must be bounded regular owner-only files, not links.
+pub fn read_private_bounded(path: &str, maximum: usize) -> Result<Vec<u8>, &'static str> {
+    use std::{fs::File, io::Read};
+    let before = std::fs::symlink_metadata(path).map_err(|_| "Unable to inspect private input.")?;
+    if !before.is_file() || before.len() > maximum as u64 {
+        return Err("Private input must be a bounded regular file.");
+    }
+    let file = File::open(path).map_err(|_| "Unable to open private input.")?;
+    let opened = file
+        .metadata()
+        .map_err(|_| "Unable to inspect opened private input.")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if before.dev() != opened.dev()
+            || before.ino() != opened.ino()
+            || opened.mode() & 0o077 != 0
+            || opened.nlink() != 1
+        {
+            return Err("Private input must have owner-only permissions and no links.");
+        }
+    }
+    if !opened.is_file() {
+        return Err("Private input must be a regular file.");
+    }
+    let mut bytes = Vec::new();
+    file.take(maximum as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "Unable to read private input.")?;
+    if bytes.len() > maximum {
+        return Err("Private input exceeds its size limit.");
+    }
+    Ok(bytes)
+}
+
 pub fn parse_canonical_u64(value: &str) -> Result<u64, &'static str> {
     if value.is_empty()
         || (value.len() > 1 && value.starts_with('0'))
@@ -368,6 +525,8 @@ mod tests {
             outer_circuit_version: EXPECTED_OUTER_CIRCUIT_VERSION.into(),
             network_upload_occurred: false,
             proof_request_submitted: false,
+            reviewed_synthetic: None,
+            review_manifest_sha256: None,
         }
         .seal()
     }
@@ -378,6 +537,97 @@ mod tests {
         assert!(value.validate_synthetic().is_ok());
         value.gas_limit_pgu += 1;
         assert!(value.validate_synthetic().is_err());
+    }
+
+    fn reviewed() -> ReviewedSynthetic {
+        ReviewedSynthetic {
+            schema_version: 1,
+            purpose: "authorized-synthetic-testnet-proof".into(),
+            source_kind: "synthetic-signed-pdf-capsule".into(),
+            synthetic: true,
+            production_approved: false,
+            chain_id: "296".into(),
+            gate: format!("0x{}", "11".repeat(20)),
+            token: format!("0x{}", "22".repeat(20)),
+            recipient: format!("0x{}", "33".repeat(20)),
+            issuer_id: format!("0x{}", "44".repeat(32)),
+            source_id: format!("0x{}", "55".repeat(32)),
+            amount_milligrams: "1000".into(),
+            signer_fingerprint: REVIEWED_SYNTHETIC_SIGNER.into(),
+            pdf_sha256: REVIEWED_SYNTHETIC_PDF_SHA256.into(),
+            request_json_sha256: "66".repeat(32),
+            request_digest: format!("0x{}", "77".repeat(32)),
+        }
+    }
+
+    #[test]
+    fn reviewed_preparation_is_distinct_and_cannot_admit_other_documents() {
+        let review = reviewed();
+        assert!(review.validate().is_ok());
+        let mut value = preparation();
+        let legacy_id = value.preparation_id.clone();
+        value.schema_version = REVIEWED_PREPARATION_SCHEMA_VERSION;
+        value.fixture_kind = REVIEWED_SYNTHETIC_KIND.into();
+        value.pdf_sha256.clone_from(&review.pdf_sha256);
+        value
+            .request_json_sha256
+            .clone_from(&review.request_json_sha256);
+        value.request_digest.clone_from(&review.request_digest);
+        value.reviewed_synthetic = Some(review.clone());
+        value.review_manifest_sha256 = Some("88".repeat(32));
+        value = value.seal();
+        assert!(value.validate_synthetic().is_ok());
+        assert_ne!(value.preparation_id, legacy_id);
+        for change in 0..8 {
+            let mut changed = value.clone();
+            let input = changed.reviewed_synthetic.as_mut().unwrap();
+            match change {
+                0 => input.synthetic = false,
+                1 => input.production_approved = true,
+                2 => input.chain_id = "295".into(),
+                3 => input.pdf_sha256 = "99".repeat(32),
+                4 => input.signer_fingerprint = "99".repeat(32),
+                5 => input.amount_milligrams = "999".into(),
+                6 => input.request_digest = format!("0x{}", "99".repeat(32)),
+                _ => input.purpose = "private-bank-document".into(),
+            }
+            assert!(changed.seal().validate_synthetic().is_err());
+        }
+        let mut changed = value.clone();
+        changed.reviewed_synthetic.as_mut().unwrap().recipient = format!("0x{}", "99".repeat(20));
+        assert_ne!(changed.computed_id(), value.preparation_id);
+        let mut changed = value.clone();
+        changed.review_manifest_sha256 = None;
+        assert!(changed.seal().validate_synthetic().is_err());
+        let mut changed = value;
+        changed.schema_version = PREPARATION_SCHEMA_VERSION;
+        assert!(changed.seal().validate_synthetic().is_err());
+        assert!(review
+            .validate_files(b"not the approved PDF", b"{}")
+            .is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn private_inputs_reject_links_permissions_and_oversize() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        let directory =
+            std::env::temp_dir().join(format!("ut-reviewed-input-{}", std::process::id()));
+        std::fs::create_dir(&directory).unwrap();
+        let path = directory.join("source");
+        std::fs::write(&path, b"test").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(
+            read_private_bounded(path.to_str().unwrap(), 4).unwrap(),
+            b"test"
+        );
+        assert!(read_private_bounded(path.to_str().unwrap(), 3).is_err());
+        let link = directory.join("link");
+        symlink(&path, &link).unwrap();
+        assert!(read_private_bounded(link.to_str().unwrap(), 4).is_err());
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(read_private_bounded(path.to_str().unwrap(), 4).is_err());
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

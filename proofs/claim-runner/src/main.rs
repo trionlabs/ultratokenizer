@@ -84,7 +84,7 @@ async fn run() -> Result<(), &'static str> {
     }
     if matches!(
         args.first().map(String::as_str),
-        Some("network-prepare-synthetic")
+        Some("network-prepare-synthetic" | "network-prepare-reviewed-synthetic")
     ) {
         return network_request::run(&args).await;
     }

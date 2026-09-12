@@ -2,8 +2,9 @@
 
 This standalone crate is the credential-bearing boundary for Succinct mainnet. Its dependency lock
 is separate from the evidence workspace, so enabling the SP1 network stack cannot silently change
-the reviewed guest build. It accepts only the integrity-sealed, embedded synthetic V2 fixture. It
-has no command that accepts an arbitrary document or witness.
+the reviewed guest build. It accepts the integrity-sealed embedded V2 fixture or a separately
+reviewed deployment request for one explicitly allowlisted synthetic PDF. Neither path accepts an
+arbitrary document or caller-supplied witness.
 
 The staging operations are:
 
@@ -13,6 +14,9 @@ The staging operations are:
   at most one program registration and uploads the witness as `PrivateStdin`. It cannot submit a
   proof request. Every external attempt is recorded in a new append-only mode-`0600` journal; an
   ambiguous result must be inspected and never retried by rerunning the command.
+- `stage-reviewed-synthetic` applies the same one-attempt boundary to a schema-2 preparation. It
+  independently rechecks the review-file hash, the allowlisted PDF, request bytes, deployment and
+  recipient bindings, public values and complete witness before loading the requester key.
 - `inspect-stage` validates a staging journal without credentials or network access and prints only
   public identifiers plus hashes of artifact URIs.
 
@@ -54,8 +58,8 @@ cargo run --manifest-path proofs/network-requester/Cargo.toml --locked -- \
 ```
 
 `PrivateStdin` keeps the artifact out of the ordinary public-input class. It is not a claim that the
-proving network cannot process or observe the witness. Only the reviewed synthetic fixture has been
-authorized; real Enpara evidence must remain local until its separate disclosure and authority
+proving network cannot process or observe the witness. Only the embedded fixture and the separately
+reviewed allowlisted synthetic PDF have an upload path; real Enpara evidence must remain local until its separate disclosure and authority
 model is approved.
 
 The completed 2026-09-11 staging run is summarized in the tracked
@@ -89,3 +93,64 @@ independently reviewed HTTPS origin, retrieves bounded bytes, and records `downl
 See the [retrieval procedure](RETRIEVAL.md); independent SDK/EVM verification is still required.
 The only admitted remote candidate remains the original synthetic V2 program in the
 shared request schema; a different Linux build is not admitted by these commands.
+
+## Reviewed deployment-bound synthetic input
+
+The original `network-prepare-synthetic` and `stage` commands and schema-1 journals remain supported;
+old preparation IDs and serialized fields are unchanged. The reviewed path uses schema 2 and never
+loosens the original embedded-fixture check. It preserves the same reviewed program VKey and ELF.
+
+Prepare an owner-only review JSON with the following exact keys. Address and hash fields use
+lowercase hex; SHA-256 fields and the signer fingerprint have no `0x` prefix. Replace placeholders
+with independently reviewed values from the final request and admitted deployment. Do not derive
+trust from values carried by an untrusted proof bundle.
+
+```json
+{
+  "schemaVersion": 1,
+  "purpose": "authorized-synthetic-testnet-proof",
+  "sourceKind": "synthetic-signed-pdf-capsule",
+  "synthetic": true,
+  "productionApproved": false,
+  "chainId": "296",
+  "gate": "0xREVIEWED_GATE",
+  "token": "0xREVIEWED_TOKEN",
+  "recipient": "0xREVIEWED_RECIPIENT",
+  "issuerId": "0xREVIEWED_ISSUER_ID",
+  "sourceId": "0xREVIEWED_SOURCE_ID",
+  "amountMilligrams": "1000",
+  "signerFingerprint": "dab715c9d49c43851ab892db3d6a55f7f47d5685570cf340658567ab19fe113f",
+  "pdfSha256": "44dc648ff3a8ab338ffe2a2857fb44668fc8917db292ab25fa384efb2d59bffa",
+  "requestJsonSha256": "REVIEWED_EXACT_REQUEST_FILE_SHA256",
+  "requestDigest": "0xREVIEWED_REQUEST_DIGEST"
+}
+```
+
+The named PDF digest is the sole additional admitted synthetic document. A `synthetic: true` flag
+cannot authorize another PDF. Native verification must still confirm its signature, signed capsule,
+exact quantity and complete request binding. PDF, request and review files must be regular files
+with owner-only permissions and no links; sizes are bounded. The review's exact byte hash is supplied
+separately, preserved in the sealed preparation and rechecked at staging. Expired requests fail.
+
+```sh
+cargo run --manifest-path proofs/Cargo.toml --locked \
+  -p ultratokenizer-claim-runner -- network-prepare-reviewed-synthetic \
+  proofs/elf/ultratokenizer-claim-guest proofs/programs/claim-v2.json \
+  work/review.json REVIEWED_REVIEW_FILE_SHA256 \
+  work/allocation.synthetic.pdf work/request.json \
+  work/run.sp1-network-preparation.json
+
+cargo run --manifest-path proofs/network-requester/Cargo.toml --locked -- \
+  stage-reviewed-synthetic work/run.sp1-network-preparation.json \
+  0xEXPECTED_REQUESTER proofs/elf/ultratokenizer-claim-guest \
+  work/run.sp1-network-staging.jsonl \
+  work/review.json REVIEWED_REVIEW_FILE_SHA256 \
+  work/allocation.synthetic.pdf work/request.json
+```
+
+Preparation performs local guest execution and PGU measurement, not a proof or upload. Staging
+uploads the exact derived witness as PrivateStdin and can register the same program if necessary;
+it does not submit a paid proof request. After staging, use the existing fresh quote, immutable budget,
+prepare-request, submit-request and recovery procedure. Neither review metadata nor preparation
+asserts chain admission: the operator must independently admit the actual Gate/token graph before
+freezing the request. A changed request requires a new review, preparation, stage and paid plan.
