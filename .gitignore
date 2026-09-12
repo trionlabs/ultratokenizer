@@ -97,6 +97,8 @@ skills-lock.json
 /.scratch/
 /context/
 /contexts/
+# Convenient local shortcut to the private runtime demo kit.
+/demo-files
 # Keep architecture research, decision records and implementation plans local.
 /docs/BLUEPRINT.md
 /docs/agents/
