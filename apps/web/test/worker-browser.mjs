@@ -117,7 +117,7 @@ try {
 
   await page.goto(base, { waitUntil: 'networkidle' });
   await expect(
-    page.getByRole('heading', { name: 'Your gold. A new form.' }),
+    page.getByRole('heading', { name: 'Proof first. Tokens next.' }),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Mint 1.000 g' })).toHaveCount(
     0,

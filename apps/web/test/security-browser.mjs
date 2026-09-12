@@ -193,7 +193,7 @@ try {
       });
       await expect(
         page.getByRole('heading', {
-          name: route ? 'Verify a receipt' : 'Your gold. A new form.',
+          name: route ? 'Verify a receipt' : 'Proof first. Tokens next.',
         }),
       ).toBeVisible();
     }

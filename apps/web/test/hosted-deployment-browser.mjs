@@ -43,7 +43,7 @@ try {
     });
     await page.goto(base, { waitUntil: 'networkidle' });
     await expect(
-      page.getByRole('heading', { name: 'Your gold. A new form.' }),
+      page.getByRole('heading', { name: 'Proof first. Tokens next.' }),
     ).toBeVisible();
     await expect(page.locator('body')).not.toContainText('MINT CONFIRMED');
     await expect(page.getByRole('dialog')).toHaveCount(0);

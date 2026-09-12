@@ -311,7 +311,7 @@
           Evidence → token <span>{activeStep + 1} / 6</span>
         </p>
         <h1 id="issuance-title" tabindex="-1">
-          Your gold. <em>A new form.</em>
+          Proof first. <em>Tokens next.</em>
         </h1>
         <p>
           {#if snapshot.receipt}Your tokens are issued. Keep the receipt.
