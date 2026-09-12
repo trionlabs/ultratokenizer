@@ -8,7 +8,7 @@ import {
   keccak256,
   toHex,
 } from 'viem';
-import { loadModule } from './helpers.mjs';
+import { loadModule, dropFiles } from './helpers.mjs';
 
 const base = new URL(process.env.PREVIEW_URL || 'http://127.0.0.1:4173/');
 assert.equal(base.protocol, 'http:');
@@ -275,6 +275,27 @@ try {
   await expect(
     page.getByRole('button', { name: 'Connect wallet', exact: true }),
   ).toBeEnabled();
+  await expect(page.getByLabel('Claim proof export')).toBeEnabled();
+  await dropFiles(page, 'Claim proof export', [
+    {
+      name: 'synthetic-claim-proof.json',
+      content: JSON.stringify({
+        status: 'verified_groth16_export',
+        proofMode: 'groth16',
+        zeroKnowledge: true,
+        issuerAuthorityChecked: false,
+        outerCircuitVersion: 'v6.1.0',
+        proofBytes: `0x${'01'.repeat(356)}`,
+        publicValues: fixture.bundle.publicValues,
+        programVKey: policy.programVKey,
+        request: fixture.bundle.request,
+      }),
+    },
+  ]);
+  await expect(
+    page.getByText('synthetic-claim-proof.json', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('1.000 g', { exact: true })).toBeVisible();
   await page
     .getByRole('button', { name: 'Connect wallet', exact: true })
     .click();

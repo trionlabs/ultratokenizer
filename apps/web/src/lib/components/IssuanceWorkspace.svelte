@@ -18,6 +18,7 @@
   import Glyph from '../visuals/Glyph.svelte';
   import EvidenceArtifact from '../visuals/EvidenceArtifact.svelte';
   import AppHeader from './AppHeader.svelte';
+  import JsonFileInput from './JsonFileInput.svelte';
 
   const session = createIssuanceSession();
   let snapshot = $state(session.read());
@@ -201,10 +202,10 @@
     };
   });
 
-  async function importFile(event: Event, kind: 'deployment' | 'bundle') {
-    const input = event.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = '';
+  async function importFile(
+    file: File | undefined,
+    kind: 'deployment' | 'bundle',
+  ) {
     if (!file || busy || unresolved || (kind === 'deployment' && !operatorMode))
       return;
     reading = true;
@@ -526,16 +527,18 @@
               >
             {/if}
           {:else if !request}
-            <label class="upload-button"
-              >Add proof package <Glyph name="plus" size={15} /><input
-                class="sr-only"
-                type="file"
-                accept=".json,application/json"
-                aria-label="Import issuance bundle"
-                disabled={busy || unresolved}
-                onchange={(event) => importFile(event, 'bundle')}
-              /></label
+            <JsonFileInput
+              class="upload-button"
+              label="Import issuance bundle"
+              compact
+              disabled={busy || unresolved}
+              onfile={(file) => importFile(file, 'bundle')}
+              onerror={(message) => (fileError = message)}
+              >Add proof package <Glyph name="plus" size={15} /></JsonFileInput
             >
+            <p class="field-hint">
+              Drop one JSON package here, or choose a file.
+            </p>
             <details class="upload-help">
               <summary>What can I upload?</summary>
               <p>
@@ -933,15 +936,13 @@
           <details class="technical-details">
             <summary>Deployment details</summary>
             <div class="compact-files">
-              {#if request}<label
-                  >Change package<input
-                    class="sr-only"
-                    type="file"
-                    accept=".json,application/json"
-                    aria-label="Import issuance bundle"
-                    disabled={busy || unresolved}
-                    onchange={(event) => importFile(event, 'bundle')}
-                  /></label
+              {#if request}<JsonFileInput
+                  label="Import issuance bundle"
+                  compact
+                  disabled={busy || unresolved}
+                  onfile={(file) => importFile(file, 'bundle')}
+                  onerror={(message) => (fileError = message)}
+                  >Change package</JsonFileInput
                 >{/if}
             </div>
             <dl class="data-list">
@@ -1024,7 +1025,11 @@
         accept=".json,application/json"
         aria-label="Import deployment configuration"
         disabled={busy || unresolved}
-        onchange={(event) => importFile(event, 'deployment')}
+        onchange={(event) => {
+          const input = event.currentTarget;
+          void importFile(input.files?.[0], 'deployment');
+          input.value = '';
+        }}
       />
       <p id="setup-file-hint" class="field-hint">
         Operator export · JSON · up to {MAX_DEPLOYMENT_BYTES / 1024} KB. Applies to

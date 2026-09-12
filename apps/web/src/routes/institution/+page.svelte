@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { zeroAddress, type EIP1193Provider, type Hex } from 'viem';
   import PortalShell from '$lib/components/PortalShell.svelte';
+  import JsonFileInput from '$lib/components/JsonFileInput.svelte';
   import Glyph from '$lib/visuals/Glyph.svelte';
   import { fetchHostedDeployment } from '$lib/application/hosted-deployment';
   import { createIssuanceSession } from '$lib/application/issuance-session';
@@ -360,13 +361,15 @@
               Source PDFs and private witnesses stay in the institution's local
               workflow.
             </p>
-            <label for="institution-proof">Claim proof export</label><input
+            <JsonFileInput
               id="institution-proof"
-              type="file"
-              accept=".json,application/json"
+              label="Claim proof export"
               disabled={busy || reservationPending}
-              onchange={(event) => loadProof(event.currentTarget.files?.[0])}
-            />
+              onfile={loadProof}
+              onerror={(message) => (error = message)}
+              >Claim proof export
+              <span class="muted">· Drop JSON here, or choose a file.</span>
+            </JsonFileInput>
             {#if proof}<dl>
                 <div>
                   <dt>Loaded proof</dt>

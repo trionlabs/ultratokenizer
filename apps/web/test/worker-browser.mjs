@@ -6,6 +6,7 @@ import {
   loadModule,
   operatorUrl,
   openOperatorConfiguration,
+  dropFiles,
 } from './helpers.mjs';
 const base = process.env.PREVIEW_URL || 'http://127.0.0.1:4173/';
 const { createFixture } = await loadModule('./fixtures/issuance.ts');
@@ -101,6 +102,8 @@ try {
       externalRequests.push(url.href);
       return route.abort();
     }
+    if (url.pathname === '/deployment.json')
+      return route.fulfill({ status: 404, body: '' });
     if (url.pathname === '/rpc-test') {
       const input = route.request().postDataJSON();
       const reply = (request) => {
@@ -238,7 +241,31 @@ try {
   await upload(page, 'Import deployment configuration', deployment);
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.locator('#issuance-title')).toBeFocused();
-  await upload(page, 'Import issuance bundle', fixture.bundle);
+  await dropFiles(page, 'Import issuance bundle', [
+    { name: 'source.pdf', type: 'application/pdf', content: '%PDF-synthetic' },
+  ]);
+  await expect(page.locator('.stage-action .inline-error')).toContainText(
+    'one JSON file',
+  );
+  const bundleFile = {
+    name: 'dropped-bundle.json',
+    content: JSON.stringify(fixture.bundle),
+  };
+  await dropFiles(page, 'Import issuance bundle', [bundleFile, bundleFile]);
+  await expect(page.locator('.stage-action .inline-error')).toContainText(
+    'one JSON file',
+  );
+  await expect(page.locator('.proof-object')).not.toHaveAttribute(
+    'data-state',
+    'loaded',
+  );
+  await dropFiles(page, 'Import issuance bundle', [
+    { name: 'invalid.json', content: '{}' },
+  ]);
+  await expect(page.locator('.stage-action .inline-error')).toContainText(
+    'bundle',
+  );
+  await dropFiles(page, 'Import issuance bundle', [bundleFile]);
   await expect(page.locator('.proof-sheet')).toContainText('1.000 g');
   await expect(page.locator('.proof-object')).toHaveAttribute(
     'data-state',
@@ -287,11 +314,21 @@ try {
   await expect(
     page.getByRole('button', { name: 'Check receipt offline' }),
   ).toBeDisabled();
-  await upload(page, 'Choose issuance receipt JSON', fixture.receipt);
+  await dropFiles(page, 'Choose issuance receipt JSON', [
+    { name: 'receipt.json', content: JSON.stringify(fixture.receipt) },
+  ]);
+  await expect(page.locator('.file-control').first()).toContainText(
+    'receipt.json',
+  );
   await expect(
     page.getByRole('button', { name: 'Check receipt offline' }),
   ).toBeDisabled();
-  await upload(page, 'Choose independent audit policy JSON', fixture.policy);
+  await dropFiles(page, 'Choose independent audit policy JSON', [
+    { name: 'policy.json', content: JSON.stringify(fixture.policy) },
+  ]);
+  await expect(page.locator('.file-control').last()).toContainText(
+    'policy.json',
+  );
   const rpcBeforeAudit = rpcCalls.length;
   await page.getByRole('button', { name: 'Check receipt offline' }).click();
   await expect(
@@ -484,6 +521,23 @@ try {
   await page.route('**/receipt.worker-*.js', hangWorker);
   await upload(page, 'Choose issuance receipt JSON', fixture.receipt);
   await page.getByRole('button', { name: 'Check receipt offline' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Cancel verification' }),
+  ).toBeVisible();
+  await dropFiles(page, 'Choose issuance receipt JSON', [
+    { name: 'blocked.json', content: '{}' },
+  ]);
+  await dropFiles(page, 'Choose independent audit policy JSON', [
+    { name: 'blocked.json', content: '{}' },
+    { name: 'also-blocked.json', content: '{}' },
+  ]);
+  await expect(page.locator('.file-control').first()).toContainText(
+    'input.json',
+  );
+  await expect(page.locator('.file-control').last()).toContainText(
+    'policy.json',
+  );
+  await expect(page.locator('.receipt-read-error')).toHaveCount(0);
   await expect(
     page.getByRole('button', { name: 'Cancel verification' }),
   ).toBeVisible();

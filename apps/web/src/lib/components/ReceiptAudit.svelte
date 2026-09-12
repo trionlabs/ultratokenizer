@@ -2,6 +2,7 @@
   import { onMount, tick } from 'svelte';
   import { formatGrams, readJsonFile, saveJson } from '../issuance';
   import { createBrowserReceiptVerifier } from '../verification/browser-verifier';
+  import JsonFileInput from './JsonFileInput.svelte';
   import {
     MAX_RECEIPT_BYTES,
     MAX_POLICY_BYTES,
@@ -41,10 +42,7 @@
     error = '';
     busy = false;
   }
-  async function importFile(event: Event, kind: 'receipt' | 'policy') {
-    const input = event.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = '';
+  async function importFile(file: File, kind: 'receipt' | 'policy') {
     if (!file || busy || reading) return;
     invalidate();
     reading = true;
@@ -125,27 +123,25 @@
     <h2>Load both files</h2>
   </div>
   <div class="file-pair">
-    <label class="file-control"
+    <JsonFileInput
+      class="file-control"
+      label="Choose issuance receipt JSON"
+      disabled={busy || reading}
+      onfile={(file) => importFile(file, 'receipt')}
+      onerror={(message) => (error = message)}
       ><span><b>01</b> Receipt</span><small
-        >{receiptName || 'JSON · 256 KB max'}</small
-      ><input
-        type="file"
-        accept=".json,application/json"
-        aria-label="Choose issuance receipt JSON"
-        disabled={busy || reading}
-        onchange={(event) => importFile(event, 'receipt')}
-      /></label
+        >{receiptName || 'Drop JSON here or choose · 256 KB max'}</small
+      ></JsonFileInput
     >
-    <label class="file-control"
+    <JsonFileInput
+      class="file-control"
+      label="Choose independent audit policy JSON"
+      disabled={busy || reading}
+      onfile={(file) => importFile(file, 'policy')}
+      onerror={(message) => (error = message)}
       ><span><b>02</b> Trust policy</span><small
-        >{policyName || 'JSON · 8 KB max'}</small
-      ><input
-        type="file"
-        accept=".json,application/json"
-        aria-label="Choose independent audit policy JSON"
-        disabled={busy || reading}
-        onchange={(event) => importFile(event, 'policy')}
-      /></label
+        >{policyName || 'Drop JSON here or choose · 8 KB max'}</small
+      ></JsonFileInput
     >
   </div>
   <p class="field-hint">
