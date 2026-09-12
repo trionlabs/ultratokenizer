@@ -1670,7 +1670,7 @@ await test('institution reservation reconciliation rejects wrong log, calldata, 
         }),
         hasCode(
           scenario === 'reorg'
-            ? 'issuance_preflight_unavailable'
+            ? 'transaction_uncertain'
             : 'reservation_mismatch',
         ),
       );

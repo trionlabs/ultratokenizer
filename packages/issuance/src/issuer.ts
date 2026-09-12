@@ -332,7 +332,7 @@ export function createIssuerClient(input: {
           permit,
           issuerSignature: signature,
         });
-      });
+      }, true);
     },
   });
 }

@@ -273,13 +273,16 @@ export function createChainContext(input: {
     if (canonical.hash !== block.hash || rpcChain !== chainId)
       throw new IssuanceClientError('transaction_uncertain');
   }
-  async function preflight<T>(operation: () => Promise<T>): Promise<T> {
+  async function preflight<T>(
+    operation: () => Promise<T>,
+    priorSubmission = false,
+  ): Promise<T> {
     try {
       return await operation();
     } catch (error) {
       if (
         error instanceof IssuanceClientError &&
-        error.code !== 'transaction_uncertain'
+        (error.code !== 'transaction_uncertain' || priorSubmission)
       )
         throw error;
       throw new IssuanceClientError('issuance_preflight_unavailable');
