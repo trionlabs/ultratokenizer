@@ -18,7 +18,7 @@ A token engine connecting authenticated rights, holder consent and institution-a
 | apps/web                                         | Fixed-amount Orbit wallet flow and independent receipt-verification worker                                                                       | Controller/browser checks; no live issuance claimed                                      |
 | Root application                                 | Interactive implementation and worker map                                                                                                        | Architecture explorer, not an issuance interface                                         |
 
-The product requires separately supplied deployment trust pins and a request-bound proof/permit bundle, then uses the actual connected wallet and RPC. It has no default issuer or deployment. The accepted claim profile is an explicitly synthetic capsule; full Enpara statement support is unfinished. The current synthetic V2 ELF and `PrivateStdin` witness were staged on Succinct, and one bounded paid request was acknowledged on September 12. Independent verification of its resulting proof remains pending. A historical core proof was independently verified for the earlier program, without zero knowledge; it does not validate the current exact-issuance program. See [proof verification](proofs/README.md) for the measured state and pending Groth16 acceptance.
+The product requires separately supplied deployment trust pins and a request-bound proof/permit bundle, then uses the actual connected wallet and RPC. It has no default issuer or deployment. The accepted claim profile is an explicitly synthetic capsule; full Enpara statement support is unfinished. DKIM and zkEmail authentication are not implemented; receiving a PDF by email does not authenticate the email or authorize issuance. The current synthetic V2 ELF and `PrivateStdin` witness were staged on Succinct, and one bounded paid request was acknowledged on September 12. Independent verification of its resulting proof remains pending. A historical core proof was independently verified for the earlier program, without zero knowledge; it does not validate the current exact-issuance program. See [proof verification](proofs/README.md) for the measured state and pending Groth16 acceptance.
 
 ## Trust flow
 
@@ -30,7 +30,7 @@ flowchart LR
   Request --> Permit[Institution permit and exact reservation]
   Proof --> Gate[Hedera issuance gate]
   Permit --> Gate
-  Gate --> Token[Selected HTS or ATS mint adapter]
+  Gate --> Token[Selected ATS adapter or optional native HTS]
   Request --> API[Authenticated observation API]
   Wallet[Wallet-submitted transaction hash] --> API
   API --> Observer[Durable read-only reconciliation]
@@ -45,9 +45,28 @@ No PDF or witness enters the edge worker. A worker reporting success cannot auth
 
 Source, issuer, governor and holder are authorization roles, not necessarily independent organizations. The engine checks configured authority and required consent; it cannot establish that an institution's source statement or physical backing assertion is true. Source authentication, asset terms and token-backend capabilities must be admitted explicitly for each supported profile.
 
-Claim profile 2 requires the request to equal the complete authenticated quantity. Exact reservation, minted supply and recipient increase must agree, with no fee deducted from that quantity. One successful issuance consumes the source's stable right identity in this Gate. Changing issuer does not create another consumption slot. Another Gate or chain requires an explicit continuity design.
+Claim profile 2 requires the request to equal the complete authenticated quantity for one right, which need not be an entire account balance. A 1 g right issues exactly 1 g or nothing. Exact reservation, minted supply and recipient increase must agree, with no fee deducted from that quantity. One successful issuance consumes the source's stable right identity in this Gate. Changing issuer does not create another consumption slot. Another Gate or chain requires an explicit continuity design.
+
+The institution ledger maps a stable `(sourceId, recordReference)` to a persisted random claim ID. Redelivery reuses that mapping; changing a PDF, email, signing key or statement date does not define a new right. The current ledger rejects changed holder or quantity for an existing reference. It implements neither account-period mint limits nor HMAC-derived claim IDs. Institutions must distinguish genuinely separate allocations from repeated descriptions of the same backing.
 
 The exact quantity and recipient are public from reservation broadcast, even if mint fails or the reservation is cancelled. Quantity secrecy is not a product requirement. Privacy protects government identifiers, names, account numbers and other source details within the supported local proving path. If the authenticated quantity represents a full account balance, that selected balance is public. Aggregate pending and outstanding amounts cannot exceed the configured issuer/token cap. That cap is a governance assertion, not proof of physical reserves or backing exclusivity across applications.
+
+## Backend and obligation boundaries
+
+ATS is the selected integration route; native HTS remains an optional backend. Both current profiles issue integer milligrams and allow later divisible transfers. The broader ATS feature set is not automatically enabled in this narrow profile.
+
+| Backend    | Current configuration                                                                                | Not provided by this profile                                       |
+| ---------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| ATS        | Admitted resolver/facet graph; sole adapter issuer; inert administrator; ERC-20 balance and transfer | Operational KYC/freeze, maintenance, recovery or redemption        |
+| Native HTS | Adapter-owned supply key and treasury; native association; mint and transfer                         | Admin, KYC, freeze, wipe or pause keys; adapter burn or redemption |
+
+Each institutional integration must identify the represented obligation, who owes fulfillment, who holds any backing, and who authorizes reserve assertions and cap changes. The engine has no universal custodian registry; its terms hashes commit to separately reviewed documents. A redemption request, token burn, reduction of outstanding liability and actual delivery are distinct events. Neither backend currently implements that settlement lifecycle, and releasing an unused reservation never clears an issued claim or its outstanding liability.
+
+## Reconstructing an issuance
+
+The `Issued` event alone is not a complete audit package. The successful `issue` calldata supplies the request, signatures, permit, public values and proof. Internal calls require execution traces or the original bundle; the top-level transaction need not target the Gate. Match the digests to the event, then follow `PolicyRegistered` and `RightsRegistered` for its issuer and version numbers to the program/source-key records, adapter and terms hashes. Reconstruct registration and revocation history against independently supplied deployment, runtime and program pins; obtain the actual terms separately.
+
+These inputs exist in the protocol; a complete historical reconstruction tool is not implemented. The institution bridge checks selected transaction/state consistency under its pinned RPC, while the portable auditor keeps historical authority and inclusion unverified. An RPC proof result, consistent event history or operator-supplied reference does not authenticate its own trust pins or establish physical backing. See [audit boundaries](packages/audit/README.md) and [verifier provenance](contracts/src/vendor/sp1/README.md).
 
 ## Install and run
 
@@ -103,7 +122,7 @@ The worker build is a local deployment dry run; the web build produces static fi
 - [Canonical requests and permits](packages/domain/README.md)
 - [PDF authentication and local proving](proofs/README.md)
 - [Separate native Enpara field extraction](proofs/enpara-evidence/README.md)
-- [Controlled issuance and HTS authority](contracts/README.md)
+- [Controlled issuance and token-backend authority](contracts/README.md)
 - [Reproducible ATS sources, compiler pins and deployment limits](contracts/ats/README.md)
 - [Holder and institution wallet clients](packages/issuance/README.md)
 - [Durable institution rights and allocations](packages/institution/README.md)

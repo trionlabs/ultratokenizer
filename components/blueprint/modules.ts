@@ -33,9 +33,9 @@ export const modules: BlueprintModule[] = [
     title: 'Request & coordination',
     short: 'Wallet issuance; separate authenticated observation.',
     zone: 'Browser / edge',
-    owner: 'Browser session; API Worker; one SQLite Durable Object per request',
+    owner: 'Browser session; API Worker; one SQLite Durable Object per tenant',
     purpose:
-      'Keep presentation separate from authenticated request tracking. The API validates ownership; a per-request object persists lifecycle transitions and alarms that reconcile a wallet-supplied transaction hash.',
+      'Keep presentation separate from authenticated request tracking. The API validates ownership; a tenant object persists request transitions, bounded retention and alarms that reconcile wallet-supplied transaction hashes.',
     input:
       'Browser: proof/permit bundle, independent deployment pins and an actual wallet. API: short-lived access token, canonical request and holder EIP-712 signature; later, a transaction hash.',
     output:
@@ -82,10 +82,10 @@ export const modules: BlueprintModule[] = [
   {
     id: 'prover',
     number: '03',
-    title: 'Local claim prover',
+    title: 'Claim prover',
     short: 'Bounded private witness → request-bound SP1 output.',
-    zone: 'Local Rust process',
-    owner: 'SP1 claim guest and explicit local proving runner',
+    zone: 'Local execution / explicit proving service',
+    owner: 'SP1 claim guest, local runner and staged network requester',
     purpose:
       'Recompute the full EIP-712 request and prove amount equals the authenticated quantity, with matching issuer/holder, claim identity and expiry. Keep proving separate from browser receipt checking.',
     input:
@@ -93,7 +93,7 @@ export const modules: BlueprintModule[] = [
     output:
       'Exactly 224 public bytes: profile, request digest, signer fingerprint, source ID, claim usage ID, claim commitment and expiry; a cryptographic proof only when explicit proving succeeds.',
     state:
-      'PDF and witness stay in the local process; the exact quantity is public from reservation. Program verification key and ELF hash identify the build; changing guest code requires new measurements.',
+      'Evidence stays local unless a separate network proving operation explicitly uploads its witness. The network requester stages synthetic inputs under a fixed budget. Program verification key and ELF hash identify the build.',
     guard:
       'Check witness length before allocation. The gate must pin this distinct claim program and verifier; execution output or a signature-only guest is insufficient.',
     failure:
@@ -103,7 +103,7 @@ export const modules: BlueprintModule[] = [
     current:
       'Current exact-quantity guest execution and rejection tests pass. A historical earlier program had a verified CPU core proof, which is not zero knowledge. The current pinned program still needs genuine Groth16 and positive Hedera verifier acceptance.',
     plannedPath:
-      'proofs/claim-guest/src/main.rs · proofs/claim-runner/src/{main,local_proof}.rs',
+      'proofs/claim-guest/src/main.rs · proofs/claim-runner/src/{main,local_proof}.rs · proofs/network-requester/src/main.rs',
   },
   {
     id: 'institution',
@@ -127,9 +127,9 @@ export const modules: BlueprintModule[] = [
     acceptance:
       'Changed requests invalidate permits; nonce reuse, expired/revoked keys and reservation overflow reject. A valid issuer signature does not prove that gold exists.',
     current:
-      'A durable institution ledger and actual wallet proof/reservation/permit client are implemented and locally tested. Their trusted lifecycle bridge, deployed signer and physical reserve reconciliation remain unconnected.',
+      'The institution ledger, wallet reservation/permit client and trusted RPC bridge are locally tested. The bridge records issued, released-unused and expired-unopened outcomes. Deployed operation and physical reserve reconciliation remain open.',
     plannedPath:
-      'packages/institution/src/ledger.ts · packages/issuance/src/issuer.ts · packages/domain/src/issuer-permit.ts · contracts/src/IssuanceGate.sol',
+      'packages/institution/src/{ledger,chain-bridge}.ts · packages/issuance/src/issuer.ts · packages/domain/src/issuer-permit.ts · contracts/src/IssuanceGate.sol',
   },
   {
     id: 'registry',
@@ -176,7 +176,7 @@ export const modules: BlueprintModule[] = [
     failure:
       'Any signature, proof, state or adapter failure reverts all consumption and mint effects. Edge observation never replaces these checks.',
     acceptance:
-      'Contract tests cover replay, claim reuse, revocation, expiry, reentrancy, reservation limits, ABI/digest parity and atomic rollback. Real verifier and native HTS acceptance remain separate release gates.',
+      'Contract tests cover replay, claim reuse, revocation, expiry, reentrancy, reservation limits, ABI/digest parity and atomic rollback. Real proof and selected Hedera backend acceptance remain separate release gates.',
     current:
       'Gate state tests use explicit test verifiers. Production deployment requires the pinned direct SP1 verifier, whose malformed-proof rejection is tested. No deployed gate or positive real-proof issuance is claimed.',
     plannedPath:
@@ -204,7 +204,7 @@ export const modules: BlueprintModule[] = [
     acceptance:
       'Main tests inject authorization, code and delta failures. A separate real ATS/Gate local run uses a test verifier; genuine proof and Hedera consensus execution remain required.',
     current:
-      'Both adapters and backend-aware wallet dispatch are implemented. The deployment script still provisions HTS only; complete ATS provisioning and live acceptance remain open. No redemption or physical delivery is established.',
+      'Both adapters and backend-aware wallet dispatch are implemented. ATS is the selected backend; its HFS creation transport is locally tested, while whole-graph provisioning and live acceptance remain open. No redemption or physical delivery is established.',
     plannedPath:
       'contracts/src/{HederaMintAdapter,AtsGateMintAdapter}.sol · packages/issuance/src/{ats,chain,client}.ts · contracts/test/AtsGateMintAdapter.t.sol',
   },
@@ -220,7 +220,7 @@ export const modules: BlueprintModule[] = [
     input:
       'Bounded issuance receipt with proof bytes, public values and signatures, plus a separately trusted policy. Historical sample receipts are rejected.',
     output:
-      'Individual binding/signature checks, missing evidence and an explicitly incomplete overall report. Optional RPC proof verification does not establish historical authority or chain inclusion.',
+      'Binding/signature checks and an incomplete audit-report.v2. Completed RPC proof checks include block, runtime, proof hashes and provider assurance; they do not establish historical authority or chain inclusion.',
     state:
       'Imports remain local. Browser jobs terminate on completion, timeout, cancellation or replacement. Auditing is offline by default; an explicitly configured RPC adapter can check proof cryptography.',
     guard:
@@ -267,7 +267,7 @@ export const journey: {
     modules: ['client', 'institution'],
     selected: 'institution',
     detail:
-      'Allocate a stable right and fix its exact quantity, reservation reference, holder, policy and rights before constructing the canonical request. The durable ledger exists; its trusted chain/wallet bridge remains open.',
+      'Allocate a stable right and fix its exact quantity, reservation reference, holder, policy and rights before constructing the canonical request. The ledger and trusted outcome bridge are locally tested; deployed integration remains open.',
   },
   {
     title: 'Approve',
@@ -277,7 +277,7 @@ export const journey: {
       'The holder wallet signs the complete fixed-amount request. A separately configured observation API can authenticate the holder and track the public request in a SQLite Durable Object; it cannot authorize issuance.',
   },
   {
-    title: 'Prove locally',
+    title: 'Prove',
     modules: ['evidence', 'prover'],
     selected: 'prover',
     detail:
@@ -321,9 +321,9 @@ export const buildPhases = [
   },
   {
     title: '02 / Cryptographic & chain acceptance',
-    ids: 'Claim prover · verifier · gate · HTS',
-    body: 'Generate genuine Groth16 for the current pinned guest, configure reviewed trust records and exercise actual Hedera verification, mint and rollback. An isolated real-contract ATS spike evaluates the prize-required backend; native HTS remains the implemented baseline.',
-    exit: 'Pending: ZK wrapper and native deployment acceptance.',
+    ids: 'Claim prover · verifier · gate · ATS',
+    body: 'Generate genuine Groth16 bound to the deployed request, admit the complete ATS runtime graph and exercise actual Hedera verification, mint, transfer and rollback. Native HTS is a separate optional backend.',
+    exit: 'Pending: deployment-bound proof and live ATS acceptance.',
   },
   {
     title: '03 / Operational & independent acceptance',

@@ -20,7 +20,7 @@ export const cases: {
     label: 'Current implementation',
     title: 'Modules are locally tested; deployment acceptance is pending.',
     detail:
-      'The wallet UI and receipt worker, exact-quantity guest, issuance gate, institution ledger, issuer wallet client, observation API and portable auditor have local checks. Current-program Groth16, institution lifecycle integration and Hedera deployment remain pending. ATS has a real local Gate integration, a main mint adapter and explicit wallet/backend checks; full provisioning and live acceptance remain open.',
+      'The wallet UI, receipt worker, exact-quantity guest, Gate, institution ledger and outcome bridge, issuer wallet client and observer have local checks. ATS has real local Gate integration and an HFS creation transport. Verified Groth16, whole-graph deployment and live acceptance remain open.',
     verdict: 'open',
   },
   {

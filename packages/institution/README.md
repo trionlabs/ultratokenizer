@@ -2,8 +2,9 @@
 
 A Node-only library for trusted institutional operators. It persists stable rights,
 exact issuance allocations and conservative backing exposure in an actual SQLite
-database. It does not sign documents or permits, submit transactions, authenticate
-chain observations, or establish physical ownership or backing.
+database. The ledger does not sign documents or permits, submit transactions,
+authenticate chain observations, or establish physical ownership or backing. Its
+separately pinned RPC bridge checks chain consistency under an operator-trusted provider.
 
 The current source prototype uses synthetic rights. A genuine proof over a
 synthetic source does not turn those rights into real bank obligations.
@@ -22,6 +23,13 @@ statement date or signing-key version. The same source/reference pair always
 returns the same randomly generated 32-byte `claimId` and public `claimUsageId`.
 Changed quantity or holder is rejected. A source identity must remain stable when
 its signing key rotates.
+
+This is a persisted random mapping, not `HMAC(account, period)` or an account-period
+mint allowance. The amount belongs to one right, not necessarily the whole account.
+The usage-ID derivation survives source revisions, but the current ledger has no
+amendment API for an existing right's holder or quantity. A new reference creates a
+new software identity; it must represent an independently justified allocation,
+not a renamed revision of already-used backing.
 
 Repeated statements about the same backing must resolve to the same institutional
 right. Different source/reference pairs cannot be recognized as duplicate physical
@@ -64,7 +72,12 @@ the cap, and cap reductions cannot go below exposure. Accounting uses exact
 signed integer range. Pools aggregate the same issuer/token across requests for
 different Gates or chains in this database.
 
-Issued obligations never expire and have no release, burn or redemption method.
+Issued exposure never expires in this ledger and has no release, burn or redemption method.
+The institution must separately identify its obligor, any custodian and the evidence
+authorizing reserve assertions and cap changes. A redemption request, token burn,
+liability reduction and physical fulfillment require distinct settlement evidence;
+none is implemented by the ledger's unused-allocation release methods. A transfer
+also does not change the original right's holder record or reduce issued exposure.
 Local time, expired permits, RPC outages and missing transaction hashes cannot release
 an allocation. A failed or uncertain `openReservation` attempt retains its identical
 local allocation. An expired request with no reservation can close only through

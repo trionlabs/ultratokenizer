@@ -207,7 +207,7 @@ export default function ModuleBlueprint({
         <div className="ub-map" aria-label="Module map with trust boundaries">
           <div className="ub-zone-title">
             <span>01 / USER CONTROL</span>
-            <span>PDFs stay in the local proving process</span>
+            <span>Local source evidence; explicit proving-service opt-in</span>
           </div>
           {node('client', true)}
           <div className="ub-connector">
@@ -230,7 +230,10 @@ export default function ModuleBlueprint({
                 <span>INSTITUTION BOUNDARY</span>
               </div>
               {node('institution')}
-              <p>The institution owns holder and physical reserve records.</p>
+              <p>
+                The integration defines the entitlement, obligor and backing
+                records.
+              </p>
             </div>
           </div>
           <div className="ub-merge" aria-hidden="true">
@@ -414,8 +417,8 @@ export default function ModuleBlueprint({
           <h3>Separate runtimes, explicit responsibilities.</h3>
           <p>
             The browser receipt worker, local Rust prover, authenticated API
-            Worker, per-request SQLite object, contracts and standalone auditor
-            have different responsibilities and trust boundaries.
+            Worker, tenant SQLite object, contracts and standalone auditor have
+            different responsibilities and trust boundaries.
           </p>
         </div>
         <div className="ub-phases">
@@ -434,11 +437,12 @@ export default function ModuleBlueprint({
       </section>
       <div className="ub-footnote">
         <p>
-          PDFs and other source fields stay local. The full exact quantity,
-          recipient and request identifiers become public from reservation
-          broadcast, including cancelled reservations. One claim is single-use
-          within a gate; institutional snapshots do not establish exclusive
-          physical reserves.
+          Personal source documents stay local; network proving requires a
+          separate explicit witness upload. The full exact quantity, recipient
+          and request identifiers become public from reservation broadcast,
+          including cancelled reservations. One claim is single-use within a
+          gate; institutional snapshots do not establish exclusive physical
+          reserves.
         </p>
         <div>
           <a
