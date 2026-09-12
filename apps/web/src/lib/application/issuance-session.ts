@@ -52,14 +52,19 @@ export type IssuanceSnapshot = Readonly<{
   }>;
 }>;
 
+function providerCode(error: unknown) {
+  if (!error || typeof error !== 'object') return undefined;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(error, 'code');
+    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function operationError(error: unknown): string {
   if (error instanceof IssuanceClientError) return error.message;
-  if (
-    error &&
-    typeof error === 'object' &&
-    'code' in error &&
-    error.code === 4001
-  )
+  if (providerCode(error) === 4001)
     return 'The wallet request was declined. No approval was recorded here.';
   return 'The operation did not complete. Check wallet activity and the configured RPC before retrying.';
 }
@@ -95,11 +100,7 @@ export function createIssuanceSession(
   let foreground: symbol | undefined;
   let delayed: { id: symbol; operation: Operation } | undefined;
   const listeners = new Set<(value: IssuanceSnapshot) => void>();
-  function providerCode(error: unknown) {
-    return error && typeof error === 'object' && 'code' in error
-      ? error.code
-      : undefined;
-  }
+
   async function observedWallet(
     currentProvider: EIP1193Provider,
     requestAccess: boolean,

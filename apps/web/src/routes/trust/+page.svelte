@@ -35,6 +35,7 @@
   async function refresh() {
     busy = true;
     error = '';
+    missing = false;
     snapshot = undefined;
     discovery = undefined;
     discoveryStatus = 'idle';
@@ -157,9 +158,15 @@
           <h2>Issuance authority</h2>
           <p class="muted">
             {snapshot.active
-              ? 'Configured records match and issuance is open at this block.'
+              ? 'Configured authority is active at this block. Each request still needs its own proof, permit and reservation.'
               : 'Issuance is paused, expired, revoked, or a configured record does not match.'}
           </p>
+          {#if snapshot.active && snapshot.pool.available === '0'}
+            <p class="muted">
+              No capacity remains for new reservations. Existing reservations
+              are checked separately.
+            </p>
+          {/if}
           <dl>
             <div>
               <dt>Chain / backend</dt>

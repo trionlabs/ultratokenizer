@@ -130,8 +130,9 @@ export function createChainContext(input: {
       reader.getChainId(),
       wallet.getChainId(),
     ]);
-    if (rpcChain !== chainId || walletChain !== chainId)
-      throw new IssuanceClientError('wrong_chain');
+    if (rpcChain !== chainId)
+      throw new IssuanceClientError('rpc_chain_mismatch');
+    if (walletChain !== chainId) throw new IssuanceClientError('wrong_chain');
     // ATS code, graph and state must share one canonical block. Legacy HTS
     // retains its original preflight behavior and has no ATS admission record.
     const block = ats ? await reader.getBlock({ blockNumber }) : undefined;
@@ -197,7 +198,7 @@ export function createChainContext(input: {
     const hash = parseTransactionHash(transactionHash);
     try {
       if ((await reader.getChainId()) !== chainId)
-        throw new IssuanceClientError('wrong_chain');
+        throw new IssuanceClientError('rpc_chain_mismatch');
       const observed = await reader.waitForTransactionReceipt({
         hash,
         confirmations: deployment.confirmations,

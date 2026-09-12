@@ -43,7 +43,7 @@ export async function readTrustSnapshot(value: unknown) {
     }),
   });
   if (String(await reader.getChainId()) !== policy.chainId)
-    throw new IssuanceClientError('wrong_chain');
+    throw new IssuanceClientError('rpc_chain_mismatch');
   const block = await reader.getBlock();
   const at = {
     address: policy.gate,
@@ -183,6 +183,10 @@ export async function readTrustSnapshot(value: unknown) {
       cap: pool[0].toString(),
       pending: pool[1].toString(),
       outstanding: pool[2].toString(),
+      available: (pool[0] > pool[1] + pool[2]
+        ? pool[0] - pool[1] - pool[2]
+        : 0n
+      ).toString(),
     },
     matches,
     active:
@@ -246,7 +250,7 @@ export function authorityCall(
       ],
     } as const;
   throw new Error(
-    'Invalid authority action. Use an exact amount or future expiry.',
+    'Invalid authority action. Use an exact amount or a positive uint64 expiry timestamp.',
   );
 }
 
@@ -264,6 +268,11 @@ export function createAuthorityClient(input: {
   });
   async function simulate(action: AuthorityAction, account: Address) {
     const operation = call(action);
+    if (action.kind === 'admit-issuer') {
+      const block = await reader.getBlock();
+      if (BigInt(action.validUntil) <= block.timestamp)
+        throw new IssuanceClientError('expired');
+    }
     if (operation.functionName === 'setPaused')
       return reader.simulateContract({ ...operation, account });
     if (operation.functionName === 'setBackingCap')

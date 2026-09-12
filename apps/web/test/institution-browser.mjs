@@ -95,6 +95,7 @@ const discoveryIndex = {
   ],
 };
 let validDiscovery = true;
+let deploymentAvailable = false;
 const browser = await chromium.launch({ headless: true });
 const errors = [];
 const unexpected = [];
@@ -226,6 +227,8 @@ try {
       unexpected.push(url.href);
       return route.abort();
     }
+    if (url.pathname === '/deployment.json' && !deploymentAvailable)
+      return route.fulfill({ status: 404, body: 'Not configured' });
     if (url.pathname === '/deployment.json')
       return route.fulfill({
         contentType: 'application/json',
@@ -239,6 +242,20 @@ try {
     return route.continue();
   });
   await page.goto(new URL('trust/', base).href);
+  await expect(
+    page.getByText(
+      "The deployment operator has not published this site's configuration yet.",
+      { exact: false },
+    ),
+  ).toBeVisible();
+  deploymentAvailable = true;
+  await page.getByRole('button', { name: 'Refresh chain state' }).click();
+  await expect(
+    page.getByText(
+      "The deployment operator has not published this site's configuration yet.",
+      { exact: false },
+    ),
+  ).toBeHidden();
   await expect(
     page.getByRole('heading', { name: 'Follow the authority.' }),
   ).toBeVisible();
@@ -260,6 +277,18 @@ try {
       .pathname,
     fullPage: true,
   });
+  values.paused = false;
+  values.backingPools = [1000n, 1000n, 0n];
+  await page.getByRole('button', { name: 'Refresh chain state' }).click();
+  await expect(
+    page.getByText('No capacity remains for new reservations.', {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Configured authority is active', { exact: false }),
+  ).toBeVisible();
+  values.backingPools = [1000n, 0n, 0n];
   validDiscovery = false;
   await page.getByRole('button', { name: 'Refresh chain state' }).click();
   await expect(

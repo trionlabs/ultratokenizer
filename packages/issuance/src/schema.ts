@@ -29,7 +29,9 @@ const messages = {
     'An independent, complete deployment configuration is required.',
   unsupported_profile:
     'This source profile is not accepted for this deployment purpose.',
-  wrong_chain: 'The wallet or RPC is connected to a different chain.',
+  wrong_chain: 'The wallet is connected to a different chain.',
+  rpc_chain_mismatch:
+    'The configured RPC serves a different chain. The deployment operator must correct it; switching wallets will not fix it.',
   wrong_account: 'The selected wallet does not authorize this request.',
   deployment_mismatch:
     'The observed contracts do not match the independently configured deployment.',

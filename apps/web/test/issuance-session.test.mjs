@@ -1419,3 +1419,44 @@ test('disposing during token preparation prevents a later wallet call', async ()
   await call;
   assert.equal(calls.includes('send-token'), false);
 });
+
+test('RPC chain mismatch does not recover as a wallet chain mismatch', async () => {
+  const fixture = await createFixture();
+  const { session } = harness(fixture, {
+    connect: async () => {
+      throw new IssuanceClientError('rpc_chain_mismatch');
+    },
+  });
+  let calls = 0;
+  session.setProvider({
+    request: async () => {
+      calls++;
+      throw new Error('No wallet recovery expected');
+    },
+  });
+  await session.connect();
+  assert.match(session.read().error, /configured RPC serves a different chain/);
+  assert.equal(calls, 0);
+  session.dispose();
+});
+
+test('wallet error code accessors are never invoked by network switching', async () => {
+  const fixture = await createFixture();
+  const { session } = harness(fixture);
+  let getters = 0;
+  session.setProvider({
+    request: async () => {
+      throw Object.defineProperty({}, 'code', {
+        get() {
+          getters++;
+          throw new Error('Untrusted getter');
+        },
+      });
+    },
+  });
+  await session.connect();
+  await session.switchToTestnet();
+  assert.equal(getters, 0);
+  assert.match(session.read().error, /could not add or switch/);
+  session.dispose();
+});

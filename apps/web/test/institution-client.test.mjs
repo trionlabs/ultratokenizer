@@ -34,6 +34,7 @@ async function harness(t) {
     transactionData: undefined,
     canonical: blockHash,
     rejectSimulation: false,
+    timestamp: '0x713fb300',
   };
   const values = {
     governor,
@@ -75,7 +76,7 @@ async function harness(t) {
       result = {
         number: '0x64',
         hash: state.canonical,
-        timestamp: '0x713fb300',
+        timestamp: state.timestamp,
         transactions: [],
       };
     else if (call.method === 'eth_blockNumber') result = '0x64';
@@ -164,12 +165,17 @@ test('current trust reads share a canonical block and report pause separately fr
     rights: true,
   });
   assert.equal(snapshot.pool.outstanding, '200');
+  assert.equal(snapshot.pool.available, '700');
   for (const call of calls.filter(
     (call) => call.method === 'eth_call' || call.method === 'eth_getCode',
   ))
     assert.equal(call.params[1], '0x64');
   values.paused = false;
   assert.equal((await readTrustSnapshot(fixture.deployment)).active, true);
+  values.backingPools = [1000n, 800n, 200n];
+  const full = await readTrustSnapshot(fixture.deployment);
+  assert.equal(full.active, true);
+  assert.equal(full.pool.available, '0');
   values.programs[2] = `0x${'ee'.repeat(32)}`;
   const changed = await readTrustSnapshot(fixture.deployment);
   assert.equal(changed.active, false);
@@ -180,7 +186,7 @@ test('wrong RPC chain and runtime fail closed before claiming matching records',
   const { fixture, state } = await harness(t);
   state.chain = '0x1';
   await assert.rejects(readTrustSnapshot(fixture.deployment), {
-    code: 'wrong_chain',
+    code: 'rpc_chain_mismatch',
   });
   state.chain = '0x128';
   state.code = '0x60036000';
@@ -270,4 +276,21 @@ test('a lost wallet response is unresolved and is never automatically sent twice
   state.sendError = new Error('Wallet disconnected after broadcast');
   await assert.rejects(client.send(intent), { code: 'transaction_uncertain' });
   assert.equal(state.sends, 1);
+});
+
+test('issuer expiry must be future at preparation and immediately before wallet dispatch', async (t) => {
+  const { client, state } = await harness(t);
+  const now = BigInt(state.timestamp);
+  for (const validUntil of [now - 1n, now])
+    await assert.rejects(
+      client.prepare({ kind: 'admit-issuer', validUntil: String(validUntil) }),
+      { code: 'expired' },
+    );
+  const intent = await client.prepare({
+    kind: 'admit-issuer',
+    validUntil: String(now + 1n),
+  });
+  state.timestamp = `0x${(now + 1n).toString(16)}`;
+  await assert.rejects(client.send(intent), { code: 'expired' });
+  assert.equal(state.sends, 0);
 });

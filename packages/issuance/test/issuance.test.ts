@@ -336,7 +336,8 @@ await test('wrong RPC chain fails before signature or submission', async (t) => 
   await assert.rejects(
     client.sign(bundle),
     (error: unknown) =>
-      error instanceof IssuanceClientError && error.code === 'wrong_chain',
+      error instanceof IssuanceClientError &&
+      error.code === 'rpc_chain_mismatch',
   );
   assert.equal(signs, 0);
 });
