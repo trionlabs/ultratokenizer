@@ -2,7 +2,11 @@
 import { chromium, expect } from '@playwright/test';
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
-import { loadModule } from './helpers.mjs';
+import {
+  loadModule,
+  operatorUrl,
+  openOperatorConfiguration,
+} from './helpers.mjs';
 const base = process.env.PREVIEW_URL || 'http://127.0.0.1:4173/';
 const { createFixture } = await loadModule('./fixtures/issuance.ts');
 const fixture = await createFixture();
@@ -28,6 +32,8 @@ const browser = await chromium.launch({
   headless: true,
 });
 const upload = async (page, label, value, filename = 'input.json') => {
+  if (label === 'Import deployment configuration')
+    await openOperatorConfiguration(page);
   await expect(page.getByLabel(label, { exact: true })).toBeEnabled();
   await page.getByLabel(label, { exact: true }).setInputFiles({
     name: filename,
@@ -115,7 +121,7 @@ try {
     return route.continue();
   });
 
-  await page.goto(base, { waitUntil: 'networkidle' });
+  await page.goto(operatorUrl(base), { waitUntil: 'networkidle' });
   await expect(
     page.getByRole('heading', { name: 'Proof first. Tokens next.' }),
   ).toBeVisible();
@@ -173,14 +179,16 @@ try {
     document.documentElement.style.fontSize = '200%';
   });
   await noOverflow(page);
-  await page.getByRole('button', { name: 'Operator setup' }).click();
+  await page.getByRole('button', { name: 'Operator configuration' }).click();
   await expect(
-    page.getByLabel('Import deployment configuration', { exact: true }),
+    page.getByRole('button', { name: 'Import deployment file', exact: true }),
   ).toBeVisible();
   await noOverflow(page);
-  await page.getByRole('button', { name: 'Close network setup' }).click();
+  await page
+    .getByRole('button', { name: 'Close operator configuration' })
+    .click();
   await expect(
-    page.getByRole('button', { name: 'Operator setup' }),
+    page.getByRole('button', { name: 'Operator configuration' }),
   ).toBeFocused();
   await page.screenshot({
     path: new URL(
@@ -195,7 +203,7 @@ try {
   await page.setViewportSize({ width: 320, height: 640 });
   await noOverflow(page);
   const setupStatus = await page
-    .getByRole('heading', { name: 'Gold issuance is not open yet' })
+    .getByRole('heading', { name: 'Gold issuance is unavailable' })
     .boundingBox();
   assert.ok(
     setupStatus && setupStatus.y + setupStatus.height <= 640,
@@ -218,7 +226,7 @@ try {
     ...fixture.deployment,
     rpcUrl: new URL('rpc-test', base).href,
   };
-  await page.getByRole('button', { name: 'Operator setup' }).click();
+  await page.getByRole('button', { name: 'Operator configuration' }).click();
   await page
     .getByLabel('Import deployment configuration', { exact: true })
     .setInputFiles({
@@ -512,7 +520,7 @@ try {
       }
     };
   });
-  await unsupported.goto(base);
+  await unsupported.goto(operatorUrl(base));
   await expect(unsupported.locator('.header-wallet')).toBeEnabled();
   await unsupported.locator('.header-wallet').click();
   await expect(unsupported.locator('.wallet-help')).toContainText(

@@ -1,6 +1,10 @@
 import { chromium, expect } from '@playwright/test';
 import assert from 'node:assert/strict';
-import { loadModule } from './helpers.mjs';
+import {
+  loadModule,
+  operatorUrl,
+  openOperatorConfiguration,
+} from './helpers.mjs';
 
 const base = process.env.PREVIEW_URL || 'http://127.0.0.1:4173/';
 const { createFixture } = await loadModule('./fixtures/issuance.ts');
@@ -48,7 +52,22 @@ try {
       page.getByRole('heading', { name: 'Proof first. Tokens next.' }),
     ).toBeVisible();
     await expect(page.locator('body')).not.toContainText('MINT CONFIRMED');
+    await expect(page.locator('.engine-label')).toHaveText(
+      'zkPDF-backed token issuance',
+    );
     await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(
+      page.getByLabel('Import deployment configuration', { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: 'Operator configuration', exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole('link', { name: 'Institution', exact: true }),
+    ).toHaveAttribute('href', '/institution/');
+    await expect(
+      page.getByRole('link', { name: 'Trust', exact: true }),
+    ).toHaveAttribute('href', '/trust/');
     if (scenario === 'ready') {
       await expect(page.locator('.header-wallet')).toBeEnabled();
       await expect(page.locator('.live-footer')).toContainText(
@@ -92,12 +111,9 @@ try {
       else await expect(retry).toBeEnabled();
       await expect(page.locator('.engine-stage .stage-action')).toContainText(
         scenario === 'missing'
-          ? 'Gold issuance is not open yet'
+          ? 'Gold issuance is unavailable'
           : 'Could not check issuance status',
       );
-      await expect(
-        page.getByRole('button', { name: 'Operator setup' }),
-      ).toBeVisible();
     }
     assert.deepEqual(await page.evaluate(() => window.walletCalls), []);
     if (scenario !== 'ready') {
@@ -111,7 +127,7 @@ try {
       ]);
       await expect(page.locator('.engine-stage .stage-action')).toContainText(
         scenario === 'missing'
-          ? 'Gold issuance is not open yet'
+          ? 'Gold issuance is unavailable'
           : 'Could not check issuance status',
       );
     }
@@ -119,6 +135,80 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
   }
+  const operator = await browser.newPage({
+    viewport: { width: 320, height: 640 },
+  });
+  const operatorCalls = [];
+  const operatorErrors = [];
+  operator.on('pageerror', (error) => operatorErrors.push(error.message));
+  await operator.route('**/*', (route) => {
+    const url = new URL(route.request().url());
+    if (
+      url.origin !== new URL(base).origin ||
+      route.request().method() !== 'GET'
+    ) {
+      operatorCalls.push(url.href);
+      return route.abort();
+    }
+    if (url.pathname === '/deployment.json')
+      return route.fulfill({ status: 404 });
+    return route.continue();
+  });
+  await operator.goto(operatorUrl(base), { waitUntil: 'networkidle' });
+  await openOperatorConfiguration(operator);
+  await expect(
+    operator.getByRole('heading', { name: 'Use another deployment' }),
+  ).toBeVisible();
+  await expect(operator.locator('.setup-dialog')).not.toContainText(
+    'No file chosen',
+  );
+  await expect(
+    operator.getByRole('button', { name: 'Import deployment file' }),
+  ).toBeVisible();
+  const input = operator.getByLabel('Import deployment configuration', {
+    exact: true,
+  });
+  await expect(input).toBeHidden();
+  const [picker] = await Promise.all([
+    operator.waitForEvent('filechooser'),
+    operator.getByRole('button', { name: 'Import deployment file' }).click(),
+  ]);
+  await picker.setFiles({
+    name: 'invalid.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from('{}'),
+  });
+  await expect(operator.locator('.setup-dialog .inline-error')).toBeVisible();
+  await expect(operator.locator('.stage-action .inline-error')).toHaveCount(0);
+  await operator
+    .getByRole('button', { name: 'Close operator configuration' })
+    .click();
+  await expect(
+    operator.getByRole('button', {
+      name: 'Operator configuration',
+      exact: true,
+    }),
+  ).toBeFocused();
+  await expect(operator.locator('.stage-action .inline-error')).toHaveCount(0);
+  await openOperatorConfiguration(operator);
+  await input.setInputFiles({
+    name: 'approved-deployment.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(fixture.deployment)),
+  });
+  await expect(operator.getByRole('dialog')).toHaveCount(0);
+  await expect(operator.locator('#issuance-title')).toBeFocused();
+  await expect(
+    operator.getByLabel('Import issuance bundle', { exact: true }),
+  ).toBeEnabled();
+  assert(
+    await operator.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  );
+  assert.deepEqual(operatorCalls, []);
+  assert.deepEqual(operatorErrors, []);
+  await operator.close();
   const switching = await browser.newPage();
   const switchDeployment = {
     ...fixture.deployment,

@@ -4,7 +4,11 @@
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { chromium, expect } from '@playwright/test';
-import { loadModule } from './helpers.mjs';
+import {
+  loadModule,
+  operatorUrl,
+  openOperatorConfiguration,
+} from './helpers.mjs';
 import { exerciseTokenRecovery } from './fixtures/token-browser.mjs';
 import { exerciseIssuanceRecovery } from './fixtures/issuance-browser.mjs';
 
@@ -28,6 +32,8 @@ const browser = await chromium.launch({
   headless: true,
 });
 const upload = async (page, label, value) => {
+  if (label === 'Import deployment configuration')
+    await openOperatorConfiguration(page);
   await expect(page.getByLabel(label, { exact: true })).toBeEnabled();
   await page.getByLabel(label, { exact: true }).setInputFiles({
     name: 'synthetic-backend-test.json',
@@ -67,7 +73,7 @@ try {
       },
     };
   });
-  await page.goto(base.href, { waitUntil: 'networkidle' });
+  await page.goto(operatorUrl(base), { waitUntil: 'networkidle' });
   const associate = page.getByRole('button', { name: 'Associate this token' });
   const connect = page.locator('.header-wallet');
   const tokenWorkspace = page.locator('.transfer-stage');
@@ -82,7 +88,7 @@ try {
   const invalid = structuredClone(ats.deployment);
   delete invalid.backend.admission;
   await upload(page, 'Import deployment configuration', invalid);
-  await expect(page.locator('.engine-stage .inline-error')).toContainText(
+  await expect(page.locator('.setup-dialog .inline-error')).toContainText(
     'An independent, complete deployment configuration is required.',
   );
   await expect(connect).toBeEnabled();
@@ -167,7 +173,7 @@ try {
 
   // A rejected replacement cannot change an already imported backend or claim.
   await upload(page, 'Import deployment configuration', invalid);
-  await expect(page.locator('.engine-stage .inline-error')).toContainText(
+  await expect(page.locator('.setup-dialog .inline-error')).toContainText(
     'An independent, complete deployment configuration is required.',
   );
   await expect(associate).toHaveCount(0);

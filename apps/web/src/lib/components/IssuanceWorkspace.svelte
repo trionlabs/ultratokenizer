@@ -21,6 +21,9 @@
   const session = createIssuanceSession();
   let snapshot = $state(session.read());
   let fileError = $state('');
+  let setupError = $state('');
+  let operatorMode = $state(false);
+  let configurationInput = $state<HTMLInputElement>();
   let reading = $state(false);
   let deploymentName = $state('');
   let bundleName = $state('');
@@ -128,9 +131,10 @@
   );
 
   function openSetup() {
+    if (!operatorMode || busy || unresolved) return;
     networkLoad?.abort();
     if (networkStatus === 'loading') networkStatus = 'missing';
-    fileError = '';
+    setupError = '';
     setupDialog?.showModal();
     setupOpen = true;
   }
@@ -157,6 +161,9 @@
   }
 
   onMount(() => {
+    // This only exposes local configuration tools; it grants no chain authority.
+    operatorMode =
+      new URLSearchParams(window.location.search).get('operator') === '1';
     const unsubscribe = session.subscribe((value) => {
       snapshot = value;
     });
@@ -197,9 +204,11 @@
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
     input.value = '';
-    if (!file || busy) return;
+    if (!file || busy || unresolved || (kind === 'deployment' && !operatorMode))
+      return;
     reading = true;
-    fileError = '';
+    if (kind === 'deployment') setupError = '';
+    else fileError = '';
     try {
       const text = await readJsonFile(
         file,
@@ -211,6 +220,7 @@
         networkStatus = 'loaded';
         deploymentName = file.name;
         bundleName = '';
+        fileError = '';
         clearEns();
         const returnToJourney = setupDialog?.open;
         setupDialog?.close();
@@ -227,10 +237,12 @@
         bundleName = file.name;
       }
     } catch (error) {
-      fileError =
+      const message =
         error instanceof IssuanceClientError || error instanceof BrowserRpcError
           ? error.message
           : 'The file could not be imported. Check its format, size and any pending transaction.';
+      if (kind === 'deployment') setupError = message;
+      else fileError = message;
     } finally {
       reading = false;
     }
@@ -295,7 +307,7 @@
 <div class="live-shell">
   <header class="live-header">
     <a class="live-brand" href="/"><span>u</span>ultratokenizer<i>.</i></a>
-    <span class="engine-label">Provable tokenization</span>
+    <span class="engine-label">zkPDF-backed token issuance</span>
     <nav class="workspace-nav" aria-label="Workspace">
       <a class:active={workspaceView === 'issue'} href="#engine">Issue</a>
       <a class:active={workspaceView === 'transfer'} href="#transfer"
@@ -498,13 +510,15 @@
                 <div>
                   <h2>
                     {networkStatus === 'missing'
-                      ? 'Gold issuance is not open yet'
+                      ? 'Gold issuance is unavailable'
                       : 'Could not check issuance status'}
                   </h2>
                   <p>
                     {networkStatus === 'missing'
-                      ? 'We are preparing the Hedera testnet deployment. There is nothing to configure or upload.'
-                      : 'The site could not load its trusted deployment. No wallet request or transaction was made.'}
+                      ? operatorMode
+                        ? 'Publish the approved deployment before accepting proof packages.'
+                        : 'Issuance will open when the testnet setup is ready. You can connect your wallet now.'
+                      : 'The app could not load its network settings. Try again.'}
                   </p>
                 </div>
               </div>
@@ -657,10 +671,10 @@
             {/if}
           {/if}
         {/key}
-        {#if reading}<p class="status-line" role="status">
+        {#if reading && !setupOpen}<p class="status-line" role="status">
             Reading JSON locally…
           </p>{/if}
-        {#if !setupOpen && fileError}<p class="inline-error" role="alert">
+        {#if fileError}<p class="inline-error" role="alert">
             {fileError}
           </p>{/if}
         {#if snapshot.busy}<p class="status-line" role="status">
@@ -695,8 +709,8 @@
             <div>
               <h2>Transfers are not available here yet</h2>
               <p>
-                We are preparing the Hedera testnet deployment. You can connect
-                a wallet now; transfers open when the deployment is ready.
+                Transfers will open when the testnet setup is ready. You can
+                connect your wallet now.
               </p>
             </div>
           </div>
@@ -865,11 +879,7 @@
               <dt>Network</dt>
               <dd>
                 {networkLabel}
-                <button
-                  class="network-link"
-                  disabled={busy || unresolved}
-                  onclick={openSetup}>Settings</button
-                >
+                <a class="network-link" href="/trust/">View contracts</a>
               </dd>
             </div>
             <div>
@@ -887,7 +897,7 @@
               </dd>
             </div>
           </dl>
-          {#if workspaceView === 'transfer' && !setupOpen && fileError}<p
+          {#if workspaceView === 'transfer' && fileError}<p
               class="inline-error"
               role="alert"
             >
@@ -928,9 +938,6 @@
           <details class="technical-details">
             <summary>Deployment details</summary>
             <div class="compact-files">
-              <button disabled={busy || unresolved} onclick={openSetup}
-                >Advanced network setup</button
-              >
               {#if request}<label
                   >Change package<input
                     class="sr-only"
@@ -972,6 +979,10 @@
                 </dd>
               </div>
               <div>
+                <dt>Proof program</dt>
+                <dd>SP1 · sealed-PDF profile</dd>
+              </div>
+              <div>
                 <dt>Verifier</dt>
                 <dd>{snapshot.deployment.auditPolicy.verifierAddress}</dd>
               </div>
@@ -982,49 +993,88 @@
     {/if}
   </main>
 
-  <dialog
-    class="setup-dialog"
-    bind:this={setupDialog}
-    onclose={() => (setupOpen = false)}
-    aria-labelledby="setup-title"
-  >
-    <div class="setup-heading">
-      <span class="scene-kicker">Advanced settings</span><button
-        class="dialog-close"
-        aria-label="Close network setup"
-        onclick={() => setupDialog?.close()}>×</button
+  {#if operatorMode}
+    <dialog
+      class="setup-dialog"
+      bind:this={setupDialog}
+      onclose={() => (setupOpen = false)}
+      aria-labelledby="setup-title"
+      aria-describedby="setup-description"
+    >
+      <div class="setup-heading">
+        <span class="scene-kicker">Operator tools</span>
+        <button
+          class="dialog-close"
+          aria-label="Close operator configuration"
+          onclick={() => setupDialog?.close()}>×</button
+        >
+      </div>
+      <h2 id="setup-title">Use another deployment</h2>
+      <p id="setup-description">
+        Replaces this session's network, token, and trusted verifier. Import an
+        independently reviewed deployment file, never one supplied by a proof
+        package.
+      </p>
+      <button
+        class="upload-button"
+        disabled={busy || unresolved}
+        aria-describedby="setup-file-hint"
+        onclick={() => configurationInput?.click()}
+        >Import deployment file <Glyph name="arrow" size={15} /></button
       >
-    </div>
-    <h2 id="setup-title">Operator configuration</h2>
-    <p>
-      The app loads its network automatically. For a separate deployment, import
-      configuration from an operator you trust. This changes the contracts and
-      verifier used by this session.
-    </p>
-    <label class="upload-button"
-      >Choose configuration <Glyph name="arrow" size={15} /><input
-        class="sr-only"
+      <input
+        bind:this={configurationInput}
+        hidden
         type="file"
         accept=".json,application/json"
         aria-label="Import deployment configuration"
         disabled={busy || unresolved}
         onchange={(event) => importFile(event, 'deployment')}
-      /></label
-    >
-    <p class="field-hint">
-      Get this file separately from your evidence package. JSON · {MAX_DEPLOYMENT_BYTES /
-        1024} KB max.
-    </p>
-    {#if fileError}<p class="inline-error" role="alert">{fileError}</p>{/if}
-  </dialog>
+      />
+      <p id="setup-file-hint" class="field-hint">
+        Operator export · JSON · up to {MAX_DEPLOYMENT_BYTES / 1024} KB. Applies to
+        this tab only.
+      </p>
+      {#if reading}<p role="status">Checking deployment file…</p>{/if}
+      {#if setupError}<p class="inline-error" role="alert">{setupError}</p>{/if}
+    </dialog>
+  {/if}
 
   <footer class="live-footer">
     <Glyph name="wallet" size={14} />
     {snapshot.deployment
       ? 'You sign in your wallet. Proofs and transaction details are public.'
       : 'Connecting a wallet does not sign or mint.'}
-    {#if !snapshot.deployment}
-      <button class="text-link" onclick={openSetup}>Operator setup</button>
-    {/if}
+    <nav aria-label="Institution and trust">
+      <a class="text-link" href="/institution/">Institution</a>
+      <a class="text-link" href="/trust/">Trust</a>
+      {#if operatorMode}
+        <button
+          class="text-link"
+          disabled={busy || unresolved}
+          onclick={openSetup}>Operator configuration</button
+        >
+      {/if}
+    </nav>
   </footer>
 </div>
+
+<style>
+  .live-footer {
+    flex-wrap: wrap;
+    padding-block: 16px;
+  }
+  .live-footer nav {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 16px;
+    margin-inline-start: auto;
+  }
+  @media (max-width: 640px) {
+    .live-footer nav {
+      width: 100%;
+      margin-inline-start: 0;
+    }
+  }
+</style>

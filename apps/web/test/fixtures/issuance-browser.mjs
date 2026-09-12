@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
+import { operatorUrl, openOperatorConfiguration } from '../helpers.mjs';
 import {
   decodeFunctionData,
   encodeAbiParameters,
@@ -300,11 +301,13 @@ export async function exerciseIssuanceRecovery({
     },
   );
   try {
-    await page.goto(base.href, { waitUntil: 'networkidle' });
+    await page.goto(operatorUrl(base), { waitUntil: 'networkidle' });
     for (const [label, value] of [
       ['Import deployment configuration', fixture.deployment],
       ['Import issuance bundle', bundle],
     ]) {
+      if (label === 'Import deployment configuration')
+        await openOperatorConfiguration(page);
       await expect(page.getByLabel(label, { exact: true })).toBeEnabled();
       await page.getByLabel(label, { exact: true }).setInputFiles({
         name: 'synthetic-issuance-recovery.json',

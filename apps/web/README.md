@@ -16,9 +16,15 @@ The `/` route loads operator-provided deployment configuration from same-origin 
 
 The amount is fixed by the canonical request, public values and permit bindings. There is no issuance amount editor: a complete 1 g claim issues exactly 1 g, once. The selected wallet must authorize that bound recipient. Every step is explicit: connect, validate the proof/permit and deployment pins, sign typed data, simulate current execution, submit the actual transaction, and reconcile its receipt and exact Gate event. Preflight success is never presented as a submitted or confirmed transaction.
 
-The centered issuance view shows one current action and six steps: evidence, wallet, verification,
+The product label is **zkPDF-backed token issuance**: the SP1 claim program verifies the sealed-PDF
+profile, not DKIM or email provenance. This does not add browser PDF parsing or accept arbitrary
+bank statements. The centered issuance view shows one current action and six steps: proof, wallet, verification,
 signing, mint and receipt. The app loads network configuration automatically before evidence input.
-An advanced operator override lives in a separate native dialog. The fixed configuration URL cannot
+Normal holder views have no deployment-file upload or network-configuration step. Operators can
+open `/?operator=1` and select **Operator configuration** to import an independently reviewed
+deployment into the current tab. This opt-in exposes local tools only and grants no chain authority.
+The override has its own native dialog and file errors; an invalid import preserves the current
+configuration and proof package. The fixed configuration URL cannot
 be selected by a proof package or a query parameter. The request omits credentials, disallows
 redirects, bypasses cache and has an eight-second deadline and a 64 KiB streamed limit. A missing
 or invalid response leaves issuance unavailable; there is no sample fallback. Loading configuration

@@ -5,7 +5,11 @@ import { readFile } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect } from '@playwright/test';
-import { loadModule } from './helpers.mjs';
+import {
+  loadModule,
+  operatorUrl,
+  openOperatorConfiguration,
+} from './helpers.mjs';
 
 const build = resolve(fileURLToPath(new URL('../build/', import.meta.url)));
 const headersText = await readFile(
@@ -96,6 +100,8 @@ async function pageFor(base, javaScriptEnabled = true) {
   return { page, external };
 }
 const upload = async (page, label, value) => {
+  if (label === 'Import deployment configuration')
+    await openOperatorConfiguration(page);
   await expect(page.getByLabel(label, { exact: true })).toBeEnabled();
   await page.getByLabel(label, { exact: true }).setInputFiles({
     name: 'synthetic-policy-test.json',
@@ -123,7 +129,9 @@ try {
         const ipv6 = 'http://[::1]:8545/';
         const guidance = 'Use HTTPS, or HTTP at localhost or 127.0.0.1.';
         await page.goto(
-          new URL(kind === 'verification' ? 'verify/' : '', protectedBase).href,
+          kind === 'verification'
+            ? new URL('verify/', protectedBase).href
+            : operatorUrl(protectedBase),
           { waitUntil: 'networkidle' },
         );
         if (kind === 'verification') {
@@ -157,7 +165,7 @@ try {
               rpcUrl: ipv6,
             });
             await expect(
-              page.locator('.stage-action .inline-error'),
+              page.locator('.setup-dialog .inline-error'),
             ).toContainText(guidance);
             await expect(page.locator('.proof-sheet')).toContainText('1.000 g');
           } else {
@@ -243,7 +251,7 @@ try {
                   : Promise.reject(new Error('No sends in this test')),
           };
         }, fixture.bundle.request.recipient);
-        const response = await page.goto(protectedBase.href, {
+        const response = await page.goto(operatorUrl(protectedBase), {
           waitUntil: 'networkidle',
         });
         assert.equal(

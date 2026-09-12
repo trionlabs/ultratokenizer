@@ -24,3 +24,17 @@ export async function loadModule(relative) {
     await rm(scratch, { recursive: true, force: true });
   }
 }
+
+/** Opt in to configuration tools without making them part of the holder journey. */
+export function operatorUrl(base) {
+  const url = new URL(base);
+  url.searchParams.set('operator', '1');
+  return url.href;
+}
+
+export async function openOperatorConfiguration(page) {
+  if (!(await page.locator('.setup-dialog').isVisible()))
+    await page
+      .getByRole('button', { name: 'Operator configuration', exact: true })
+      .click();
+}
