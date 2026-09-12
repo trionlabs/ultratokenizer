@@ -599,6 +599,9 @@ async fn ambiguous_submission_recovers_exact_nonce_signature_without_new_send_or
     assert_eq!(result["budgetReleased"], false);
     assert_eq!(result["proofVerified"], false);
     assert_eq!(result["proofDownloaded"], false);
+    assert_eq!(result["fulfiller"], serde_json::Value::Null);
+    assert_eq!(result["serviceCreatedAtUnix"], serde_json::Value::Null);
+    assert_eq!(result["serviceUpdatedAtUnix"], serde_json::Value::Null);
     assert_eq!(network.nonce_calls, 1);
     assert_eq!(network.sends.len(), 1);
     assert_eq!(signer.calls.get(), 1);
@@ -612,6 +615,59 @@ async fn ambiguous_submission_recovers_exact_nonce_signature_without_new_send_or
             .await
             .is_err()
     );
+}
+
+#[tokio::test]
+async fn assigned_recovery_reports_deadline_without_reclassifying_or_resubmitting() {
+    for (offset, passed) in [(-1_i64, false), (0, true), (1, true)] {
+        let directory = Directory::new();
+        let signer = Signer::fixture();
+        let (value, mut log) = setup(&directory, &signer);
+        let mut network = Network::fixture(&value, directory.path("request.jsonl"));
+        submit_once(&mut log, &mut network, &signer, || Ok(NOW))
+            .await
+            .unwrap();
+        network.index_sent();
+        network.status.fulfillment_status = rpc::FulfillmentStatus::Assigned.into();
+        network.status.execution_status = rpc::ExecutionStatus::Executed.into();
+        network.status.public_values_hash =
+            Some(hex::decode(&value.preparation.public_values_sha256).unwrap());
+        network.candidates[0].created_at = NOW;
+        network.candidates[0].updated_at = NOW + 60;
+        network.candidates[0].fulfiller = Some(vec![0x42; 20]);
+        let observed = value
+            .settings
+            .deadline_unix
+            .checked_add_signed(offset)
+            .unwrap();
+        let result = recover_once(&mut log, &mut network, || Ok(observed))
+            .await
+            .unwrap();
+        assert_eq!(result["deadlineUnix"], value.settings.deadline_unix);
+        assert_eq!(result["observedAtUnix"], observed);
+        assert_eq!(result["deadlinePassed"], passed);
+        assert_eq!(result["serviceCreatedAtUnix"], NOW);
+        assert_eq!(result["serviceUpdatedAtUnix"], NOW + 60);
+        assert_eq!(result["fulfiller"], format!("0x{}", "42".repeat(20)));
+        assert_eq!(result["fulfillmentStatus"], 2);
+        assert_eq!(result["executionStatus"], 2);
+        assert_eq!(result["proofAvailable"], false);
+        assert_eq!(result["proofVerified"], false);
+        assert_eq!(result["proofDownloaded"], false);
+        assert_eq!(result["budgetReleased"], false);
+        assert_eq!(result["automaticRetryAllowed"], false);
+        assert_eq!(log.events().last().unwrap().at_unix, observed);
+        assert_eq!(network.sends.len(), 1);
+        assert_eq!(network.nonce_calls, 1);
+        assert_eq!(signer.calls.get(), 1);
+        assert!(!result.to_string().contains("s3://"));
+        assert!(
+            submit_once(&mut log, &mut network, &signer, || Ok(observed))
+                .await
+                .is_err()
+        );
+        assert_eq!(network.sends.len(), 1);
+    }
 }
 
 #[tokio::test]

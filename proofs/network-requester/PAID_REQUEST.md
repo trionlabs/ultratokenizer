@@ -143,8 +143,15 @@ RPC. It does not retry failed calls or infer absence from reaching a limit or fi
 It validates the status transaction hash, deadline and any execution public-values hash before
 recording status. An omitted status execution hash can be supplied only by the exact-bound,
 executed request-details response; every returned hash must match the signed expected value.
-It prints only identifiers and a hash of any proof URI. Fulfilled status remains
+It prints identifiers, diagnostic metadata and a hash of any proof URI. Fulfilled status remains
 `proofVerified: false`; recovery does not download or implicitly accept an artifact.
+The output also reports the signed `deadlineUnix`, journaled `observedAtUnix` and
+`deadlinePassed` (`observedAtUnix >= deadlineUnix`), independently of the service status.
+An `ASSIGNED` response after the deadline is still reported as assigned; it does not establish
+successful fulfillment, a refund or permission to retry. Service-reported creation/update times
+and a well-formed fulfiller address are diagnostic metadata, not a prover heartbeat or authority
+proof. Missing times and absent or malformed fulfiller addresses are `null`. Artifact URIs and
+raw service error text are never printed.
 
 All request and budget journals must remain intact and private. A torn append, invalid hash chain,
 permissive file mode, lock conflict or clock regression fails closed. This package does not repair

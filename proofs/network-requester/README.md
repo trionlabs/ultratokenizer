@@ -81,6 +81,8 @@ Once signing starts, reopening the journal cannot sign, refresh the nonce, or su
 Unsigned recovery checks request fields plus the recorded sender, nonce and signature; neither a
 timeout nor an empty search releases the conservative cumulative budget. See the
 [paid request procedure](PAID_REQUEST.md) for the exact settings, commands, and failure boundaries.
+Recovery reports elapsed deadlines separately from service statuses, which can remain `Assigned`
+after the proving window closes. Deadline expiry never authorizes another paid request.
 
 Run `npm run check:network-requester` from the repository root for the pinned Rust formatting,
 locked tests and clippy checks. The independent CI requester job runs the same command without

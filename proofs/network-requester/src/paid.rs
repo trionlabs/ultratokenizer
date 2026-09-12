@@ -414,6 +414,13 @@ pub async fn recover_once<L: RequestLog, R: PaidRpc>(
         .proof_uri
         .as_ref()
         .map(|uri| sha256_hex(uri.as_bytes()));
+    let observed_at_unix = clock()?;
+    // Service enums can remain ASSIGNED after the signed deadline. Report the
+    // local clock separately; elapsed time never proves settlement or absence.
+    let fulfiller = request
+        .fulfiller
+        .as_deref()
+        .and_then(|bytes| crate::address_hex(bytes).ok());
     log.append(
         RequestEvent::Observed {
             request_id: request_id.clone(),
@@ -423,12 +430,17 @@ pub async fn recover_once<L: RequestLog, R: PaidRpc>(
             proof_uri: status.proof_uri,
             proof_uri_sha256: uri_hash.clone(),
         },
-        clock()?,
+        observed_at_unix,
     )?;
     Ok(
         serde_json::json!({"status":"exact_signed_request_observed", "requestId":request_id,
         "transactionHash":transaction_hash, "fulfillmentStatus":status.fulfillment_status,
         "executionStatus":status.execution_status, "proofAvailable":fulfilled,
+        "deadlineUnix":body.deadline, "observedAtUnix":observed_at_unix,
+        "deadlinePassed":observed_at_unix >= body.deadline,
+        "serviceCreatedAtUnix":(request.created_at != 0).then_some(request.created_at),
+        "serviceUpdatedAtUnix":(request.updated_at != 0).then_some(request.updated_at),
+        "fulfiller":fulfiller,
         "proofUriSha256":uri_hash, "proofDownloaded":false, "proofVerified":false,
         "budgetReleased":false, "automaticRetryAllowed":false}),
     )
