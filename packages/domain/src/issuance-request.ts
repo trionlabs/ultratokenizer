@@ -1,6 +1,7 @@
 import { getAddress, isAddress, zeroAddress } from 'viem';
 import type { Address, Hex } from 'viem';
 import { RequestValidationError } from './errors.js';
+import { parseDuplicateFreeJson } from './json.js';
 
 export const ISSUANCE_REQUEST_VERSION = '1';
 export const GOLD_UNIT = 'XAU_MILLIGRAM';
@@ -190,6 +191,23 @@ export function parseIssuanceRequest(input: unknown): IssuanceRequest {
     nonce: uint(value.nonce, 'nonce', 256, true),
     validUntil: uint(value.validUntil, 'validUntil', 64),
   });
+}
+
+/** Raw request boundary, matching the native evidence parser's 4096-byte cap. */
+export function parseIssuanceRequestJson(input: unknown): IssuanceRequest {
+  let value: unknown;
+  try {
+    value = parseDuplicateFreeJson(input, 4096);
+  } catch (error) {
+    throw new RequestValidationError(
+      error instanceof RangeError ? 'input_too_large' : 'invalid_json',
+      '$',
+      error instanceof RangeError
+        ? 'Request JSON exceeds its 4096-byte limit.'
+        : 'Request JSON must be valid and contain unique object keys.',
+    );
+  }
+  return parseIssuanceRequest(value);
 }
 
 /** Stable JSON for storage/export. Sign the EIP-712 digest, not this string. */

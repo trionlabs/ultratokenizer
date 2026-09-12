@@ -1,6 +1,7 @@
 import { type Hex, type Address } from 'viem';
 import {
   parseIssuanceRequest,
+  parseDuplicateFreeJson,
   parseIssuerPermit,
   getIssuanceRequestDigest,
   getIssuerPermitDigest,
@@ -140,9 +141,7 @@ function record(
 }
 function bounded(input: unknown, limit: number): unknown {
   if (typeof input !== 'string') return input;
-  if (input.length > limit || new TextEncoder().encode(input).length > limit)
-    throw new Error();
-  return JSON.parse(input);
+  return parseDuplicateFreeJson(input, limit);
 }
 export function bytes(input: unknown, maximum: number, exact?: number): Hex {
   if (

@@ -28,6 +28,8 @@ import {
   BUNDLE_FORMAT,
   DEPLOYMENT_FORMAT,
   DEPLOYMENT_V2_FORMAT,
+  MAX_BUNDLE_BYTES,
+  MAX_DEPLOYMENT_BYTES,
   getTokenBackend,
   parseIssuanceBundle,
   parseDeploymentConfig,
@@ -1361,6 +1363,112 @@ const proofExport = {
   programVKey: bundle.programVKey,
   proofBytes: `0x4388a21c${'00'.repeat(352)}`,
 };
+
+await test('raw issuance imports reject shadowed outer and nested keys with sanitized errors', async (t) => {
+  const marker = 'private-import-marker';
+  const backend = createAtsBackendFixture();
+  const atsDeployment = {
+    ...deployment,
+    format: DEPLOYMENT_V2_FORMAT,
+    backend,
+  };
+  for (const [name, parse, input, outerKey, nestedKey] of [
+    ['bundle', parseIssuanceBundle, bundle, 'format', 'request'],
+    ['proof export', parseClaimProofExport, proofExport, 'status', 'request'],
+    ['deployment', parseDeploymentConfig, deployment, 'purpose', 'auditPolicy'],
+    [
+      'ATS deployment',
+      parseDeploymentConfig,
+      atsDeployment,
+      'purpose',
+      'auditPolicy',
+    ],
+  ] as const) {
+    const json = JSON.stringify(input);
+    const nestedField = nestedKey === 'request' ? 'amount' : 'profileVersion';
+    const escapedField =
+      nestedKey === 'request' ? 'amo\\u0075nt' : 'profile\\u0056ersion';
+    const cases = [
+      [
+        'outer duplicate',
+        `{${JSON.stringify(outerKey)}:${JSON.stringify(marker)},${json.slice(1)}`,
+      ],
+      [
+        'nested duplicate',
+        json.replace(
+          `"${nestedKey}":{`,
+          `"${nestedKey}":{"${nestedField}":"${marker}",`,
+        ),
+      ],
+      [
+        'escaped nested duplicate',
+        json.replace(
+          `"${nestedKey}":{`,
+          `"${nestedKey}":{"${escapedField}":"${marker}",`,
+        ),
+      ],
+    ];
+    if (name === 'bundle')
+      cases.push([
+        'permit duplicate',
+        json.replace('"permit":{', `"permit":{"nonce":"${marker}",`),
+      ]);
+    if (name === 'ATS deployment')
+      cases.push([
+        'backend duplicate',
+        json.replace('"adapter":{', `"adapter":{"code\\u0048ash":"${marker}",`),
+      ]);
+    for (const [scenario, raw] of cases)
+      await t.test(`${name}: ${scenario}`, () => {
+        assert.throws(
+          () => parse(raw),
+          (error: unknown) => {
+            assert.ok(error instanceof IssuanceClientError);
+            const code = name.includes('deployment')
+              ? 'invalid_deployment'
+              : 'invalid_bundle';
+            assert.equal(error.code, code);
+            assert.equal(error.message, new IssuanceClientError(code).message);
+            assert.equal(error.message.includes(marker), false);
+            return true;
+          },
+        );
+      });
+  }
+});
+
+await test('raw issuance imports preserve valid escaping and exact byte limits', () => {
+  for (const [parse, input, limit, code] of [
+    [parseIssuanceBundle, bundle, MAX_BUNDLE_BYTES, 'invalid_bundle'],
+    [parseClaimProofExport, proofExport, MAX_BUNDLE_BYTES, 'invalid_bundle'],
+    [
+      parseDeploymentConfig,
+      deployment,
+      MAX_DEPLOYMENT_BYTES,
+      'invalid_deployment',
+    ],
+  ] as const) {
+    const json = JSON.stringify(input);
+    assert.deepEqual(
+      parse(json.replace('"gate"', '"ga\\u0074e"')),
+      parse(input),
+    );
+    const padded =
+      json + ' '.repeat(limit - new TextEncoder().encode(json).byteLength);
+    assert.deepEqual(parse(padded), parse(input));
+    assert.throws(() => parse(padded + ' '), hasCode(code));
+    assert.throws(
+      () => parse('{"private-import-marker":'),
+      (error: unknown) => {
+        assert.ok(error instanceof IssuanceClientError);
+        assert.equal(error.code, code);
+        assert.equal(error.message.includes('private-import-marker'), false);
+        return true;
+      },
+    );
+  }
+});
+
 // Transport fixtures deliberately contain no valid SP1 proof. Acceptance remains a separate live test.
 await test('proof exports reject altered request binding, extra data, wrong proof mode and noncanonical length', () => {
   assert.equal(

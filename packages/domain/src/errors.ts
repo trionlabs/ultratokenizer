@@ -1,5 +1,7 @@
 export type RequestErrorCode =
   | 'invalid_shape'
+  | 'invalid_json'
+  | 'input_too_large'
   | 'unknown_field'
   | 'missing_field'
   | 'invalid_literal'

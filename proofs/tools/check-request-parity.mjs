@@ -1,6 +1,8 @@
 /** Compare independent TypeScript/viem and Rust validation/digests on adversarial inputs. */
 import { getIssuanceRequestDigest } from '../../dist/domain/src/request-digest.js';
 import { getClaimUsageId } from '../../dist/domain/src/claim-identity.js';
+import { parseIssuanceRequestJson } from '../../dist/domain/src/issuance-request.js';
+import { requestJsonCases } from '../../dist/domain/test/request-json-cases.js';
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -50,6 +52,7 @@ delete missing.amount;
 cases.push(missing);
 const temporary = mkdtempSync(join(tmpdir(), 'ultratokenizer-parity-'));
 let requestCases = 0;
+let rawRequestCases = 0;
 try {
   const path = join(temporary, 'request.json');
   for (const candidate of cases) {
@@ -75,6 +78,29 @@ try {
       );
   }
   requestCases = cases.length;
+  for (const candidate of requestJsonCases(baseline)) {
+    let expected;
+    try {
+      expected = getIssuanceRequestDigest(
+        parseIssuanceRequestJson(candidate.json),
+      );
+    } catch {
+      expected = undefined;
+    }
+    if (Boolean(expected) !== candidate.accepted)
+      throw new Error(`Unexpected raw request acceptance: ${candidate.name}.`);
+    writeFileSync(path, candidate.json, { mode: 0o600 });
+    const actual = spawnSync(
+      new URL('target/debug/ultratokenizer-claim-runner', root).pathname,
+      ['request-digest', path],
+      { encoding: 'utf8', timeout: 10_000 },
+    );
+    if (actual.error || (actual.status === 0) !== Boolean(expected))
+      throw new Error(`Raw request acceptance differs: ${candidate.name}.`);
+    if (expected && JSON.parse(actual.stdout).requestDigest !== expected)
+      throw new Error(`Raw request digest differs: ${candidate.name}.`);
+    rawRequestCases++;
+  }
 } finally {
   rmSync(temporary, { recursive: true, force: true });
 }
@@ -120,9 +146,10 @@ for (const identity of identityCases) {
 console.log(
   JSON.stringify({
     status: 'passed',
-    cases: requestCases + identityCases.length,
+    cases: requestCases + rawRequestCases + identityCases.length,
     phases: {
       request: { cases: requestCases },
+      rawRequest: { cases: rawRequestCases },
       identity: { cases: identityCases.length },
     },
     implementations: ['typescript-viem', 'rust-tiny-keccak'],

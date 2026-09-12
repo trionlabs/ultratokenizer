@@ -5,9 +5,11 @@ export {
   GOLD_UNIT,
   ISSUANCE_REQUEST_VERSION,
   parseIssuanceRequest,
+  parseIssuanceRequestJson,
   serializeIssuanceRequest,
 } from './issuance-request.js';
 export type { IssuanceRequest } from './issuance-request.js';
+export { parseDuplicateFreeJson } from './json.js';
 export {
   getIssuanceRequestDigest,
   getIssuanceRequestTypedData,

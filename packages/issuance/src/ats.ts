@@ -13,6 +13,7 @@ import {
   type Hex,
   type PublicClient,
 } from 'viem';
+import { parseDuplicateFreeJson } from '../../domain/src/index.js';
 
 /** Fixed source/selector/layout profile, not a certification of caller-supplied hashes.
  * Upstream: https://github.com/hashgraph/asset-tokenization-studio/tree/be4f860e408ec5b1a24d12feb6f872aabff69319
@@ -132,14 +133,8 @@ function runtimePin(input: unknown): AtsRuntimePin {
  */
 export function parseAtsBackend(input: unknown): AtsBackend {
   try {
-    if (typeof input === 'string') {
-      if (
-        input.length > MAX_ATS_BACKEND_BYTES ||
-        new TextEncoder().encode(input).length > MAX_ATS_BACKEND_BYTES
-      )
-        throw new Error();
-      input = JSON.parse(input);
-    }
+    if (typeof input === 'string')
+      input = parseDuplicateFreeJson(input, MAX_ATS_BACKEND_BYTES);
     const v = configRecord(input, [
       'kind',
       'profile',

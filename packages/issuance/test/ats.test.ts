@@ -97,6 +97,68 @@ await test('ATS config is independent, exact, bounded, cloned and deeply frozen'
   assert.equal(parsed.adapter.address, fixture.adapter.address);
 });
 
+await test('raw ATS imports reject shadowed authority pins at every depth', async (t) => {
+  const fixture = createAtsBackendFixture();
+  const json = JSON.stringify(fixture);
+  const marker = 'private-ats-marker';
+  const cases = [
+    ['outer duplicate', `{"kind":"${marker}",${json.slice(1)}`],
+    ['escaped outer duplicate', `{"ki\\u006ed":"${marker}",${json.slice(1)}`],
+    [
+      'runtime duplicate',
+      json.replace('"adapter":{', `"adapter":{"address":"${marker}",`),
+    ],
+    [
+      'configuration duplicate',
+      json.replace(
+        '"configuration":{',
+        `"configuration":{"ver\\u0073ion":"${marker}",`,
+      ),
+    ],
+    [
+      'facet duplicate',
+      json.replace(
+        '"CoreFacet":{',
+        `"CoreFacet":{"code\\u0048ash":"${marker}",`,
+      ),
+    ],
+    [
+      'admission duplicate',
+      json.replace('"admission":{', `"admission":{"reviewHash":"${marker}",`),
+    ],
+  ];
+  for (const [name, raw] of cases)
+    await t.test(name, () => {
+      assert.throws(
+        () => parseAtsBackend(raw),
+        (error: unknown) => {
+          assert.ok(error instanceof AtsBackendError);
+          assert.equal(error.code, 'invalid_config');
+          assert.equal(
+            error.message,
+            new AtsBackendError('invalid_config').message,
+          );
+          assert.equal(error.message.includes(marker), false);
+          return true;
+        },
+      );
+    });
+  assert.deepEqual(
+    parseAtsBackend(json.replace('"kind"', '"ki\\u006ed"')),
+    parseAtsBackend(fixture),
+  );
+  const padded =
+    json +
+    ' '.repeat(
+      MAX_ATS_BACKEND_BYTES - new TextEncoder().encode(json).byteLength,
+    );
+  assert.deepEqual(parseAtsBackend(padded), parseAtsBackend(fixture));
+  assert.throws(
+    () => parseAtsBackend(padded + ' '),
+    errorCode('invalid_config'),
+  );
+});
+
 await test('ATS config rejects missing identity, ambiguous values, additions and oversized JSON', () => {
   const b = createAtsBackendFixture();
   for (const changed of [

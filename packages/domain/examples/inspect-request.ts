@@ -3,6 +3,7 @@ import fixture from '../fixtures/request.synthetic.json' with { type: 'json' };
 import {
   assertIssuanceRequestActive,
   getIssuanceRequestDigest,
+  parseIssuanceRequestJson,
   RequestValidationError,
 } from '../src/index.js';
 
@@ -10,15 +11,7 @@ try {
   let input: unknown = fixture;
   if (process.argv[2]) {
     const contents = await readFile(process.argv[2], 'utf8');
-    try {
-      input = JSON.parse(contents);
-    } catch {
-      throw new RequestValidationError(
-        'invalid_shape',
-        '$',
-        'Input must contain valid JSON.',
-      );
-    }
+    input = parseIssuanceRequestJson(contents);
   }
   const now = BigInt(Math.floor(Date.now() / 1000));
   const request = assertIssuanceRequestActive(input, now);

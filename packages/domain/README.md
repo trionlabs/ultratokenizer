@@ -28,6 +28,8 @@ Import the public API from `src/index.ts` in TypeScript or the generated `dist/d
 | Function                                    | Result                                                                                     |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `parseIssuanceRequest(input)`               | Validated, normalized and frozen request; throws `RequestValidationError` on invalid input |
+| `parseIssuanceRequestJson(input)`           | Raw request JSON with a 4096-byte UTF-8 limit and duplicate decoded keys rejected          |
+| `parseDuplicateFreeJson(input, maxBytes)`   | Bounded raw JSON preserving native values and rejecting duplicate keys in every object     |
 | `serializeIssuanceRequest(input)`           | Stable JSON for storage and export; not a signing format                                   |
 | `getIssuanceRequestTypedData(input)`        | EIP-712 domain, type definitions and message for a signer                                  |
 | `getIssuanceRequestDigest(input)`           | 32-byte EIP-712 digest of the complete request                                             |
@@ -40,6 +42,22 @@ Import the public API from `src/index.ts` in TypeScript or the generated `dist/d
 | `ISSUED_EVENT_ABI`                          | Frozen gate event definition shared by the audit package and chain observer                |
 
 Parsing and hashing intentionally allow expired requests so historical audit remains possible. Call the expiry check explicitly for current execution. Contracts must use the chain's timestamp and live state at issuance.
+
+Use `parseIssuanceRequestJson` at a raw request boundary, before any `JSON.parse`
+call loses duplicate-key information. The existing `parseIssuanceRequest` still
+accepts normalized objects only; it cannot reconstruct how their text was encoded.
+The raw request byte limit matches the native Rust evidence parser. Escaped keys
+are compared after decoding, so `amount` and `amo\u0075nt` cannot coexist. Valid
+escaping, whitespace and property order do not change the canonical digest.
+
+Envelope parsers may use `parseDuplicateFreeJson` with their own byte limit before
+applying their schema. It uses native JSON grammar and values, then scans object
+keys; it does not perform schema validation, normalize Unicode or authenticate
+input. It throws sanitized `SyntaxError` or `RangeError` without input snippets.
+The request wrapper exposes `RequestValidationError` codes `invalid_json` and
+`input_too_large` for these raw-text failures; existing field-validation errors
+remain unchanged. Strict receipt, policy and bundle consumers retain their own
+error contracts and size limits.
 
 ## Request format, version 1
 

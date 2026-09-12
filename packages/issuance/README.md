@@ -10,6 +10,12 @@ described below. Unknown backends, missing fields and attempts to inject a backe
 are rejected. Parsed configurations remain reparseable and frozen. The complete import is bounded
 to64 KiB; no backend is inferred from an asset name, bundle or missing contract method.
 
+Raw bundle, proof-export, deployment and ATS configuration JSON rejects duplicate
+decoded keys at every object depth, including escaped aliases such as `gate`
+and `ga\u0074e`. This check runs before object validation can lose their textual
+identity. Existing byte limits and sanitized parser error codes remain unchanged;
+valid escaping and field ordering preserve the canonical request digest.
+
 An `ultratokenizer.issuance-bundle.v1` contains only `request`, `permit`, `issuerSignature`, `publicValues`, `proofBytes` and `programVKey`, plus its format. `parseIssuanceBundle` checks structural and request binding; parsing alone does not verify cryptography. The request fixes the whole authenticated quantity, for example 1 g → exactly 1,000 mg. It is not an editable partial-mint amount. The exact on-chain reservation must exist before signing in this client; its recipient, token, full amount, request digest and claim usage ID are public even if issuance never succeeds. Documents and private witness material are not bundle fields.
 
 The supported portable signing/receipt path uses canonical 65-byte EOA signatures. The Gate's separate ERC-1271 support does not imply complete smart-wallet or counterfactual-account support in this browser/offline-audit workflow.
