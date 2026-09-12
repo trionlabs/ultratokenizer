@@ -1,4 +1,5 @@
 import { getAddress, type EIP1193Provider, type Hex } from 'viem';
+import { getIssuanceRequestDigest } from '../../../../../packages/domain/src/index.js';
 import { parseBrowserRpcUrl } from '../browser-rpc';
 import {
   createIssuanceClient,
@@ -7,6 +8,7 @@ import {
   parseIssuanceBundle,
   parseTransactionHash,
   assertBundleDeployment,
+  parsePreparedIssuanceRequest,
   IssuanceClientError,
   type IssuanceClient,
   type IssuanceBundle,
@@ -14,6 +16,7 @@ import {
   type ConnectedWallet,
   type IssuanceReceipt,
   type TokenTransactionIntent,
+  type PreparedIssuanceRequest,
 } from '../issuance';
 
 type Operation =
@@ -31,6 +34,8 @@ type Outcome = 'pending' | 'confirmed' | 'unresolved' | 'reverted';
 export type IssuanceSnapshot = Readonly<{
   deployment?: DeploymentConfig;
   bundle?: IssuanceBundle;
+  preparedRequest?: PreparedIssuanceRequest;
+  preparedGatePaused?: boolean;
   wallet?: ConnectedWallet;
   providerAvailable: boolean;
   sourceProof: 'unchecked' | 'accepted';
@@ -149,6 +154,8 @@ export function createIssuanceSession(
       receipt: undefined,
       error: undefined,
       unknownSubmission: undefined,
+      preparedRequest: undefined,
+      preparedGatePaused: undefined,
     });
   }
   function requireClient() {
@@ -412,6 +419,8 @@ export function createIssuanceSession(
           signature: undefined,
           simulation: 'unchecked',
           balanceMg: undefined,
+          preparedRequest: undefined,
+          preparedGatePaused: undefined,
         });
       }
       provider = next;
@@ -426,6 +435,8 @@ export function createIssuanceSession(
         signature: undefined,
         simulation: 'unchecked',
         balanceMg: undefined,
+        preparedRequest: undefined,
+        preparedGatePaused: undefined,
         error:
           'Wallet account or network changed. Reconnect before a new action; submitted transactions remain reconcilable.',
       });
@@ -458,6 +469,88 @@ export function createIssuanceSession(
         tokenTransaction: undefined,
         tokenIntent: undefined,
         balanceMg: undefined,
+      });
+    },
+    clearPreparedRequest() {
+      canReplace();
+      resetChecks();
+      update({ bundle: undefined });
+    },
+    prepareRequest(value: unknown) {
+      canReplace();
+      const prepared = parsePreparedIssuanceRequest(value);
+      return run('checking', async (_revision, current) => {
+        resetChecks();
+        update({ bundle: undefined });
+        const accepted = await requireClient().prepareRequest(prepared);
+        if (current())
+          update({
+            preparedRequest: accepted.prepared,
+            preparedGatePaused: accepted.gatePaused,
+          });
+      });
+    },
+    signPreparedRequest() {
+      canReplace();
+      return run('signing', async (revision) => {
+        const prepared = state.preparedRequest;
+        if (
+          !prepared ||
+          !state.disclosed ||
+          !state.wallet ||
+          state.transaction ||
+          state.unknownSubmission
+        )
+          throw new Error();
+        update({ signature: undefined, simulation: 'unchecked' });
+        const signature = await requireClient().signRequest(prepared);
+        if (unchanged(revision) && state.preparedRequest === prepared)
+          update({ signature });
+      });
+    },
+    restorePreparedRequest(value: unknown, holderSignature: Hex) {
+      canReplace();
+      const prepared = parsePreparedIssuanceRequest(value);
+      return run('checking', async (_revision, current) => {
+        resetChecks();
+        update({ bundle: undefined });
+        const restored = await requireClient().restorePreparedRequest(
+          prepared,
+          holderSignature,
+        );
+        if (current())
+          update({
+            preparedRequest: restored.prepared,
+            preparedGatePaused: restored.gatePaused,
+            signature: restored.signature,
+            disclosed: true,
+          });
+      });
+    },
+    acceptPreparedBundle(value: unknown) {
+      canReplace();
+      return run('checking', async (_revision, current) => {
+        const prepared = state.preparedRequest;
+        const signature = state.signature;
+        if (!prepared || !signature || !state.wallet) throw new Error();
+        const bundle = parseIssuanceBundle(value);
+        if (
+          getIssuanceRequestDigest(bundle.request) !==
+          getIssuanceRequestDigest(prepared.request)
+        )
+          throw new IssuanceClientError('issuance_mismatch');
+        update({ sourceProof: 'unchecked', simulation: 'unchecked' });
+        const accepted = await requireClient().acceptPreparedBundle(
+          bundle,
+          prepared,
+          signature,
+        );
+        if (
+          current() &&
+          state.preparedRequest === prepared &&
+          state.signature === signature
+        )
+          update({ bundle: accepted, sourceProof: 'accepted' });
       });
     },
     disclose(value: boolean) {

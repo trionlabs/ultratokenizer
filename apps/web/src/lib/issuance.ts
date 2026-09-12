@@ -8,6 +8,7 @@ export {
   parseIssuanceBundle,
   parseTransactionHash,
   assertBundleDeployment,
+  parsePreparedIssuanceRequest,
   IssuanceClientError,
   MAX_BUNDLE_BYTES,
   MAX_DEPLOYMENT_BYTES,
@@ -18,6 +19,7 @@ export type {
   DeploymentConfig,
   ConnectedWallet,
   TokenTransactionIntent,
+  PreparedIssuanceRequest,
 } from '../../../../packages/issuance/src/index.js';
 export type { IssuanceReceipt } from '../../../../packages/audit/src/index.js';
 

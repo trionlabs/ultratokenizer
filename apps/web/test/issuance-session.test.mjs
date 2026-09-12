@@ -36,6 +36,24 @@ function harness(fixture, overrides = {}) {
       calls.push('sign');
       return fixture.holderSignature;
     },
+    prepareRequest: async (prepared) => {
+      calls.push('prepare-request');
+      return { prepared, gatePaused: false };
+    },
+    signRequest: async () => {
+      calls.push('sign-request');
+      return fixture.holderSignature;
+    },
+    restorePreparedRequest: async (prepared, signature) => {
+      calls.push('restore-request');
+      return { prepared, signature, gatePaused: true };
+    },
+    acceptPreparedBundle: async (bundle, prepared, signature) => {
+      calls.push('accept-prepared');
+      assert.equal(signature, fixture.holderSignature);
+      assert.deepEqual(bundle.request, prepared.request);
+      return bundle;
+    },
     simulate: async () => {
       calls.push('simulate');
     },
@@ -1466,4 +1484,211 @@ test('wallet error code accessors are never invoked by network switching', async
   assert.equal(getters, 0);
   assert.match(session.read().error, /could not add or switch/);
   session.dispose();
+});
+
+function preparedFrom(fixture) {
+  return {
+    request: fixture.bundle.request,
+    sourceId: fixture.deployment.auditPolicy.sourceId,
+    signerFingerprint: fixture.deployment.auditPolicy.sourceSignerFingerprint,
+    policyTermsHash: `0x${'01'.repeat(32)}`,
+    rightsTermsHash: `0x${'02'.repeat(32)}`,
+  };
+}
+
+test('document request approval is reused after proof acceptance without a second signing prompt', async () => {
+  const fixture = await createFixture();
+  const { session, calls } = harness(fixture);
+  await session.connect();
+  await session.prepareRequest(preparedFrom(fixture));
+  assert.equal(session.read().bundle, undefined);
+  assert.equal(session.read().sourceProof, 'unchecked');
+  session.disclose(true);
+  await session.signPreparedRequest();
+  assert.equal(session.read().signature, fixture.holderSignature);
+  assert.equal(session.read().sourceProof, 'unchecked');
+  await session.submit();
+  assert.ok(!calls.includes('submit'));
+  await session.acceptPreparedBundle(fixture.bundle);
+  assert.equal(session.read().signature, fixture.holderSignature);
+  assert.equal(session.read().sourceProof, 'accepted');
+  await session.simulate();
+  await session.submit();
+  assert.deepEqual(calls, [
+    'prepare-request',
+    'sign-request',
+    'accept-prepared',
+    'simulate',
+    'submit',
+  ]);
+  assert.equal(session.read().transaction.hash, fixture.transactionHash);
+});
+
+test('prepared signing requires explicit disclosure and rejected proof never enables mint', async () => {
+  const fixture = await createFixture();
+  const { session, calls } = harness(fixture, {
+    acceptPreparedBundle: async () => {
+      throw new IssuanceClientError('invalid_proof');
+    },
+  });
+  await session.connect();
+  await session.prepareRequest(preparedFrom(fixture));
+  await session.signPreparedRequest();
+  assert.ok(!calls.includes('sign-request'));
+  session.disclose(true);
+  await session.signPreparedRequest();
+  await session.acceptPreparedBundle(fixture.bundle);
+  assert.equal(session.read().sourceProof, 'unchecked');
+  assert.equal(session.read().bundle, undefined);
+  await session.submit();
+  assert.ok(!calls.includes('submit'));
+});
+
+test('prepared bundle cannot replace the signed request with a different canonical digest', async () => {
+  const fixture = await createFixture();
+  const { session, calls } = harness(fixture);
+  await session.connect();
+  const prepared = preparedFrom(fixture);
+  prepared.request = {
+    ...prepared.request,
+    nonce: String(BigInt(prepared.request.nonce) + 1n),
+  };
+  await session.prepareRequest(prepared);
+  session.disclose(true);
+  await session.signPreparedRequest();
+  await session.acceptPreparedBundle(fixture.bundle);
+  assert.ok(!calls.includes('accept-prepared'));
+  assert.equal(session.read().sourceProof, 'unchecked');
+  assert.equal(session.read().bundle, undefined);
+  assert.match(session.read().error, /exact expected issuance/);
+});
+
+test('provider, wallet and deployment changes invalidate prepared document authorizations', async () => {
+  for (const change of [
+    'wallet',
+    'provider',
+    'deployment',
+    'bundle',
+    'clear',
+  ]) {
+    const fixture = await createFixture();
+    const { session } = harness(fixture);
+    await session.connect();
+    await session.prepareRequest(preparedFrom(fixture));
+    session.disclose(true);
+    await session.signPreparedRequest();
+    if (change === 'wallet') session.walletChanged();
+    if (change === 'provider') session.setProvider({ request() {} });
+    if (change === 'deployment')
+      session.loadDeployment(JSON.stringify(fixture.deployment));
+    if (change === 'bundle') session.loadBundle(JSON.stringify(fixture.bundle));
+    if (change === 'clear') session.clearPreparedRequest();
+    assert.equal(session.read().preparedRequest, undefined, change);
+    assert.equal(session.read().signature, undefined, change);
+    assert.equal(session.read().sourceProof, 'unchecked', change);
+  }
+});
+
+test('late document authorization cannot survive a wallet account change', async () => {
+  const fixture = await createFixture();
+  let finish;
+  const pending = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const { session } = harness(fixture, { signRequest: () => pending });
+  await session.connect();
+  await session.prepareRequest(preparedFrom(fixture));
+  session.disclose(true);
+  const signing = session.signPreparedRequest();
+  session.walletChanged();
+  finish(fixture.holderSignature);
+  await signing;
+  assert.equal(session.read().preparedRequest, undefined);
+  assert.equal(session.read().signature, undefined);
+});
+
+test('document replacement and bundle acceptance cannot erase an unresolved wallet submission', async () => {
+  const fixture = await createFixture();
+  const { session } = harness(fixture, {
+    submit: async () => {
+      throw new IssuanceClientError('transaction_uncertain');
+    },
+  });
+  await ready(session);
+  await session.submit();
+  for (const replace of [
+    () => session.prepareRequest(preparedFrom(fixture)),
+    () => session.clearPreparedRequest(),
+    () => session.acceptPreparedBundle(fixture.bundle),
+  ])
+    assert.throws(replace, /Reconcile/);
+  assert.equal(session.read().unknownSubmission, 'issuance');
+});
+
+test('preparation reports a paused Gate without treating the document as proof accepted', async () => {
+  const fixture = await createFixture();
+  const { session } = harness(fixture, {
+    prepareRequest: async (prepared) => ({ prepared, gatePaused: true }),
+  });
+  await session.connect();
+  await session.prepareRequest(preparedFrom(fixture));
+  assert.equal(session.read().preparedGatePaused, true);
+  assert.equal(session.read().sourceProof, 'unchecked');
+  assert.equal(session.read().bundle, undefined);
+  session.walletChanged();
+  assert.equal(session.read().preparedGatePaused, undefined);
+});
+
+test('restoring public approval after refresh preserves the exact signature without marking proof accepted', async () => {
+  const fixture = await createFixture();
+  const { session, calls } = harness(fixture);
+  session.clearPreparedRequest();
+  await session.connect();
+  await session.restorePreparedRequest(
+    preparedFrom(fixture),
+    fixture.holderSignature,
+  );
+  assert.equal(session.read().signature, fixture.holderSignature);
+  assert.equal(session.read().preparedGatePaused, true);
+  assert.equal(session.read().disclosed, true);
+  assert.equal(session.read().sourceProof, 'unchecked');
+  assert.deepEqual(calls, ['restore-request']);
+  await session.acceptPreparedBundle(fixture.bundle);
+  assert.equal(session.read().sourceProof, 'accepted');
+  assert.deepEqual(calls, ['restore-request', 'accept-prepared']);
+});
+
+test('untrusted persisted approval and wallet changes cannot restore an accepted signature', async () => {
+  const fixture = await createFixture();
+  const rejected = harness(fixture, {
+    restorePreparedRequest: async () => {
+      throw new IssuanceClientError('invalid_signature');
+    },
+  });
+  await rejected.session.connect();
+  await rejected.session.restorePreparedRequest(
+    preparedFrom(fixture),
+    fixture.holderSignature,
+  );
+  assert.equal(rejected.session.read().signature, undefined);
+  assert.equal(rejected.session.read().preparedRequest, undefined);
+  let finish;
+  const pending = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const delayed = harness(fixture, { restorePreparedRequest: () => pending });
+  await delayed.session.connect();
+  const restoring = delayed.session.restorePreparedRequest(
+    preparedFrom(fixture),
+    fixture.holderSignature,
+  );
+  delayed.session.walletChanged();
+  finish({
+    prepared: preparedFrom(fixture),
+    signature: fixture.holderSignature,
+    gatePaused: false,
+  });
+  await restoring;
+  assert.equal(delayed.session.read().signature, undefined);
+  assert.equal(delayed.session.read().preparedRequest, undefined);
 });
