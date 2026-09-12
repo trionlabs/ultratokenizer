@@ -8,8 +8,13 @@ import {
 } from 'viem';
 import { loadModule } from './helpers.mjs';
 
-const { parseDiscoveryIndex, decodeRegistration, readDiscovery, IDENTITY_ABI } =
-  await loadModule('../src/lib/application/discovery.ts');
+const {
+  parseDiscoveryIndex,
+  decodeRegistration,
+  readDiscovery,
+  discoveryErrorMessage,
+  IDENTITY_ABI,
+} = await loadModule('../src/lib/application/discovery.ts');
 const { fetchHostedDiscovery } = await loadModule(
   '../src/lib/application/hosted-deployment.ts',
 );
@@ -107,6 +112,7 @@ async function harness(t) {
     metadataDelayMs: 0,
     metadataInFlight: 0,
     peakMetadataInFlight: 0,
+    metadataError: undefined,
   };
   const calls = [];
   t.mock.method(globalThis, 'fetch', async (url, options) => {
@@ -136,6 +142,15 @@ async function harness(t) {
       });
       const offset = decoded.args ? Number(decoded.args[0]) - 1 : 0;
       if (decoded.functionName === 'tokenURI') {
+        if (state.metadataError)
+          return new Response(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: call.id,
+              error: state.metadataError,
+            }),
+            { headers: { 'content-type': 'application/json' } },
+          );
         state.metadataInFlight += 1;
         state.peakMetadataInFlight = Math.max(
           state.peakMetadataInFlight,
@@ -304,6 +319,46 @@ test('unverifiable metadata stops attribution without retrying or querying later
         .functionName === 'tokenURI',
   );
   assert.equal(metadataCalls.length, 1);
+});
+
+test('RPC metadata failures stay unconfirmed and show a bounded message without provider internals', async (t) => {
+  const { read, state, calls } = await harness(t);
+  state.metadataError = {
+    code: -32000,
+    message: 'execution reverted: FAIL_INVALID',
+    data: `0x${'ab'.repeat(4096)}`,
+  };
+  await assert.rejects(read(), (error) => {
+    assert.equal(
+      discoveryErrorMessage(error),
+      'Service records could not be checked. Refresh chain state to try again.',
+    );
+    return true;
+  });
+  const metadataCalls = calls.filter(
+    (call) =>
+      call.method === 'eth_call' &&
+      decodeFunctionData({ abi: IDENTITY_ABI, data: call.params[0].data })
+        .functionName === 'tokenURI',
+  );
+  assert.equal(metadataCalls.length, 1);
+  assert(calls.every((call) => !/send|sign/.test(call.method)));
+});
+
+test('discovery messages preserve known pin failures but never arbitrary thrown text', async (t) => {
+  const { read, state } = await harness(t);
+  state.implementation = '0x9999999999999999999999999999999999999999';
+  await assert.rejects(read(), (error) => {
+    assert.equal(
+      discoveryErrorMessage(error),
+      'The discovery registry or its ownership changed from the reviewed pins.',
+    );
+    return true;
+  });
+  assert.equal(
+    discoveryErrorMessage(new Error('provider-supplied diagnostic text')),
+    'Service records could not be checked. Refresh chain state to try again.',
+  );
 });
 
 test('NFT transfer and wallet clearing fail attribution without any signing or mutation', async (t) => {

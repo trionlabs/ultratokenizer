@@ -25,6 +25,15 @@ const IMPLEMENTATION_SLOT =
 const MAX_METADATA_BYTES = 16 * 1024;
 const REGISTRATION_TYPE =
   'https://eips.ethereum.org/EIPS/eip-8004#registration-v1';
+class DiscoveryError extends Error {}
+
+/** Only messages authored by this module are suitable for the public page. */
+export function discoveryErrorMessage(cause: unknown): string {
+  return cause instanceof DiscoveryError
+    ? cause.message
+    : 'Service records could not be checked. Refresh chain state to try again.';
+}
+
 type Role = 'issuer' | 'deployment' | 'auditor';
 type Entry = Readonly<{
   role: Role;
@@ -56,19 +65,21 @@ function record(value: unknown, keys?: string[]): Record<string, unknown> {
     Array.isArray(value) ||
     ![Object.prototype, null].includes(Object.getPrototypeOf(value))
   )
-    throw new Error('Invalid discovery record.');
+    throw new DiscoveryError('Invalid discovery record.');
   if (
     keys &&
     (Object.keys(value).length !== keys.length ||
       Object.keys(value).some((key) => !keys.includes(key)))
   )
-    throw new Error('Unsupported discovery fields.');
+    throw new DiscoveryError('Unsupported discovery fields.');
   return value as Record<string, unknown>;
 }
 function address(value: unknown): Address {
-  if (typeof value !== 'string') throw new Error('Invalid discovery address.');
+  if (typeof value !== 'string')
+    throw new DiscoveryError('Invalid discovery address.');
   const result = getAddress(value);
-  if (result === zeroAddress) throw new Error('Missing discovery address.');
+  if (result === zeroAddress)
+    throw new DiscoveryError('Missing discovery address.');
   return result;
 }
 function hash(value: unknown): Hex {
@@ -77,7 +88,7 @@ function hash(value: unknown): Hex {
     !/^0x[0-9a-fA-F]{64}$/.test(value) ||
     /^0x0+$/.test(value)
   )
-    throw new Error('Invalid discovery hash.');
+    throw new DiscoveryError('Invalid discovery hash.');
   return value.toLowerCase() as Hex;
 }
 function integer(value: unknown) {
@@ -86,7 +97,7 @@ function integer(value: unknown) {
     !/^(0|[1-9][0-9]{0,77})$/.test(value) ||
     BigInt(value) >= 1n << 256n
   )
-    throw new Error('Invalid discovery identifier.');
+    throw new DiscoveryError('Invalid discovery identifier.');
   return value;
 }
 
@@ -109,7 +120,7 @@ export function parseDiscoveryIndex(
     address(value.gate) !== deployment.auditPolicy.gate ||
     hash(value.issuerId) !== deployment.auditPolicy.issuerId
   )
-    throw new Error('Discovery index belongs to another deployment.');
+    throw new DiscoveryError('Discovery index belongs to another deployment.');
   const registry = record(value.identityRegistry, [
     'address',
     'proxyCodeHash',
@@ -122,7 +133,7 @@ export function parseDiscoveryIndex(
     value.entries.length < 1 ||
     value.entries.length > 3
   )
-    throw new Error('Discovery needs one to three role records.');
+    throw new DiscoveryError('Discovery needs one to three role records.');
   const entries = value.entries.map((input) => {
     const item = record(input, [
       'role',
@@ -132,7 +143,7 @@ export function parseDiscoveryIndex(
       'metadataHash',
     ]);
     if (!['issuer', 'deployment', 'auditor'].includes(String(item.role)))
-      throw new Error('Unsupported discovery role.');
+      throw new DiscoveryError('Unsupported discovery role.');
     return Object.freeze({
       role: item.role as Role,
       agentId: integer(item.agentId),
@@ -145,7 +156,7 @@ export function parseDiscoveryIndex(
     new Set(entries.map((entry) => entry.role)).size !== entries.length ||
     new Set(entries.map((entry) => entry.agentId)).size !== entries.length
   )
-    throw new Error('Duplicate discovery role or agent ID.');
+    throw new DiscoveryError('Duplicate discovery role or agent ID.');
   return Object.freeze({
     format: value.format,
     chainId: deployment.auditPolicy.chainId,
@@ -170,14 +181,16 @@ export function decodeRegistration(uri: string, expectedHash: Hex) {
     !uri.startsWith(prefix) ||
     uri.length > prefix.length + 4 * Math.ceil(MAX_METADATA_BYTES / 3)
   )
-    throw new Error('Discovery metadata must be a bounded JSON data URI.');
+    throw new DiscoveryError(
+      'Discovery metadata must be a bounded JSON data URI.',
+    );
   const encoded = uri.slice(prefix.length);
   if (
     !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
       encoded,
     )
   )
-    throw new Error('Invalid metadata encoding.');
+    throw new DiscoveryError('Invalid metadata encoding.');
   const binary = atob(encoded);
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
   if (
@@ -185,7 +198,9 @@ export function decodeRegistration(uri: string, expectedHash: Hex) {
     bytes.length > MAX_METADATA_BYTES ||
     keccak256(toHex(bytes)) !== expectedHash
   )
-    throw new Error('Discovery metadata changed from the reviewed artifact.');
+    throw new DiscoveryError(
+      'Discovery metadata changed from the reviewed artifact.',
+    );
   const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   const metadata = record(parseDuplicateFreeJson(text, MAX_METADATA_BYTES));
   if (
@@ -194,7 +209,7 @@ export function decodeRegistration(uri: string, expectedHash: Hex) {
     !metadata.name.trim() ||
     metadata.name.length > 160
   )
-    throw new Error('Unsupported registration metadata.');
+    throw new DiscoveryError('Unsupported registration metadata.');
   return { text, metadata, name: metadata.name };
 }
 
@@ -214,7 +229,7 @@ function compareDossier(
     dossier.gateIsSoleMintAuthority !== true ||
     dossier.registryAssertionsAuthorizeIssuance !== false
   )
-    throw new Error(
+    throw new DiscoveryError(
       'The service declaration does not match this Gate and role.',
     );
   if (
@@ -241,20 +256,22 @@ function compareDossier(
       );
     })
   )
-    throw new Error('The declaration is missing its actual registry tuple.');
+    throw new DiscoveryError(
+      'The declaration is missing its actual registry tuple.',
+    );
   if (
     hash(dossier.gateRuntimeHash) !== snapshot.gateCodeHash ||
     hash(dossier.sourceId) !== snapshot.source.id
   )
-    throw new Error(
+    throw new DiscoveryError(
       'The declared Gate runtime or source differs from the current Gate.',
     );
   if (dossier.policyVersion !== snapshot.policyVersion)
-    throw new Error(
+    throw new DiscoveryError(
       'The declared policy version differs from this deployment.',
     );
   if (dossier.rightsVersion !== snapshot.rightsVersion)
-    throw new Error(
+    throw new DiscoveryError(
       'The declared rights version differs from this deployment.',
     );
   if (entry.role === 'issuer') {
@@ -262,7 +279,7 @@ function compareDossier(
       entry.wallet !== snapshot.issuer.signer ||
       address(dossier.proposedPermitSigner) !== snapshot.issuer.signer
     )
-      throw new Error(
+      throw new DiscoveryError(
         'The service wallet is not the current Gate permit signer.',
       );
   } else if (entry.role === 'deployment') {
@@ -274,13 +291,15 @@ function compareDossier(
       hash(program.verifierRuntimeHash) !== snapshot.program.codeHash ||
       program.profileVersion !== String(snapshot.program.profile)
     )
-      throw new Error('The declared program differs from the current Gate.');
+      throw new DiscoveryError(
+        'The declared program differs from the current Gate.',
+      );
   } else if (
     address(dossier.reviewerAddress) !== entry.wallet ||
     dossier.auditPolicyFormat !== 'ultratokenizer.audit-policy.v1' ||
     dossier.auditReportFormat !== 'ultratokenizer.audit-report.v2'
   )
-    throw new Error(
+    throw new DiscoveryError(
       'The declared audit role differs from its wallet or supported formats.',
     );
 }
@@ -298,7 +317,9 @@ export async function readDiscovery(
     snapshot.issuerId !== index.issuerId ||
     snapshot.gateCodeHash !== deployment.gateCodeHash
   )
-    throw new Error('The Gate observation belongs to another deployment.');
+    throw new DiscoveryError(
+      'The Gate observation belongs to another deployment.',
+    );
   const registry = index.identityRegistry;
   const reader = createPublicClient({
     transport: http(parseBrowserRpcUrl(deployment.rpcUrl), {
@@ -334,7 +355,7 @@ export async function readDiscovery(
       registry.implementation ||
     getAddress(owner) !== registry.owner
   )
-    throw new Error(
+    throw new DiscoveryError(
       'The discovery registry or its ownership changed from the reviewed pins.',
     );
   // Read one role at a time to avoid saturating public RPC metadata reads.
@@ -362,7 +383,7 @@ export async function readDiscovery(
       getAddress(owner) !== entry.owner ||
       getAddress(wallet) !== entry.wallet
     )
-      throw new Error(
+      throw new DiscoveryError(
         `The ${entry.role} record was transferred or its wallet changed.`,
       );
     const decoded = decodeRegistration(uri, entry.metadataHash);
@@ -383,7 +404,9 @@ export async function readDiscovery(
     canonical.hash !== snapshot.blockHash ||
     String(finalChain) !== index.chainId
   )
-    throw new Error('The discovery observation is no longer canonical.');
+    throw new DiscoveryError(
+      'The discovery observation is no longer canonical.',
+    );
   return Object.freeze({
     format: 'ultratokenizer.discovery-observation.v1',
     assurance: 'configured-rpc-current-attribution',

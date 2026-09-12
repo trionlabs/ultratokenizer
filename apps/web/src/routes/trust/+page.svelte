@@ -6,6 +6,7 @@
     fetchHostedDiscovery,
   } from '$lib/application/hosted-deployment';
   import {
+    discoveryErrorMessage,
     readDiscovery,
     type DiscoveryObservation,
   } from '$lib/application/discovery';
@@ -79,10 +80,7 @@
     } catch (cause) {
       if (controller.signal.aborted || snapshot !== observed) return;
       discoveryStatus = 'failed';
-      discoveryError =
-        cause instanceof Error
-          ? cause.message
-          : 'Discovery could not be checked.';
+      discoveryError = discoveryErrorMessage(cause);
     }
   }
   onMount(() => {
