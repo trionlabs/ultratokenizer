@@ -280,6 +280,7 @@ export function createIssuanceSession(
               'issuance_preflight_unavailable',
               'token_preflight_unavailable',
               'wrong_chain',
+              'rpc_chain_mismatch',
               'wrong_account',
               'wallet_rejected',
               'stale_token_intent',

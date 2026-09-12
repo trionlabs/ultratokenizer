@@ -1382,23 +1382,30 @@ test('expired token preparation cannot resume into a late wallet send', async (t
   assert.equal(session.read().pendingOperation, undefined);
 });
 
-test('a delayed explicit preflight failure clears uncertainty without inventing a transaction', async (t) => {
-  const fixture = await createFixture();
-  const reply = deferred();
-  const { session } = harness(fixture, { submit: () => reply.promise });
-  await ready(session);
-  t.mock.timers.enable({ apis: ['setTimeout'] });
-  const call = session.submit();
-  t.mock.timers.tick(120_000);
-  await call;
-  assert.equal(session.read().unknownSubmission, 'issuance');
-  reply.reject(new IssuanceClientError('issuance_preflight_unavailable'));
-  await flushLateReply();
-  assert.equal(session.read().pendingOperation, undefined);
-  assert.equal(session.read().unknownSubmission, undefined);
-  assert.equal(session.read().transaction, undefined);
-  assert.match(session.read().error, /No wallet transaction was requested/);
-});
+for (const code of ['issuance_preflight_unavailable', 'rpc_chain_mismatch']) {
+  test(`a delayed ${code} clears uncertainty without inventing a transaction`, async (t) => {
+    const fixture = await createFixture();
+    const reply = deferred();
+    const { session } = harness(fixture, { submit: () => reply.promise });
+    await ready(session);
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const call = session.submit();
+    t.mock.timers.tick(120_000);
+    await call;
+    assert.equal(session.read().unknownSubmission, 'issuance');
+    const error = new IssuanceClientError(code);
+    reply.reject(error);
+    await flushLateReply();
+    assert.equal(session.read().pendingOperation, undefined);
+    assert.equal(session.read().unknownSubmission, undefined);
+    assert.equal(session.read().transaction, undefined);
+    assert.equal(session.read().error, error.message);
+    assert.doesNotThrow(() =>
+      session.loadDeployment(JSON.stringify(fixture.deployment)),
+    );
+    session.dispose();
+  });
+}
 
 test('disposing during token preparation prevents a later wallet call', async () => {
   const fixture = await createFixture();
