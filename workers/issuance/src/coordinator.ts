@@ -16,6 +16,8 @@ import {
   MAX_OBSERVATIONS,
   MAX_OPEN_REQUESTS,
   MAX_RETAINED_REQUESTS,
+  MAX_SUBJECT_OPEN_REQUESTS,
+  MAX_SUBJECT_RETAINED_REQUESTS,
   MAX_CONCURRENT_OBSERVATIONS,
   RETENTION_MS,
   publicState,
@@ -196,7 +198,11 @@ export class IssuanceCoordinator extends DurableObject<IssuanceEnv> {
       );
       if (
         retained.length >= MAX_RETAINED_REQUESTS ||
-        open.length >= MAX_OPEN_REQUESTS
+        open.length >= MAX_OPEN_REQUESTS ||
+        retained.filter((state) => state.ownerId === ownerId).length >=
+          MAX_SUBJECT_RETAINED_REQUESTS ||
+        open.filter((state) => state.ownerId === ownerId).length >=
+          MAX_SUBJECT_OPEN_REQUESTS
       )
         throw new WorkerError('rate_limited');
       const now = Date.now();

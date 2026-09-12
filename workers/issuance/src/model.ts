@@ -71,5 +71,7 @@ export const MAX_OBSERVATIONS = 24;
 export const LEASE_MS = 90_000;
 export const MAX_OPEN_REQUESTS = 32;
 export const MAX_RETAINED_REQUESTS = 128;
+export const MAX_SUBJECT_OPEN_REQUESTS = 8;
+export const MAX_SUBJECT_RETAINED_REQUESTS = 32;
 export const MAX_CONCURRENT_OBSERVATIONS = 4;
 export const RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;

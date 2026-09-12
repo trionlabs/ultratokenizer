@@ -230,14 +230,19 @@ void test(
       for (let base = 200; base < 295; base += 32) {
         const batch = await Promise.all(
           Array.from({ length: Math.min(32, 295 - base) }, (_, offset) =>
-            r.call('create', 'holder', r.request(base + offset)),
+            r.call(
+              'create',
+              `holder-${base + offset}`,
+              r.request(base + offset),
+            ),
           ),
         );
-        for (const response of batch) {
+        for (const [offset, response] of batch.entries()) {
           assert.equal(response.status, 200, await response.clone().text());
           const state = await response.json();
           assert.equal(
-            (await r.call('cancel', 'holder', state.id)).status,
+            (await r.call('cancel', `holder-${base + offset}`, state.id))
+              .status,
             200,
           );
         }
@@ -291,6 +296,121 @@ void test(
       );
       assert.equal(
         (await r.call('create', 'holder', r.request(501))).status,
+        200,
+      );
+    } finally {
+      await r.close();
+    }
+  },
+);
+
+void test(
+  'subject quotas prevent open and retained monopolies without blocking recovery or another subject',
+  { timeout: 30_000 },
+  async () => {
+    const r = await runtime();
+    try {
+      const burst = await Promise.all(
+        Array.from({ length: 12 }, (_, index) =>
+          r.call('create', 'holder', r.request(index + 1)),
+        ),
+      );
+      assert.equal(
+        burst.filter((response) => response.status === 200).length,
+        8,
+      );
+      assert.equal(
+        burst.filter((response) => response.status === 429).length,
+        4,
+      );
+      assert.equal(
+        (await r.call('create', 'other-holder', r.request(50))).status,
+        200,
+      );
+      await r.restart();
+      let storage = await r.storage();
+      const first = (await rows(storage)).find(
+        (state) => state.ownerId === 'holder',
+      );
+      const retry = await r.call('create', 'holder', first.request);
+      assert.equal(retry.status, 200);
+      assert.equal((await retry.json()).revision, 1);
+      assert.equal(
+        (await r.call('create', 'holder', r.request(100))).status,
+        429,
+      );
+      // Concurrent cancellation retries release only one subject open slot.
+      const cancellations = await Promise.all(
+        Array.from({ length: 8 }, () => r.call('cancel', 'holder', first.id)),
+      );
+      assert.ok(cancellations.every((response) => response.status === 200));
+      const replacements = await Promise.all(
+        Array.from({ length: 8 }, (_, index) =>
+          r.call('create', 'holder', r.request(100 + index)),
+        ),
+      );
+      assert.equal(
+        replacements.filter((response) => response.status === 200).length,
+        1,
+      );
+      assert.equal(
+        replacements.filter((response) => response.status === 429).length,
+        7,
+      );
+      let subjectRows = (await rows(storage)).filter(
+        (state) => state.ownerId === 'holder',
+      );
+      assert.equal(subjectRows.length, 9);
+      for (const state of subjectRows)
+        assert.equal((await r.call('cancel', 'holder', state.id)).status, 200);
+
+      // Cancellation frees open capacity, but cannot bypass retained capacity.
+      for (let index = 0; index < 23; index++) {
+        const created = await r.call(
+          'create',
+          'holder',
+          r.request(200 + index),
+        );
+        assert.equal(created.status, 200);
+        const state = await created.json();
+        assert.equal((await r.call('cancel', 'holder', state.id)).status, 200);
+      }
+      subjectRows = (await rows(storage)).filter(
+        (state) => state.ownerId === 'holder',
+      );
+      assert.equal(subjectRows.length, 32);
+      assert.ok(
+        subjectRows.every((state) => state.status === 'tracking_cancelled'),
+      );
+      assert.equal(
+        (await r.call('create', 'holder', r.request(300))).status,
+        429,
+      );
+      assert.equal(
+        (await r.call('create', 'holder', first.request)).status,
+        200,
+      );
+      assert.equal(
+        (await r.call('create', 'other-holder', r.request(301))).status,
+        200,
+      );
+
+      // Absolute retention restores that subject's capacity without clearing others.
+      const expiry = Date.now() + 1_500;
+      for (const state of subjectRows)
+        await checkpoint(storage, { ...state, createdAt: expiry - RETENTION });
+      assert.equal((await r.call('inspect', 'holder', first.id)).status, 200);
+      await r.restart();
+      storage = await r.storage();
+      await eventually(async () => (await rows(storage)).length === 2);
+      assert.ok(
+        (await rows(storage)).every(
+          (state) => state.ownerId === 'other-holder',
+        ),
+      );
+      assert.equal((await r.call('inspect', 'holder', first.id)).status, 404);
+      assert.equal(
+        (await r.call('create', 'holder', r.request(300))).status,
         200,
       );
     } finally {
