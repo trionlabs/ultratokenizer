@@ -2,6 +2,7 @@
   import { onMount, tick } from 'svelte';
   import type { EIP1193Provider } from 'viem';
   import { createIssuanceSession } from '../application/issuance-session';
+  import { fetchHostedDeployment } from '../application/hosted-deployment';
   import {
     formatGrams,
     getTokenBackend,
@@ -32,6 +33,10 @@
   let workspaceView = $state<'issue' | 'transfer'>('issue');
   let setupDialog = $state<HTMLDialogElement>();
   let setupOpen = $state(false);
+  let networkStatus = $state<'loading' | 'missing' | 'failed' | 'loaded'>(
+    'loading',
+  );
+  let networkLoad: AbortController | undefined;
   let ens = $state<Awaited<ReturnType<typeof resolveEnsRecipient>>>();
   let resolutionVersion = 0;
 
@@ -41,7 +46,9 @@
   }
 
   let connected = $derived(!!snapshot.wallet);
-  let busy = $derived(!!snapshot.busy || reading || resolving);
+  let busy = $derived(
+    !!snapshot.busy || reading || resolving || networkStatus === 'loading',
+  );
   let unresolved = $derived(
     !!snapshot.pendingOperation ||
       !!snapshot.unknownSubmission ||
@@ -81,7 +88,7 @@
       label: 'Verify',
       done: snapshot.sourceProof === 'accepted' || issuanceStarted,
     },
-    { label: 'Approve', done: !!snapshot.signature || issuanceStarted },
+    { label: 'Sign', done: !!snapshot.signature || issuanceStarted },
     { label: 'Mint', done: !!snapshot.receipt },
     { label: 'Receipt', done: !!snapshot.receipt },
   ]);
@@ -102,9 +109,32 @@
   );
 
   function openSetup() {
+    networkLoad?.abort();
+    if (networkStatus === 'loading') networkStatus = 'missing';
     fileError = '';
     setupDialog?.showModal();
     setupOpen = true;
+  }
+
+  async function loadNetwork() {
+    if (snapshot.deployment) return;
+    networkLoad?.abort();
+    const controller = new AbortController();
+    networkLoad = controller;
+    networkStatus = 'loading';
+    try {
+      const text = await fetchHostedDeployment(controller.signal);
+      if (controller.signal.aborted || session.read().deployment) return;
+      if (text === undefined) {
+        networkStatus = 'missing';
+        return;
+      }
+      session.loadDeployment(text);
+      deploymentName = 'App configuration';
+      networkStatus = 'loaded';
+    } catch {
+      if (!controller.signal.aborted) networkStatus = 'failed';
+    }
   }
 
   onMount(() => {
@@ -124,6 +154,7 @@
     syncView();
     window.addEventListener('hashchange', syncView);
     session.setProvider(provider);
+    void loadNetwork();
     const changed = () => {
       session.walletChanged();
       clearEns();
@@ -132,6 +163,7 @@
     provider?.on?.('chainChanged', changed);
     provider?.on?.('disconnect', changed);
     return () => {
+      networkLoad?.abort();
       provider?.removeListener?.('accountsChanged', changed);
       provider?.removeListener?.('chainChanged', changed);
       provider?.removeListener?.('disconnect', changed);
@@ -155,7 +187,9 @@
         kind === 'deployment' ? MAX_DEPLOYMENT_BYTES : MAX_BUNDLE_BYTES,
       );
       if (kind === 'deployment') {
+        networkLoad?.abort();
         session.loadDeployment(text);
+        networkStatus = 'loaded';
         deploymentName = file.name;
         bundleName = '';
         clearEns();
@@ -242,13 +276,13 @@
 <div class="live-shell">
   <header class="live-header">
     <a class="live-brand" href="/"><span>u</span>ultratokenizer<i>.</i></a>
-    <span class="engine-label">Proof-backed token engine</span>
+    <span class="engine-label">Provable tokenization</span>
     <nav class="workspace-nav" aria-label="Workspace">
       <a class:active={workspaceView === 'issue'} href="#engine">Issue</a>
       <a class:active={workspaceView === 'transfer'} href="#transfer"
         >Transfer</a
       >
-      <a href="/verify/">Verify <Glyph name="arrow" size={14} /></a>
+      <a href="/verify/">Verify receipt <Glyph name="arrow" size={14} /></a>
     </nav>
     <button
       class="header-wallet"
@@ -257,7 +291,9 @@
         busy ||
         !!snapshot.pendingOperation}
       onclick={() => session.connect()}
-      title={!snapshot.deployment ? 'Set up the network first' : undefined}
+      title={!snapshot.deployment
+        ? 'Waiting for the app network configuration'
+        : undefined}
       ><Glyph name="wallet" size={15} />{connected
         ? 'Reconnect wallet'
         : 'Connect wallet'}</button
@@ -283,8 +319,7 @@
             reverted. No tokens were minted.
           {:else if snapshot.transaction || snapshot.unknownSubmission === 'issuance'}Check
             the outcome before continuing.
-          {:else if !request}From authenticated evidence to tokens in your
-            wallet.
+          {:else if !request}Tokenize gold with proof and issuer authorization.
           {:else if !recipientConnected}Connect the wallet that will receive
             your tokens.
           {:else if snapshot.sourceProof !== 'accepted'}Check the evidence
@@ -415,12 +450,18 @@
               {/if}
             </div>
           {:else if !snapshot.deployment}
-            <button class="primary-button wide-button" onclick={openSetup}
-              >Set up network <Glyph name="arrow" size={15} /></button
-            >
-            <p class="field-hint">
-              Set the network before adding your evidence.
-            </p>
+            {#if networkStatus === 'loading'}
+              <p role="status">Connecting…</p>
+            {:else}
+              <button class="primary-button wide-button" onclick={loadNetwork}
+                >Check availability <Glyph name="arrow" size={15} /></button
+              >
+              <p class="field-hint" role="status">
+                {networkStatus === 'missing'
+                  ? 'Minting is not live yet.'
+                  : 'Unable to connect. Please try again.'}
+              </p>
+            {/if}
           {:else if !request}
             <label class="upload-button"
               >Add evidence package <Glyph name="plus" size={15} /><input
@@ -469,8 +510,11 @@
             <div class="action-copy">
               <span>03</span>
               <div>
-                <h2>Verify the package</h2>
-                <p>Check the proof, approval, and current contract state.</p>
+                <h2>Verify evidence</h2>
+                <p>
+                  Check the proof, issuer authorization, and current issuance
+                  conditions.
+                </p>
               </div>
             </div>
             <div class="claim-review">
@@ -481,16 +525,16 @@
               <button
                 class="primary-button"
                 disabled={busy || unresolved}
-                onclick={() => session.check()}>Check bundle</button
+                onclick={() => session.check()}>Verify evidence</button
               >
             </div>
           {:else if !snapshot.signature}
             <div class="action-copy">
               <span>04</span>
               <div>
-                <h2>Approve the mint</h2>
+                <h2>Sign mint request</h2>
                 <p>
-                  Sign for the exact amount. This step sends no transaction.
+                  Approve the exact amount. This signature sends no transaction.
                 </p>
               </div>
             </div>
@@ -510,7 +554,7 @@
               class="primary-button wide-button"
               disabled={!snapshot.disclosed || busy || unresolved}
               onclick={() => session.sign()}
-              >Sign request <Glyph name="arrow" size={15} /></button
+              >Sign mint request <Glyph name="arrow" size={15} /></button
             >
           {:else}
             <div class="action-copy">
@@ -736,8 +780,7 @@
               <button
                 class="network-link"
                 disabled={busy || unresolved}
-                onclick={openSetup}
-                >{snapshot.deployment ? 'Change' : 'Set up'}</button
+                onclick={openSetup}>Settings</button
               >
             </dd>
           </div>
@@ -762,12 +805,12 @@
           </p>{/if}
       </section>
       <section>
-        <div class="rail-heading"><span>Activity</span></div>
+        <div class="rail-heading"><span>Session activity</span></div>
         {#if !snapshot.transaction && !snapshot.tokenTransaction}
           <div class="empty-activity">
             <Glyph name="receipt" size={23} />
             <p>No transactions yet.</p>
-            <small>Your mints and transfers will appear here.</small>
+            <small>Your latest transaction status appears here.</small>
           </div>
         {:else}
           {#if snapshot.transaction}<div class="activity-item">
@@ -793,10 +836,10 @@
       </section>
       {#if snapshot.deployment}
         <details class="technical-details">
-          <summary>Test configuration</summary>
+          <summary>Deployment details</summary>
           <div class="compact-files">
             <button disabled={busy || unresolved} onclick={openSetup}
-              >Change network setup</button
+              >Advanced network setup</button
             >
             {#if request}<label
                 >Change package<input
@@ -855,16 +898,17 @@
     aria-labelledby="setup-title"
   >
     <div class="setup-heading">
-      <span class="scene-kicker">Connection settings</span><button
+      <span class="scene-kicker">Advanced settings</span><button
         class="dialog-close"
         aria-label="Close network setup"
         onclick={() => setupDialog?.close()}>×</button
       >
     </div>
-    <h2 id="setup-title">Network setup</h2>
+    <h2 id="setup-title">Operator configuration</h2>
     <p>
-      Import the configuration supplied by your deployment operator. It selects
-      the network, token, and trusted verifier.
+      The app loads its network automatically. For a separate deployment, import
+      configuration from an operator you trust. This changes the contracts and
+      verifier used by this session.
     </p>
     <label class="upload-button"
       >Choose configuration <Glyph name="arrow" size={15} /><input
@@ -884,7 +928,7 @@
   </dialog>
 
   <footer class="live-footer">
-    <Glyph name="lock" size={14} /> Files stay in this browser. Private keys are never
-    requested.
+    <Glyph name="wallet" size={14} /> You sign in your wallet. Proofs and transaction
+    details are public.
   </footer>
 </div>

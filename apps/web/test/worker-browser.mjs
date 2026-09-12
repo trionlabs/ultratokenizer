@@ -127,7 +127,7 @@ try {
   await expect(headerWallet).toBeDisabled();
   // Future actions are not rendered before their prerequisites.
   await expect(
-    page.getByRole('button', { name: 'Sign request', exact: true }),
+    page.getByRole('button', { name: 'Sign mint request', exact: true }),
   ).toHaveCount(0);
   assert.deepEqual(await page.evaluate(() => window.walletCalls), []);
   assert.deepEqual(rpcCalls, []);
@@ -173,16 +173,14 @@ try {
     document.documentElement.style.fontSize = '200%';
   });
   await noOverflow(page);
-  await page
-    .getByRole('button', { name: 'Set up network', exact: true })
-    .click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(
     page.getByLabel('Import deployment configuration', { exact: true }),
   ).toBeVisible();
   await noOverflow(page);
   await page.getByRole('button', { name: 'Close network setup' }).click();
   await expect(
-    page.getByRole('button', { name: 'Set up network', exact: true }),
+    page.getByRole('button', { name: 'Settings', exact: true }),
   ).toBeFocused();
   await page.screenshot({
     path: new URL(
@@ -197,11 +195,11 @@ try {
   await page.setViewportSize({ width: 320, height: 640 });
   await noOverflow(page);
   const firstUpload = await page
-    .getByRole('button', { name: 'Set up network', exact: true })
+    .getByRole('button', { name: 'Check availability', exact: true })
     .boundingBox();
   assert.ok(
     firstUpload && firstUpload.y + firstUpload.height <= 640,
-    'Mobile setup starts in the first viewport',
+    'Mobile availability action starts in the first viewport',
   );
   const sceneBox = await page.locator('.proof-object').boundingBox();
   const paperBox = await page.locator('.artifact-body').boundingBox();
@@ -220,9 +218,7 @@ try {
     ...fixture.deployment,
     rpcUrl: new URL('rpc-test', base).href,
   };
-  await page
-    .getByRole('button', { name: 'Set up network', exact: true })
-    .click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page
     .getByLabel('Import deployment configuration', { exact: true })
     .setInputFiles({
@@ -255,7 +251,7 @@ try {
   assert(rpcCalls.includes('eth_getCode'));
   await expect(
     page.getByRole('button', {
-      name: 'Sign request',
+      name: 'Sign mint request',
       exact: true,
       includeHidden: true,
     }),

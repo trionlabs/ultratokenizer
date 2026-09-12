@@ -71,21 +71,22 @@
     <div class="artifact-body" class:is-coin={minted}>
       <div class="proof-sheet">
         <div class="sheet-top"><b>u.</b><span>EVIDENCE / XAU</span></div>
-        <strong>Gold<br />evidence</strong>
+        <strong>Gold<br />allocation</strong>
         <div class="sheet-lines"><span></span><span></span><span></span></div>
         <div class="sheet-bottom">
           <span>{amount ? `${amount} g` : '— g'}</span><small
-            >{amount ? 'EXACT AMOUNT' : 'NO PACKAGE'}</small
+            >{amount ? 'EXACT AMOUNT' : ''}</small
           >
         </div>
       </div>
       <div class="coin-face">
-        <span class="coin-ring"></span><span class="coin-top"
-          >ULTRATOKENIZER</span
-        >
-        <strong>Au</strong><span class="coin-amount">{amount} g</span><small
-          >MINT CONFIRMED</small
-        >
+        <span class="coin-ring"></span>
+        {#if minted}
+          <span class="coin-top">ULTRATOKENIZER</span>
+          <strong>Au</strong><span class="coin-amount">{amount} g</span><small
+            >MINT CONFIRMED</small
+          >
+        {/if}
       </div>
       <div class="artifact-edge"></div>
     </div>

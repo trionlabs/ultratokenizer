@@ -328,7 +328,7 @@ export async function exerciseIssuanceRecovery({
         page.locator('.flow-rail [aria-current="step"]'),
       ).toContainText('Wallet');
       await expect(
-        page.getByRole('button', { name: 'Check bundle', exact: true }),
+        page.getByRole('button', { name: 'Verify evidence', exact: true }),
       ).toHaveCount(0);
       await page.evaluate((address) => {
         window.issuanceWallet.account = address;
@@ -339,10 +339,10 @@ export async function exerciseIssuanceRecovery({
       .getByRole('button', { name: 'Connect wallet', exact: true })
       .click();
     await page
-      .getByRole('button', { name: 'Check bundle', exact: true })
+      .getByRole('button', { name: 'Verify evidence', exact: true })
       .click();
     await expect(
-      page.getByRole('heading', { name: 'Approve the mint' }),
+      page.getByRole('heading', { name: 'Sign mint request' }),
     ).toBeVisible();
     await expect(page.locator('.proof-object')).toHaveAttribute(
       'data-state',
@@ -351,7 +351,7 @@ export async function exerciseIssuanceRecovery({
     await expect(page.locator('.artifact-body')).not.toHaveClass(/is-coin/);
     await page.getByRole('checkbox').check();
     await page
-      .getByRole('button', { name: 'Sign request', exact: true })
+      .getByRole('button', { name: 'Sign mint request', exact: true })
       .click();
     await page
       .getByRole('button', { name: 'Check before sending', exact: true })

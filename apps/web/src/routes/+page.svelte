@@ -3,10 +3,10 @@
 </script>
 
 <svelte:head>
-  <title>Proof-backed token engine — Ultratokenizer</title>
+  <title>Provable tokenization — Ultratokenizer</title>
   <meta
     name="description"
-    content="Turn an approved gold right into divisible tokens, with wallet review and an independently verifiable receipt."
+    content="Issue the exact approved gold quantity with proof verification, issuer authorization, wallet consent, and a receipt you can inspect independently."
   />
 </svelte:head>
 <IssuanceWorkspace />

@@ -143,9 +143,9 @@ try {
     page.getByRole('button', { name: 'Review transfer in wallet' }),
   ).toBeDisabled();
   await expect(page.locator('.transaction-card')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Check bundle' })).toHaveCount(
-    0,
-  );
+  await expect(
+    page.getByRole('button', { name: 'Verify evidence' }),
+  ).toHaveCount(0);
 
   const screenshots = new URL('../../../.scratch/web-qa/', import.meta.url);
   await mkdir(screenshots, { recursive: true });

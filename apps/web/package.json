@@ -12,7 +12,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "node --experimental-strip-types --test test/*.test.mjs",
-    "test:browser": "node test/worker-browser.mjs && node test/security-browser.mjs",
+    "test:browser": "node test/hosted-deployment-browser.mjs && node test/worker-browser.mjs && node test/security-browser.mjs",
     "test:browser:backends": "node test/backend-browser.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
