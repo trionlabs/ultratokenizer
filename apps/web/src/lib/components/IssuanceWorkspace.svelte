@@ -545,9 +545,10 @@
             <details class="upload-help">
               <summary>What can I upload?</summary>
               <p>
-                A prepared public package with the proof, exact quantity, and
-                issuer approval. JSON, up to {MAX_BUNDLE_BYTES / 1024} KB. Source
-                PDFs and emails cannot be uploaded here.
+                Get the public proof-and-permit package from your issuer. Its
+                permit lasts at most ten minutes; ask for a fresh permit if it
+                expires. JSON, up to {MAX_BUNDLE_BYTES / 1024} KB. Source PDFs and
+                emails cannot be uploaded here.
               </p>
             </details>
           {:else if !recipientConnected}
@@ -1046,6 +1047,7 @@
       ? 'You sign in your wallet. Proofs and transaction details are public.'
       : 'Connecting a wallet does not sign or mint.'}
     <nav aria-label="Institution and trust">
+      <a class="text-link" href="/demo/">How it works</a>
       <a class="text-link" href="/institution/">Institution</a>
       <a class="text-link" href="/trust/">Trust</a>
       {#if operatorMode}

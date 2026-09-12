@@ -3,7 +3,8 @@
   let {
     current,
     children,
-  }: { current: 'institution' | 'trust'; children: Snippet } = $props();
+  }: { current: 'institution' | 'trust' | 'demo'; children: Snippet } =
+    $props();
 </script>
 
 <a class="skip-link" href="#portal">Skip to {current}</a>
@@ -21,6 +22,9 @@
         >Trust</a
       >
       <a href="/verify/">Verify</a>
+      <a href="/demo/" aria-current={current === 'demo' ? 'page' : undefined}
+        >How it works</a
+      >
     </nav>
   </header>
   <main id="portal" tabindex="-1">{@render children()}</main>

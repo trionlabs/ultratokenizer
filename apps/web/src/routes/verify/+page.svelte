@@ -23,7 +23,18 @@
       <p class="scene-kicker">Independent verifier</p>
       <h1>Verify a receipt.</h1>
       <p>Compare it with trust settings you obtained separately.</p>
+      <p class="audit-context">
+        No wallet needed. <a href="/trust/">Inspect deployment records</a> ·
+        <a href="/demo/">Explore the roles</a>
+      </p>
     </div>
     <ReceiptAudit />
   </main>
 </div>
+
+<style>
+  .audit-context {
+    margin-top: 12px;
+    font-size: 0.85rem;
+  }
+</style>
