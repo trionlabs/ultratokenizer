@@ -3,6 +3,7 @@ import { open, constants } from 'node:fs/promises';
 import { auditIssuanceReceipt } from './audit.js';
 import {
   AuditInputError,
+  REPORT_FORMAT,
   MAX_POLICY_BYTES,
   MAX_RECEIPT_BYTES,
   parseAuditPolicy,
@@ -88,9 +89,10 @@ async function main(args: string[]): Promise<number> {
     process.stdout.write(
       `${JSON.stringify(
         {
-          format: 'ultratokenizer.audit-report.v1',
+          format: REPORT_FORMAT,
           status: 'invalid',
           complete: false,
+          proofVerification: null,
           error: { code: error.code, message: error.message },
           checks: [
             { id: 'input_schema', status: 'failed', detail: error.message },

@@ -1,6 +1,7 @@
 export {
   RECEIPT_FORMAT,
   POLICY_FORMAT,
+  REPORT_FORMAT,
   MAX_RECEIPT_BYTES,
   MAX_POLICY_BYTES,
   MAX_PROOF_BYTES,
@@ -8,12 +9,14 @@ export {
   parseIssuanceReceipt,
   parseAuditPolicy,
   decodeClaimOutput,
+  parseRpcProofObservation,
 } from './schema.js';
 export type {
   IssuanceReceipt,
   AuditPolicy,
   ClaimOutput,
   ProofVerifierIdentity,
+  RpcProofObservation,
 } from './schema.js';
 export { auditIssuanceReceipt } from './audit.js';
 export type {

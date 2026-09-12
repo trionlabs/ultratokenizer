@@ -87,9 +87,58 @@ const expectedLog = getExpectedIssuedEvent(receiptJson);
 The library supplies **no default proof-verification adapter**. A caller may pass `{ proofVerifier }`, implementing `ProofVerificationAdapter`:
 
 - `identity`: proof system, exact outer version, verifier address and code hash. All must match the separate caller policy.
-- `verify({ proofBytes, publicValues, programVKey, policy }): Promise<boolean>`: actual cryptographic verification against that pinned configuration.
+- `verify({ proofBytes, publicValues, programVKey, policy })`: a boolean result, or a bound `RpcProofObservation` from the online adapter.
 
 The adapter is trusted executable code installed/configured by the caller; its identity declaration is not independently authenticated by this library. A `true` result marks only `proof_cryptography` verified. `false` fails that check; an exception leaves it unverified with a safe error. An identity mismatch fails closed without invoking the adapter. Prior binding failures also prevent invocation. Callers running expensive adapters must supply their own execution isolation, timeout and cancellation; no adapter is loaded by the CLI.
+
+### Exported proof observation and replay
+
+Reports use `ultratokenizer.audit-report.v2` and always include `proofVerification`.
+It is `null` for offline checks, incomplete RPC checks and boolean-only custom adapters.
+The browser accepts version 2 only; receipt and caller-policy formats remain version 1.
+
+`createRpcProofVerifier({ policy, rpcUrl })` records a completed online result as
+`ultratokenizer.rpc-proof-observation.v1`: chain ID, execution block number/hash,
+verifier address/runtime hash, direct `VERSION()` metadata, program VKey, Keccak hashes
+of public values and proof bytes, the `verifyProof(bytes32,bytes,bytes)` method and
+`returned` or `reverted` result. Its assurance is explicitly `trusted-rpc`.
+Only the RPC origin is exported; URL paths and queries are excluded. Credentials
+embedded in a hostname cannot be redacted while retaining that origin, so use a
+shareable hostname when exporting the report.
+
+The adapter reads code, VERSION and proof result at one numeric block, then rechecks
+the block number/hash and chain. Missing state, wrong VERSION, changed anchors and
+ambiguous provider failures leave proof verification unverified. VERSION is a
+consistency check; it cannot replace independently reviewed runtime identity.
+Both accepted and explicitly reverted results carry anchors; neither establishes
+historical issuance inclusion, authority, backing or fulfillment.
+
+To repeat a saved observation, obtain the receipt, policy and RPC configuration
+independently and select its exact block; no latest-block fallback is used:
+
+```ts
+const observation = previousReport.proofVerification;
+if (!observation) throw new Error('No replayable RPC observation.');
+const verifier = createRpcProofVerifier({
+  policy,
+  rpcUrl: independentlyConfiguredRpc,
+  block: { number: observation.blockNumber, hash: observation.blockHash },
+});
+const replay = await auditIssuanceReceipt(receiptJson, policy, {
+  proofVerifier: verifier,
+});
+```
+
+Compare the new observation's input hashes, verifier identity and result with the
+saved record. A saved report is an assertion to reproduce, not a trusted receipt or
+policy source. A coherent dishonest RPC can fabricate consistent reads; this adapter
+does not verify consensus inclusion. The RPC origin alone does not authenticate a provider.
+
+Institutional policies may cover multiple holders. Operation-specific expectations
+remain caller assertions: compare `report.requestDigest` with an independently expected
+digest, or compare the normalized `parseIssuanceReceipt(receiptJson).request.recipient`
+with the expected recipient before accepting a report. A valid self-signature alone
+does not establish that this is the operation or person the caller intended to audit.
 
 ## Evidence that remains missing
 

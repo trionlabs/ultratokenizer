@@ -92,7 +92,8 @@ export function createWorkerVerifier(
                 parseVerificationResult(
                   reply.result,
                   text,
-                  options.rpcUrl ? 'rpc' : 'offline',
+                  options.policyText,
+                  options.rpcUrl,
                 ),
               );
             } else finish('failed');

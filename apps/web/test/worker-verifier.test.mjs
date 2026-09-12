@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { keccak256 } from 'viem';
 import { loadModule } from './helpers.mjs';
 const { createWorkerVerifier } = await loadModule(
   '../src/lib/verification/worker-client.ts',
@@ -71,16 +72,37 @@ test('worker correlation ignores unrelated replies and success cleans up the wor
   client.dispose();
 });
 
-test('an explicit online proof result retains required unverified history', async () => {
-  const { client, workers } = harness();
+function onlineResult() {
   const result = structuredClone(checked);
   result.mode = 'rpc';
+  result.report.proofVerification = {
+    format: 'ultratokenizer.rpc-proof-observation.v1',
+    chainId: fixture.policy.chainId,
+    blockNumber: '1',
+    blockHash: `0x${'ab'.repeat(32)}`,
+    verifierAddress: fixture.policy.verifierAddress,
+    verifierCodeHash: fixture.policy.verifierCodeHash,
+    outerVersion: fixture.policy.outerVersion,
+    programVKey: fixture.policy.programVKey,
+    publicValuesHash: keccak256(fixture.receipt.publicValues),
+    proofBytesHash: keccak256(fixture.receipt.proofBytes),
+    method: 'verifyProof(bytes32,bytes,bytes)',
+    result: 'returned',
+    assurance: 'trusted-rpc',
+    rpcOrigin: 'https://rpc.example.invalid',
+  };
   result.report.checks.find(
     (check) => check.id === 'proof_cryptography',
   ).status = 'verified';
   result.report.missingEvidence = result.report.missingEvidence.filter(
     (id) => id !== 'proof_cryptography',
   );
+  return result;
+}
+
+test('an explicit online proof result retains required unverified history and exportable anchors', async () => {
+  const { client, workers } = harness();
+  const result = onlineResult();
   const pending = client.verify(receiptText, {
     ...options,
     rpcUrl: 'https://rpc.example.invalid/',
@@ -89,7 +111,44 @@ test('an explicit online proof result retains required unverified history', asyn
   const verified = await pending;
   assert.equal(verified.report.status, 'incomplete');
   assert(verified.report.missingEvidence.includes('historical_registry'));
+  assert.deepEqual(
+    verified.report.proofVerification,
+    result.report.proofVerification,
+  );
   client.dispose();
+});
+
+test('online worker evidence must match caller pins, receipt bytes, outcome and RPC origin', async () => {
+  for (const patch of [
+    { format: 'ultratokenizer.rpc-proof-observation.v0' },
+    { chainId: '1' },
+    { blockNumber: '-1' },
+    { blockNumber: '01' },
+    { blockHash: `0x${'00'.repeat(32)}` },
+    { verifierAddress: fixture.receipt.request.recipient },
+    { verifierCodeHash: `0x${'cd'.repeat(32)}` },
+    { outerVersion: 'v0.0.0' },
+    { programVKey: `0x${'cd'.repeat(32)}` },
+    { publicValuesHash: `0x${'cd'.repeat(32)}` },
+    { proofBytesHash: `0x${'cd'.repeat(32)}` },
+    { method: 'verify' },
+    { result: 'reverted' },
+    { assurance: 'independent-consensus' },
+    { rpcOrigin: 'https://different.example.invalid' },
+    { rpcOrigin: 'https://rpc.example.invalid/secret' },
+    { extra: true },
+  ]) {
+    const { client, workers } = harness();
+    const result = onlineResult();
+    Object.assign(result.report.proofVerification, patch);
+    const pending = client.verify(receiptText, {
+      ...options,
+      rpcUrl: 'https://rpc.example.invalid',
+    });
+    workers[0].reply({ id: workers[0].message.id, ok: true, result });
+    await assert.rejects(pending, /worker stopped/);
+    client.dispose();
+  }
 });
 
 for (const scenario of [
@@ -308,6 +367,18 @@ test('the worker itself preserves field-specific input errors when its public cl
 });
 
 for (const [name, changed] of [
+  [
+    'legacy report format',
+    (result) => {
+      result.report.format = 'ultratokenizer.audit-report.v1';
+    },
+  ],
+  [
+    'missing proof evidence field',
+    (result) => {
+      delete result.report.proofVerification;
+    },
+  ],
   [
     'omitted canonical checks',
     (result) => {

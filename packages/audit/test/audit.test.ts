@@ -5,7 +5,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { encodeAbiParameters, decodeEventLog, keccak256, type Hex } from 'viem';
+import {
+  encodeAbiParameters,
+  decodeEventLog,
+  keccak256,
+  toFunctionSelector,
+  type Hex,
+} from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import requestFixture from '../../domain/fixtures/request.synthetic.json' with { type: 'json' };
 import {
@@ -308,6 +314,37 @@ await test('schema rejects private additions, unknown nested fields, malformed E
   );
 });
 
+await test('raw receipt and policy inputs reject duplicate decoded fields before normalization', () => {
+  for (const input of [
+    text.replace('{', '{"format":"private-marker",'),
+    text.replace('"request":{', '"request":{"amount":"1",'),
+    text.replace('"request":{', '"request":{"amoun\\u0074":"1",'),
+    text.replace('"permit":{', '"permit":{"nonce":"private-marker",'),
+  ]) {
+    assert.notEqual(input, text);
+    assert.throws(
+      () => parseIssuanceReceipt(input),
+      (error) =>
+        error instanceof AuditInputError &&
+        error.code === 'invalid_receipt' &&
+        !error.message.includes('private-marker'),
+    );
+  }
+  const policyText = JSON.stringify(policy);
+  for (const key of ['format', 'forma\\u0074']) {
+    assert.throws(
+      () =>
+        parseAuditPolicy(
+          policyText.replace('{', `{"${key}":"private-marker",`),
+        ),
+      (error) =>
+        error instanceof AuditInputError &&
+        error.code === 'invalid_policy' &&
+        !error.message.includes('private-marker'),
+    );
+  }
+});
+
 await test('proof adapters require exact outer verifier identity and never complete unknown historical checks', async () => {
   const identity = {
     proofSystem: policy.proofSystem,
@@ -453,6 +490,7 @@ await test('CLI is truthful by default, strict incomplete exits 2, invalid exits
   );
   const invalid = run();
   assert.equal(invalid.status, 1);
+  assert.equal(JSON.parse(invalid.stdout).proofVerification, null);
   assert.ok(!invalid.stdout.includes('secret-value-marker'));
   assert.ok(!invalid.stdout.includes('sensitive-content-marker'));
   assert.equal(invalid.stderr, '');
@@ -466,9 +504,17 @@ await test('RPC proof checks distinguish explicit rejection from server failure 
   const code = '0x6000';
   const rpcPolicy = { ...policy, verifierCodeHash: keccak256(code) };
   for (const scenario of [
+    'returned',
+    'replay',
+    'wrong-version',
+    'wrong-replay-hash',
+    'wrong-block-number',
     'revert',
     'internal',
     'transport',
+    'null-result',
+    'empty-result',
+    'nonempty-result',
     'reorg',
     'wrong-code',
     'wrong-chain',
@@ -491,7 +537,10 @@ await test('RPC proof checks distinguish explicit rejection from server failure 
           else if (call.method === 'eth_getBlockByNumber') {
             blockReads++;
             result = {
-              number: '0x1',
+              number:
+                scenario === 'wrong-block-number' && blockReads > 1
+                  ? '0x2'
+                  : '0x1',
               hash: bytes32(
                 scenario === 'reorg' && blockReads > 1 ? '02' : '01',
               ),
@@ -505,6 +554,19 @@ await test('RPC proof checks distinguish explicit rejection from server failure 
               'runtime must use the selected block',
             );
             result = scenario === 'wrong-code' ? '0x6001' : code;
+          } else if (
+            call.method === 'eth_call' &&
+            call.params[0].data === toFunctionSelector('VERSION()')
+          ) {
+            assert.equal(call.params[1], '0x1');
+            result = encodeAbiParameters(
+              [{ type: 'string' }],
+              [
+                scenario === 'wrong-version'
+                  ? 'v0.0.0'
+                  : rpcPolicy.outerVersion,
+              ],
+            );
           } else if (call.method === 'eth_call') {
             proofCalls++;
             assert.equal(
@@ -534,7 +596,14 @@ await test('RPC proof checks distinguish explicit rejection from server failure 
                 code: -32000,
                 message: `[Request ID: 00000000-0000-4000-8000-000000000001] Error occurred during transaction simulation: ${exception}`,
               };
-            } else
+            } else if (scenario === 'null-result') result = null;
+            else if (scenario === 'empty-result') result = '';
+            else if (scenario === 'nonempty-result') result = '0x00';
+            else if (
+              ['returned', 'replay', 'wrong-block-number'].includes(scenario)
+            )
+              result = '0x';
+            else
               error = {
                 code: 3,
                 message: 'execution reverted',
@@ -556,14 +625,26 @@ await test('RPC proof checks distinguish explicit rejection from server failure 
       );
       const adapter = createRpcProofVerifier({
         policy: rpcPolicy,
-        rpcUrl: 'http://127.0.0.1:12345',
+        rpcUrl: 'http://127.0.0.1:12345/private-rpc?apiKey=not-for-report',
+        ...(['replay', 'wrong-replay-hash'].includes(scenario)
+          ? {
+              block: {
+                number: '1',
+                hash: bytes32(scenario === 'replay' ? '01' : '99'),
+              },
+            }
+          : {}),
       });
       const report = await auditIssuanceReceipt(text, rpcPolicy, {
         proofVerifier: adapter,
       });
       assert.equal(
         status(report, 'proof_cryptography'),
-        scenario === 'revert' ? 'failed' : 'unverified',
+        scenario === 'revert'
+          ? 'failed'
+          : ['returned', 'replay'].includes(scenario)
+            ? 'verified'
+            : 'unverified',
       );
       assert.equal(
         report.status,
@@ -573,8 +654,87 @@ await test('RPC proof checks distinguish explicit rejection from server failure 
       assert.equal(status(report, 'transaction_inclusion'), 'unverified');
       assert.equal(
         proofCalls,
-        ['wrong-code', 'wrong-chain'].includes(scenario) ? 0 : 1,
+        [
+          'wrong-code',
+          'wrong-chain',
+          'wrong-version',
+          'wrong-replay-hash',
+        ].includes(scenario)
+          ? 0
+          : 1,
       );
+      assert.equal(report.format, 'ultratokenizer.audit-report.v2');
+      assert.equal(
+        report.proofVerification?.result ?? null,
+        scenario === 'revert'
+          ? 'reverted'
+          : ['returned', 'replay'].includes(scenario)
+            ? 'returned'
+            : null,
+      );
+      if (report.proofVerification) {
+        assert.equal(report.proofVerification.blockNumber, '1');
+        assert.equal(report.proofVerification.blockHash, bytes32('01'));
+        assert.equal(
+          report.proofVerification.verifierCodeHash,
+          rpcPolicy.verifierCodeHash,
+        );
+        assert.equal(
+          report.proofVerification.outerVersion,
+          rpcPolicy.outerVersion,
+        );
+        assert.equal(
+          report.proofVerification.proofBytesHash,
+          keccak256(parseIssuanceReceipt(text).proofBytes),
+        );
+        assert.equal(
+          report.proofVerification.publicValuesHash,
+          keccak256(receipt.publicValues),
+        );
+        assert.equal(report.proofVerification.assurance, 'trusted-rpc');
+        assert.equal(
+          report.proofVerification.rpcOrigin,
+          'http://127.0.0.1:12345',
+        );
+      }
+      assert.ok(!JSON.stringify(report).includes('not-for-report'));
+      assert.ok(!JSON.stringify(report).includes('private-rpc'));
     });
   }
+});
+
+await test('RPC replay rejects malformed or accessor-bearing block selectors without falling back', async () => {
+  const { createRpcProofVerifier } =
+    await import('../src/rpc-proof-verifier.js');
+  let reads = 0;
+  const accessor = Object.defineProperty({ hash: bytes32('01') }, 'number', {
+    enumerable: true,
+    get() {
+      reads++;
+      return '1';
+    },
+  });
+  for (const block of [
+    null,
+    false,
+    0,
+    '',
+    [],
+    {},
+    { number: '01', hash: bytes32('01') },
+    { number: '1', hash: bytes32('00') },
+    { number: '1', hash: bytes32('01'), extra: true },
+    accessor,
+  ]) {
+    assert.throws(
+      () =>
+        createRpcProofVerifier({
+          policy,
+          rpcUrl: 'https://rpc.invalid',
+          block: block as never,
+        }),
+      /Unsupported verifier block reference/,
+    );
+  }
+  assert.equal(reads, 0);
 });

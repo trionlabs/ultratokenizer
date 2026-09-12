@@ -7,6 +7,9 @@ import {
   parseIssuanceReceipt,
   parseAuditPolicy,
   decodeClaimOutput,
+  REPORT_FORMAT,
+  parseRpcProofObservation,
+  type RpcProofObservation,
   type AuditPolicy,
   type ProofVerifierIdentity,
   type IssuanceReceipt,
@@ -18,10 +21,11 @@ export type AuditCheck = Readonly<{
   detail: string;
 }>;
 export type AuditReport = Readonly<{
-  format: 'ultratokenizer.audit-report.v1';
+  format: typeof REPORT_FORMAT;
   status: 'invalid' | 'incomplete';
   complete: false;
   requestDigest: Hex;
+  proofVerification: RpcProofObservation | null;
   checks: readonly AuditCheck[];
   missingEvidence: readonly string[];
   limitations: readonly string[];
@@ -37,7 +41,7 @@ export interface ProofVerificationAdapter {
       programVKey: Hex;
       policy: AuditPolicy;
     }>,
-  ): Promise<boolean>;
+  ): Promise<boolean | RpcProofObservation>;
 }
 
 async function signatureMatches(hash: Hex, signature: Hex, expected: string) {
@@ -177,6 +181,7 @@ export async function auditIssuanceReceipt(
   }
 
   const adapter = options.proofVerifier;
+  let proofVerification: RpcProofObservation | null = null;
   if (!adapter)
     check(
       'proof_cryptography',
@@ -204,7 +209,7 @@ export async function auditIssuanceReceipt(
       );
     else {
       try {
-        const valid = await adapter.verify(
+        const result = await adapter.verify(
           Object.freeze({
             proofBytes: receipt.proofBytes,
             publicValues: receipt.publicValues,
@@ -212,6 +217,12 @@ export async function auditIssuanceReceipt(
             policy,
           }),
         );
+        if (typeof result !== 'boolean')
+          proofVerification = parseRpcProofObservation(result, receipt, policy);
+        const valid =
+          typeof result === 'boolean'
+            ? result
+            : proofVerification?.result === 'returned';
         tested(
           'proof_cryptography',
           valid === true,
@@ -276,12 +287,13 @@ export async function auditIssuanceReceipt(
   ])
     check(id, 'unverified', detail);
   return Object.freeze({
-    format: 'ultratokenizer.audit-report.v1',
+    format: REPORT_FORMAT,
     status: checks.some((item) => item.status === 'failed')
       ? 'invalid'
       : 'incomplete',
     complete: false,
     requestDigest: digest,
+    proofVerification,
     checks: Object.freeze(checks),
     missingEvidence: Object.freeze(
       checks

@@ -1,11 +1,14 @@
 import {
   parseIssuanceReceipt,
+  parseAuditPolicy,
+  parseRpcProofObservation,
+  REPORT_FORMAT,
   type AuditCheck,
 } from '../../../../../packages/audit/src/index.js';
 import type { ReceiptVerification } from './contracts';
 import { getIssuanceRequestDigest } from '../../../../../packages/domain/src/index.js';
 
-// These are the versioned audit-report.v1 capabilities, not a new verifier.
+// These are the versioned audit-report.v2 capabilities, not a new verifier.
 const unknownChecks = [
   'historical_registry',
   'historical_reservation',
@@ -103,8 +106,10 @@ function sameData(expected: unknown, actual: unknown): boolean {
 export function parseVerificationResult(
   input: unknown,
   receiptText: string,
-  mode: ReceiptVerification['mode'],
+  policyText: string,
+  rpcUrl?: string,
 ): ReceiptVerification {
+  const mode = rpcUrl ? 'rpc' : 'offline';
   const result = record(input, ['receipt', 'report', 'execution', 'mode']);
   if (result.execution !== 'dedicated-worker' || result.mode !== mode)
     throw new Error();
@@ -116,18 +121,39 @@ export function parseVerificationResult(
     'status',
     'complete',
     'requestDigest',
+    'proofVerification',
     'checks',
     'missingEvidence',
     'limitations',
   ]);
   if (
-    report.format !== 'ultratokenizer.audit-report.v1' ||
+    report.format !== REPORT_FORMAT ||
     report.complete !== false ||
     (report.status !== 'invalid' && report.status !== 'incomplete') ||
     report.requestDigest !== requestDigest
   )
     throw new Error();
   const checks = list(report.checks, 64).map(check);
+  const proofVerification =
+    report.proofVerification === null
+      ? null
+      : parseRpcProofObservation(
+          report.proofVerification,
+          receipt,
+          parseAuditPolicy(policyText),
+        );
+  const proofStatus = checks.find(
+    (item) => item.id === 'proof_cryptography',
+  )?.status;
+  if (
+    (proofVerification &&
+      (!rpcUrl ||
+        proofVerification.rpcOrigin !== new URL(rpcUrl).origin ||
+        proofStatus !==
+          (proofVerification.result === 'returned' ? 'verified' : 'failed'))) ||
+    (proofStatus === 'verified' && !proofVerification)
+  )
+    throw new Error();
   const ids = checks.map((item) => item.id);
   const missingEvidence = list(report.missingEvidence, 64).map(identifier);
   const missing = checks
@@ -156,10 +182,11 @@ export function parseVerificationResult(
   return Object.freeze({
     receipt,
     report: Object.freeze({
-      format: 'ultratokenizer.audit-report.v1',
+      format: REPORT_FORMAT,
       status: report.status,
       complete: false,
       requestDigest,
+      proofVerification,
       checks: Object.freeze(checks),
       missingEvidence: Object.freeze(missingEvidence),
       limitations: Object.freeze(

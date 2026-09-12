@@ -2,18 +2,21 @@ import {
   getAddress,
   isAddress,
   zeroAddress,
+  keccak256,
   type Address,
   type Hex,
 } from 'viem';
 import {
   parseIssuanceRequest,
   parseIssuerPermit,
+  parseDuplicateFreeJson,
   type IssuanceRequest,
   type IssuerPermit,
 } from '../../domain/src/index.js';
 
 export const RECEIPT_FORMAT = 'ultratokenizer.issuance-receipt.v1';
 export const POLICY_FORMAT = 'ultratokenizer.audit-policy.v1';
+export const REPORT_FORMAT = 'ultratokenizer.audit-report.v2';
 export const MAX_RECEIPT_BYTES = 256 * 1024;
 export const MAX_POLICY_BYTES = 8 * 1024;
 export const MAX_PROOF_BYTES = 64 * 1024;
@@ -68,6 +71,96 @@ export type AuditPolicy = Readonly<
     sourceSignerFingerprint: Hex;
   }
 >;
+
+/** A bounded observation under a caller-trusted RPC, not independent inclusion evidence. */
+export type RpcProofObservation = Readonly<{
+  format: 'ultratokenizer.rpc-proof-observation.v1';
+  chainId: string;
+  blockNumber: string;
+  blockHash: Hex;
+  verifierAddress: Address;
+  verifierCodeHash: Hex;
+  outerVersion: string;
+  programVKey: Hex;
+  publicValuesHash: Hex;
+  proofBytesHash: Hex;
+  method: 'verifyProof(bytes32,bytes,bytes)';
+  result: 'returned' | 'reverted';
+  assurance: 'trusted-rpc';
+  rpcOrigin: string;
+}>;
+
+export function parseRpcProofObservation(
+  input: unknown,
+  receipt: IssuanceReceipt,
+  policy: AuditPolicy,
+): RpcProofObservation {
+  const value = object(input, [
+    'format',
+    'chainId',
+    'blockNumber',
+    'blockHash',
+    'verifierAddress',
+    'verifierCodeHash',
+    'outerVersion',
+    'programVKey',
+    'publicValuesHash',
+    'proofBytesHash',
+    'method',
+    'result',
+    'assurance',
+    'rpcOrigin',
+  ]);
+  if (
+    value.format !== 'ultratokenizer.rpc-proof-observation.v1' ||
+    value.method !== 'verifyProof(bytes32,bytes,bytes)' ||
+    (value.result !== 'returned' && value.result !== 'reverted') ||
+    value.assurance !== 'trusted-rpc' ||
+    value.outerVersion !== policy.outerVersion ||
+    typeof value.rpcOrigin !== 'string' ||
+    value.rpcOrigin.length > 2048
+  )
+    throw new Error('Invalid proof observation.');
+  const origin = new URL(value.rpcOrigin);
+  if (
+    origin.origin !== value.rpcOrigin ||
+    (origin.protocol !== 'https:' &&
+      !(
+        origin.protocol === 'http:' &&
+        ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)
+      ))
+  )
+    throw new Error('Invalid proof observation origin.');
+  const observation: RpcProofObservation = {
+    format: 'ultratokenizer.rpc-proof-observation.v1',
+    chainId: uint(value.chainId, 256),
+    blockNumber: value.blockNumber === '0' ? '0' : uint(value.blockNumber, 256),
+    blockHash: hex(value.blockHash, 32),
+    verifierAddress: address(value.verifierAddress),
+    verifierCodeHash: hex(value.verifierCodeHash, 32),
+    outerVersion: policy.outerVersion,
+    programVKey: hex(value.programVKey, 32),
+    publicValuesHash: hex(value.publicValuesHash, 32),
+    proofBytesHash: hex(value.proofBytesHash, 32),
+    method: value.method,
+    result: value.result,
+    assurance: value.assurance,
+    rpcOrigin: value.rpcOrigin,
+  };
+  if (
+    value.outerVersion !== policy.outerVersion ||
+    observation.chainId !== policy.chainId ||
+    observation.chainId !== receipt.request.chainId ||
+    observation.verifierAddress !== policy.verifierAddress ||
+    observation.verifierCodeHash !== policy.verifierCodeHash ||
+    observation.programVKey !== policy.programVKey ||
+    observation.programVKey !== receipt.programVKey ||
+    observation.publicValuesHash !== keccak256(receipt.publicValues) ||
+    observation.proofBytesHash !== keccak256(receipt.proofBytes)
+  )
+    throw new Error('Proof observation differs from caller inputs.');
+  return Object.freeze(observation);
+}
 
 function object(
   input: unknown,
@@ -144,7 +237,7 @@ function decodeJson(text: string, limit: number): unknown {
   if (typeof text !== 'string') throw new Error();
   if (text.length > limit || new TextEncoder().encode(text).byteLength > limit)
     throw new AuditInputError('too_large');
-  return JSON.parse(text);
+  return parseDuplicateFreeJson(text, limit);
 }
 
 /** Strict public bundle. Documents, witnesses, keys and registry claims are rejected as unknown fields. */
