@@ -3,7 +3,9 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
+import stat
 import subprocess
 import tempfile
 
@@ -15,8 +17,15 @@ def openssl(*args: str) -> bytes:
     return result.stdout
 
 
-def create_fixture(content: bytes, capsule: bytes = b"") -> tuple[bytes, dict]:
-    """Sign a synthetic PDF. The optional fixed capsule is covered by the signature."""
+def create_fixture(
+    content: bytes,
+    capsule: bytes = b"",
+    signing_identity: tuple[Path, Path] | None = None,
+) -> tuple[bytes, dict]:
+    """Sign a synthetic PDF and its optional fixed capsule.
+
+    An existing RSA key/cert pair must consist of owned, mode-0600 files.
+    """
     placeholder = b"[0000000000 0000000000 0000000000 0000000000]"
     signature_space = 8192
     objects = [
@@ -52,9 +61,24 @@ def create_fixture(content: bytes, capsule: bytes = b"") -> tuple[bytes, dict]:
     with tempfile.TemporaryDirectory(prefix="ultratokenizer-fixture-") as temporary:
         temporary = Path(temporary)
         key, cert, body, signature = [temporary / name for name in ("key.pem", "cert.pem", "body.bin", "signature.der")]
-        openssl("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256", "-days", "30",
-                "-subj", "/CN=Ultratokenizer Synthetic Signer/O=Test Fixtures",
-                "-keyout", str(key), "-out", str(cert))
+        if signing_identity is None:
+            openssl("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256", "-days", "30",
+                    "-subj", "/CN=Ultratokenizer Synthetic Signer/O=Test Fixtures",
+                    "-keyout", str(key), "-out", str(cert))
+        else:
+            for source, destination in zip(signing_identity, (key, cert), strict=True):
+                try:
+                    descriptor = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                except OSError:
+                    raise ValueError("Signing identity files must be owned regular files with mode 0600.") from None
+                info = os.fstat(descriptor)
+                if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o600:
+                    os.close(descriptor)
+                    raise ValueError("Signing identity files must be owned regular files with mode 0600.")
+                with os.fdopen(descriptor, "rb") as identity_file:
+                    with os.fdopen(os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as copy:
+                        copy.write(identity_file.read())
+            openssl("rsa", "-in", str(key), "-check", "-noout", "-passin", "pass:")
         body.write_bytes(signed_bytes)
         openssl("cms", "-sign", "-binary", "-in", str(body), "-signer", str(cert),
                 "-inkey", str(key), "-md", "sha256", "-nosmimecap", "-outform", "DER", "-out", str(signature))
