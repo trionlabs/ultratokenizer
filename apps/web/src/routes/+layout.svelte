@@ -3,19 +3,23 @@
   import '../styles.css';
   import '../issuance.css';
   let { children } = $props();
-  let directTab = $state(false);
+  let frameState = $state<'checking' | 'direct' | 'embedded'>('checking');
   let directPath = $state('/');
   onMount(() => {
     directPath = window.location.origin + window.location.pathname;
-    directTab = window.self === window.top;
+    frameState = window.self === window.top ? 'direct' : 'embedded';
   });
 </script>
 
-{#if directTab}
+{#if frameState === 'direct'}
   {@render children()}
 {:else}
-  <main class="direct-tab">
-    <p>Use a direct browser tab to import files or connect a wallet.</p>
+  <main class="direct-tab" aria-busy={frameState === 'checking'}>
+    <p>
+      {frameState === 'checking'
+        ? 'Opening Ultratokenizer…'
+        : 'Use a direct browser tab to import files or connect a wallet.'}
+    </p>
     <a href={directPath} target="_blank" rel="noopener noreferrer"
       >Open Ultratokenizer directly</a
     >

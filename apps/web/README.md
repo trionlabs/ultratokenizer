@@ -1,6 +1,6 @@
 # Ultratokenizer web
 
-A static SvelteKit issuance workspace and independent receipt verifier. The Orbit visual direction is retained; the former runtime sample journeys and simulated completion states are removed.
+A static SvelteKit token workspace and independent receipt verifier. The visual flow follows real session state; there are no runtime sample journeys or simulated completion states.
 
 Run from the repository root:
 
@@ -16,10 +16,13 @@ The `/` route imports an independent deployment configuration and a separate `ul
 
 The amount is fixed by the canonical request, public values and permit bindings. There is no issuance amount editor: a complete 1 g claim issues exactly 1 g, once. The selected wallet must authorize that bound recipient. Every step is explicit: connect, validate the proof/permit and deployment pins, sign typed data, simulate current execution, submit the actual transaction, and reconcile its receipt and exact Gate event. Preflight success is never presented as a submitted or confirmed transaction.
 
-The form groups these actions into expandable setup, review and signing steps. Opening a step does
-not run its checks or change the transaction state. Errors, pending-wallet recovery and transaction
-outcomes remain outside those groups. Orbit follows the actual session progress; its mobile layout
-uses a compact progress list. The transfer panel also serves holders who already own the token.
+The centered issuance view shows one current action and a six-step progress line: profile, evidence,
+wallet, verification, issuance and receipt. Network/deployment settings and the public bundle remain
+separate files. A wallet control stays visible in the header, but connection is disabled until a
+deployment profile is loaded and verified. The right rail reports the network, wallet, exact amount
+and actual transaction status; advanced configuration is collapsed. Transfer is a separate view for
+holders who already own the token. Errors, uncertain sends and recovery stay next to the relevant
+action. Switching views does not create a new transaction or change the session state.
 
 The current accepted source is profile 2's synthetic signed capsule, restricted by the shared client to test deployments. Real cryptography does not make this real bank evidence, asset backing, custody or a redemption promise. This UI imports public proof artifacts; it neither reads private PDF/email evidence nor generates proofs. Actual local proof generation is a separate [proof runner workflow](../../proofs/README.md).
 
@@ -112,6 +115,11 @@ PREVIEW_URL=http://127.0.0.1:4175/ npm --prefix apps/web run test:browser
 PREVIEW_URL=http://127.0.0.1:4175/ npm --prefix apps/web run test:browser:backends
 ```
 
+Stop preview before rebuilding, then start it again. A preview process can retain the previous
+manifest while the build replaces hashed assets, leaving the prerendered loading shell visible
+because the new JavaScript requests return 404. Serve the complete build over HTTP; opening
+`build/index.html` through `file://` cannot load its module assets.
+
 The browser test exercises the actual shared client against an intentionally mismatched test RPC, proving failure remains closed. It also checks worker auditing of signed test fixtures, missing trust pins, changed amounts, sample rejection, size bounds, cancellation/retry, unavailable workers, production CSP/hydration and 320px layout. It performs no live issuance. Screenshots are written to the ignored root `.scratch/web-qa/` directory. `PLAYWRIGHT_CHANNEL=chrome` can select an explicitly installed Chrome instead of bundled Chromium.
 
 The backend browser check imports synthetic v1/v2 HTS and v2 ATS configurations, rejects an
@@ -127,7 +135,7 @@ The build produces `build/index.html`, `build/verify/index.html` and worker asse
 Serve the complete build and correct JavaScript content types. `static/_headers` supplies framing, MIME, referrer, permissions, opener and HTTPS policies for supporting hosts; translate them to server response headers elsewhere. Its supplemental `frame-ancestors` policy requires an HTTP header. It intentionally omits `connect-src`: a second, narrower directive would intersect the generated page policy and block explicit RPC and ENS providers. Do not replace the generated CSP with a policy that drops hydration hashes. Building does not deploy the app or register any chain authority.
 
 Response headers are the primary framing defense. As a fallback, prerendered HTML exposes only a
-direct-link notice; file and wallet controls render after JavaScript confirms a top-level tab.
+neutral loading shell and same-origin direct link; file and wallet controls render after JavaScript confirms a top-level tab.
 An embedded page keeps the notice even when a host omits response headers; its direct link is pinned
 to the current origin, including double-slash path aliases. This fallback does not
 replace HTTP frame protections. JavaScript is required to use the workspace.
