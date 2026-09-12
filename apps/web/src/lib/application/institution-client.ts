@@ -141,6 +141,12 @@ export async function readTrustSnapshot(value: unknown) {
   )
     throw new IssuanceClientError('transaction_uncertain');
   return Object.freeze({
+    chainId: policy.chainId,
+    gate: policy.gate,
+    gateCodeHash: deployment.gateCodeHash,
+    issuerId: policy.issuerId,
+    policyVersion: policy.policyVersion,
+    rightsVersion: policy.rightsVersion,
     blockNumber: block.number.toString(),
     blockHash: block.hash,
     timestamp: block.timestamp.toString(),

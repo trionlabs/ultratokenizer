@@ -5,7 +5,29 @@ export async function fetchHostedDeployment(
   signal: AbortSignal,
   fetcher: typeof fetch = fetch,
 ): Promise<string | undefined> {
-  const response = await fetcher('/deployment.json', {
+  return fetchHostedJson(
+    '/deployment.json',
+    MAX_DEPLOYMENT_BYTES,
+    signal,
+    fetcher,
+  );
+}
+
+/** Optional discovery never changes the deployment or the issuance client. */
+export async function fetchHostedDiscovery(
+  signal: AbortSignal,
+  fetcher: typeof fetch = fetch,
+) {
+  return fetchHostedJson('/discovery.json', 32 * 1024, signal, fetcher);
+}
+
+async function fetchHostedJson(
+  path: '/deployment.json' | '/discovery.json',
+  limit: number,
+  signal: AbortSignal,
+  fetcher: typeof fetch,
+) {
+  const response = await fetcher(path, {
     signal: AbortSignal.any([signal, AbortSignal.timeout(8_000)]),
     credentials: 'omit',
     redirect: 'error',
@@ -34,7 +56,7 @@ export async function fetchHostedDeployment(
       const { done, value } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > MAX_DEPLOYMENT_BYTES)
+      if (bytes > limit)
         throw new Error('The app network configuration is too large.');
       text += decoder.decode(value, { stream: true });
     }

@@ -232,3 +232,21 @@ zkEmail are not implemented by this UI.
 RPC: role denial, an exact cap transaction and reconciliation, no automatic sends, and 320px layout.
 It does not establish live Hedera acceptance. `npm test` includes the authority client's canonical
 state, nonce, runtime, amount and submission-failure checks.
+
+The optional `/discovery.json` sidecar is read only by `/trust/`. Its strict
+`ultratokenizer.discovery.v1` schema binds `chainId`, `gate`, `issuerId`, an `identityRegistry`
+object (`address`, `proxyCodeHash`, `implementation`, `implementationCodeHash`, `owner`), and one
+to three unique `entries` (`role`, decimal-string `agentId`, NFT `owner`, service `wallet`,
+`metadataHash`). Roles are `issuer`, `deployment` and `auditor`. The file is an operator-reviewed
+index; ERC-8004 does not natively reverse-resolve this application's issuer ID.
+
+The reader checks registry and implementation runtime hashes, the EIP-1967 implementation slot,
+registry owner, NFT owners and service wallets at the same canonical block as the Gate. It accepts
+only `data:application/json;base64,` registration URIs, at most 16 KiB after decoding, with
+`metadataHash = keccak256(exact decoded UTF-8 bytes)`. Remote metadata, images and service endpoints
+are never fetched or rendered. Metadata must include its actual registry tuple and the prepared
+`ultratokenizer.discovery-dossier.v1` fields, including policy and rights versions. Issuer wallets
+and deployment program declarations are compared with current Gate state. All matching is current
+attribution through a configured RPC, not authenticated historical inclusion or a self-proving
+trust root. A missing sidecar, changed owner, upgrade, transfer, metadata change or outage affects
+only the discovery section. No registry read enters issuance or offline receipt verification.

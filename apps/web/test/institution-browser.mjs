@@ -2,7 +2,12 @@
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { chromium, expect } from '@playwright/test';
-import { decodeFunctionData, encodeFunctionResult, keccak256 } from 'viem';
+import {
+  decodeFunctionData,
+  encodeFunctionResult,
+  keccak256,
+  toHex,
+} from 'viem';
 import { loadModule } from './helpers.mjs';
 
 const base = new URL(process.env.PREVIEW_URL || 'http://127.0.0.1:4173/');
@@ -11,6 +16,9 @@ assert(['localhost', '127.0.0.1'].includes(base.hostname));
 const { createFixture } = await loadModule('./fixtures/issuance.ts');
 const { GOVERNOR_ABI } = await loadModule(
   '../src/lib/application/institution-client.ts',
+);
+const { IDENTITY_ABI } = await loadModule(
+  '../src/lib/application/discovery.ts',
 );
 const { ISSUANCE_GATE_ABI } = await loadModule(
   '../../../packages/issuance/src/abi.ts',
@@ -42,6 +50,51 @@ const values = {
   ],
   sourceKeys: [policy.sourceSignerFingerprint, false],
 };
+const registry = {
+  address: '0x7777777777777777777777777777777777777777',
+  proxyCodeHash: keccak256('0x60036000'),
+  implementation: '0x8888888888888888888888888888888888888888',
+  implementationCodeHash: keccak256('0x60046000'),
+  owner: governor,
+};
+const metadataText = JSON.stringify({
+  type: 'https://eips.ethereum.org/EIPS/eip-8004#registration-v1',
+  name: 'Synthetic issuer discovery service',
+  registrations: [
+    { agentId: 1, agentRegistry: `eip155:296:${registry.address}` },
+  ],
+  ultratokenizer: {
+    format: 'ultratokenizer.discovery-dossier.v1',
+    role: 'issuer',
+    chainId: '296',
+    gate: policy.gate,
+    gateRuntimeHash: fixture.deployment.gateCodeHash,
+    issuerId: policy.issuerId,
+    sourceId: policy.sourceId,
+    policyVersion: '1',
+    rightsVersion: '1',
+    gateIsSoleMintAuthority: true,
+    registryAssertionsAuthorizeIssuance: false,
+    proposedPermitSigner: policy.issuerAddress,
+  },
+});
+const discoveryIndex = {
+  format: 'ultratokenizer.discovery.v1',
+  chainId: '296',
+  gate: policy.gate,
+  issuerId: policy.issuerId,
+  identityRegistry: registry,
+  entries: [
+    {
+      role: 'issuer',
+      agentId: '1',
+      owner: policy.issuerAddress,
+      wallet: policy.issuerAddress,
+      metadataHash: keccak256(toHex(metadataText)),
+    },
+  ],
+};
+let validDiscovery = true;
 const browser = await chromium.launch({ headless: true });
 const errors = [];
 const unexpected = [];
@@ -87,12 +140,42 @@ try {
         };
       else if (call.method === 'eth_getCode')
         result =
-          call.params[0].toLowerCase() === policy.gate.toLowerCase()
-            ? '0x60006000'
-            : call.params[0].toLowerCase() === adapter.toLowerCase()
-              ? '0x60026000'
-              : '0x60016000';
+          call.params[0].toLowerCase() === registry.address.toLowerCase()
+            ? '0x60036000'
+            : call.params[0].toLowerCase() ===
+                registry.implementation.toLowerCase()
+              ? '0x60046000'
+              : call.params[0].toLowerCase() === policy.gate.toLowerCase()
+                ? '0x60006000'
+                : call.params[0].toLowerCase() === adapter.toLowerCase()
+                  ? '0x60026000'
+                  : '0x60016000';
+      else if (call.method === 'eth_getStorageAt')
+        result = `0x${'0'.repeat(24)}${registry.implementation.slice(2)}`;
       else if (call.method === 'eth_call') {
+        if (
+          call.params[0].to.toLowerCase() === registry.address.toLowerCase()
+        ) {
+          const decoded = decodeFunctionData({
+            abi: IDENTITY_ABI,
+            data: call.params[0].data,
+          });
+          const value =
+            decoded.functionName === 'owner'
+              ? governor
+              : decoded.functionName === 'tokenURI'
+                ? `data:application/json;base64,${Buffer.from(validDiscovery ? metadataText : '{}').toString('base64')}`
+                : policy.issuerAddress;
+          result = encodeFunctionResult({
+            abi: IDENTITY_ABI,
+            functionName: decoded.functionName,
+            result: value,
+          });
+          return route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({ jsonrpc: '2.0', id: call.id, result }),
+          });
+        }
         const decoded = decodeFunctionData({ abi, data: call.params[0].data });
         result =
           decoded.functionName in values
@@ -148,6 +231,11 @@ try {
         contentType: 'application/json',
         body: JSON.stringify(fixture.deployment),
       });
+    if (url.pathname === '/discovery.json')
+      return route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify(discoveryIndex),
+      });
     return route.continue();
   });
   await page.goto(new URL('trust/', base).href);
@@ -161,6 +249,9 @@ try {
     page.getByText('Matches application pins', { exact: false }).first(),
   ).toBeVisible();
   assert.deepEqual(await page.evaluate(() => window.sends), []);
+  await expect(
+    page.getByRole('heading', { name: 'Synthetic issuer discovery service' }),
+  ).toBeVisible();
   await mkdir(new URL('../../../.scratch/web-qa/', import.meta.url), {
     recursive: true,
   });
@@ -169,6 +260,14 @@ try {
       .pathname,
     fullPage: true,
   });
+  validDiscovery = false;
+  await page.getByRole('button', { name: 'Refresh chain state' }).click();
+  await expect(
+    page.getByText('Discovery was not confirmed:', { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Observed at block 100', { exact: true }),
+  ).toBeVisible();
   await page.goto(new URL('institution/', base).href);
   await expect(
     page.getByRole('heading', { name: 'Review. Authorize. Issue.' }),
