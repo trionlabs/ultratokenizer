@@ -302,7 +302,7 @@ export async function readDiscovery(
   const registry = index.identityRegistry;
   const reader = createPublicClient({
     transport: http(parseBrowserRpcUrl(deployment.rpcUrl), {
-      timeout: 10_000,
+      timeout: 20_000,
       retryCount: 0,
     }),
   });
@@ -337,41 +337,44 @@ export async function readDiscovery(
     throw new Error(
       'The discovery registry or its ownership changed from the reviewed pins.',
     );
-  const entries = await Promise.all(
-    index.entries.map(async (entry) => {
-      const [owner, wallet, uri] = await Promise.all([
-        reader.readContract({
-          ...at,
-          functionName: 'ownerOf',
-          args: [BigInt(entry.agentId)],
-        }),
-        reader.readContract({
-          ...at,
-          functionName: 'getAgentWallet',
-          args: [BigInt(entry.agentId)],
-        }),
-        reader.readContract({
-          ...at,
-          functionName: 'tokenURI',
-          args: [BigInt(entry.agentId)],
-        }),
-      ]);
-      if (
-        getAddress(owner) !== entry.owner ||
-        getAddress(wallet) !== entry.wallet
-      )
-        throw new Error(
-          `The ${entry.role} record was transferred or its wallet changed.`,
-        );
-      const decoded = decodeRegistration(uri, entry.metadataHash);
-      compareDossier(decoded.metadata, entry, index, snapshot);
-      return Object.freeze({
+  // Read one role at a time to avoid saturating public RPC metadata reads.
+  // At most three roles require five bounded RPC stages in total.
+  const entries = [];
+  for (const entry of index.entries) {
+    const [owner, wallet, uri] = await Promise.all([
+      reader.readContract({
+        ...at,
+        functionName: 'ownerOf',
+        args: [BigInt(entry.agentId)],
+      }),
+      reader.readContract({
+        ...at,
+        functionName: 'getAgentWallet',
+        args: [BigInt(entry.agentId)],
+      }),
+      reader.readContract({
+        ...at,
+        functionName: 'tokenURI',
+        args: [BigInt(entry.agentId)],
+      }),
+    ]);
+    if (
+      getAddress(owner) !== entry.owner ||
+      getAddress(wallet) !== entry.wallet
+    )
+      throw new Error(
+        `The ${entry.role} record was transferred or its wallet changed.`,
+      );
+    const decoded = decodeRegistration(uri, entry.metadataHash);
+    compareDossier(decoded.metadata, entry, index, snapshot);
+    entries.push(
+      Object.freeze({
         ...entry,
         name: decoded.name,
         metadataText: decoded.text,
-      });
-    }),
-  );
+      }),
+    );
+  }
   const [canonical, finalChain] = await Promise.all([
     reader.getBlock({ blockNumber }),
     reader.getChainId(),

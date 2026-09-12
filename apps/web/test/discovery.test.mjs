@@ -104,6 +104,9 @@ async function harness(t) {
     blockHash: snapshot.blockHash,
     wallets: index.entries.map((entry) => entry.wallet),
     owners: index.entries.map((entry) => entry.owner),
+    metadataDelayMs: 0,
+    metadataInFlight: 0,
+    peakMetadataInFlight: 0,
   };
   const calls = [];
   t.mock.method(globalThis, 'fetch', async (url, options) => {
@@ -132,6 +135,17 @@ async function harness(t) {
         data: call.params[0].data,
       });
       const offset = decoded.args ? Number(decoded.args[0]) - 1 : 0;
+      if (decoded.functionName === 'tokenURI') {
+        state.metadataInFlight += 1;
+        state.peakMetadataInFlight = Math.max(
+          state.peakMetadataInFlight,
+          state.metadataInFlight,
+        );
+        await new Promise((resolve) =>
+          setTimeout(resolve, state.metadataDelayMs),
+        );
+        state.metadataInFlight -= 1;
+      }
       const value =
         decoded.functionName === 'owner'
           ? state.registryOwner
@@ -269,6 +283,27 @@ test('registry upgrade or ownership change cannot silently change accepted disco
   state.implementation = '0x8888888888888888888888888888888888888888';
   state.registryOwner = '0x9999999999999999999999999999999999999999';
   await assert.rejects(read(), /registry or its ownership changed/);
+});
+
+test('slow metadata reads are bounded to one role at a time', async (t) => {
+  const { read, state } = await harness(t);
+  state.metadataDelayMs = 10;
+  const observed = await read();
+  assert.equal(observed.entries.length, 3);
+  assert.equal(state.peakMetadataInFlight, 1);
+});
+
+test('unverifiable metadata stops attribution without retrying or querying later roles', async (t) => {
+  const { read, uris, calls } = await harness(t);
+  uris[0] = 'data:application/json;base64,e30=';
+  await assert.rejects(read(), /changed/);
+  const metadataCalls = calls.filter(
+    (call) =>
+      call.method === 'eth_call' &&
+      decodeFunctionData({ abi: IDENTITY_ABI, data: call.params[0].data })
+        .functionName === 'tokenURI',
+  );
+  assert.equal(metadataCalls.length, 1);
 });
 
 test('NFT transfer and wallet clearing fail attribution without any signing or mutation', async (t) => {
