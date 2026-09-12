@@ -3,10 +3,10 @@
 </script>
 
 <svelte:head>
-  <title>Ultratokenizer — A new form</title>
+  <title>Proof-backed token engine — Ultratokenizer</title>
   <meta
     name="description"
-    content="Issue the full quantity of one gold claim, then transfer in whole milligrams. Review each wallet action and save its receipt. Current source is synthetic and test-only."
+    content="Turn an approved gold right into divisible tokens, with wallet review and an independently verifiable receipt."
   />
 </svelte:head>
 <IssuanceWorkspace />

@@ -35,9 +35,9 @@
     height: 380px;
     border-radius: 50%;
     background:
-      radial-gradient(ellipse at 35% 35%, #e8e5c975, transparent 60%),
-      radial-gradient(ellipse at 65% 60%, #d3dfd063, transparent 64%);
-    filter: blur(20px);
+      radial-gradient(ellipse at 35% 35%, #d8d2e5a8, transparent 60%),
+      radial-gradient(ellipse at 65% 60%, #dfe9e0a8, transparent 64%);
+    filter: blur(28px);
     transition:
       transform 1s,
       opacity 1s;
@@ -46,7 +46,7 @@
     position: relative;
     width: var(--field-size);
     height: var(--field-size);
-    opacity: 0.5;
+    opacity: 0.58;
     transform: rotate(-12deg);
     transition:
       transform 1.1s cubic-bezier(0.2, 0.8, 0.2, 1),
@@ -56,9 +56,11 @@
     position: absolute;
     inset: 8%;
     border-radius: 42% 58% 48% 52%;
-    border: 1px solid #869b6b20;
-    border-top-color: #b5a57342;
+    border: 1px solid #8d87a42e;
+    border-top-color: #9b94b052;
     transform: rotate(calc(var(--petal) * 60deg)) translateY(-20px);
+    animation: aperture-glow 5s ease-in-out infinite alternate;
+    animation-delay: calc(var(--petal) * -0.6s);
   }
   [data-phase='review'] .field-aperture {
     transform: scale(0.67) rotate(25deg);
@@ -86,8 +88,8 @@
     width: 3px;
     height: 3px;
     border-radius: 50%;
-    background: #ad986359;
-    box-shadow: 0 0 0 4px #b5a46d08;
+    background: #a98d4f73;
+    box-shadow: 0 0 9px #a98d4f45;
   }
   .a {
     left: 20%;
@@ -102,6 +104,12 @@
     top: 4%;
     width: 2px;
     height: 2px;
+  }
+  @keyframes aperture-glow {
+    to {
+      opacity: 0.38;
+      filter: brightness(1.35);
+    }
   }
   @media (max-width: 640px) {
     .orbit-field {

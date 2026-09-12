@@ -121,16 +121,13 @@
 
 <section class="audit-controls" aria-label="Receipt verification inputs">
   <div class="audit-input-heading">
-    <h2>Two files. One independent check.</h2>
-    <p class="field-hint">
-      Add your receipt and a trust policy obtained separately. No wallet is
-      needed.
-    </p>
+    <p class="overline">Verification run</p>
+    <h2>Load both files</h2>
   </div>
   <div class="file-pair">
     <label class="file-control"
-      ><span><b>01</b> Issuance receipt</span><small
-        >{receiptName || 'Saved after issuance · JSON, 256 KB max'}</small
+      ><span><b>01</b> Receipt</span><small
+        >{receiptName || 'JSON · 256 KB max'}</small
       ><input
         type="file"
         accept=".json,application/json"
@@ -140,9 +137,8 @@
       /></label
     >
     <label class="file-control"
-      ><span><b>02</b> Independent trust policy</span><small
-        >{policyName ||
-          'Trusted contract and issuer settings · JSON, 8 KB max'}</small
+      ><span><b>02</b> Trust policy</span><small
+        >{policyName || 'JSON · 8 KB max'}</small
       ><input
         type="file"
         accept=".json,application/json"
@@ -153,8 +149,7 @@
     >
   </div>
   <p class="field-hint">
-    Get the policy from a source you trust independently of this receipt. The
-    receipt cannot establish who to trust.
+    Get the policy separately. A receipt cannot choose who you trust.
   </p>
   <label class="disclosure-control"
     ><input
@@ -166,8 +161,8 @@
         rpcEnabled = event.currentTarget.checked;
       }}
     /><span
-      ><strong>Enable an online proof check</strong><br />Optional. Send the
-      public proof, public values and program key to an RPC provider you choose.</span
+      ><strong>Online proof check</strong><br />Shares public proof inputs with
+      the RPC URL you enter.</span
     ></label
   >
   {#if rpcEnabled}<label class="text-field"
@@ -183,11 +178,9 @@
       /></label
     >
     <p class="field-hint">
-      The check uses the chain and verifier in your trust policy. It does not
-      establish transaction inclusion or authority at the time of issuance.
+      This does not prove transaction history or authority at issuance.
     </p>{:else}<p class="field-hint">
-      Offline by default: checks matching fields and wallet signatures without
-      contacting an RPC. Proof validity and chain history remain unverified.
+      Offline checks validate fields and signatures only. No RPC is contacted.
     </p>{/if}
   <div class="audit-actions">
     <button
@@ -270,9 +263,8 @@
     </details>
     <div class="audit-limitations">
       <p>
-        This report remains incomplete. Transaction inclusion, authority at
-        issuance and token balances have not been independently verified. These
-        checks do not establish physical gold backing or redemption.
+        Transaction history, issuer authority, backing, and redemption remain
+        unverified.
       </p>
       <details class="technical-details">
         <summary>Limits of this report</summary>
@@ -301,9 +293,8 @@
         <details class="technical-details">
           <summary>Online proof check references</summary>
           <p class="field-hint">
-            These references are included in the saved report. They record a
-            result from your chosen RPC; they are not independent chain
-            evidence.
+            Saved RPC references are provider observations, not independent
+            chain history.
           </p>
           <dl class="data-list">
             {#each [['RPC origin', result.report.proofVerification.rpcOrigin], ['Chain ID', result.report.proofVerification.chainId], ['Block number', result.report.proofVerification.blockNumber], ['Block hash', result.report.proofVerification.blockHash], ['Verifier', result.report.proofVerification.verifierAddress], ['Verifier code hash', result.report.proofVerification.verifierCodeHash], ['Verifier version', result.report.proofVerification.outerVersion], ['Program key', result.report.proofVerification.programVKey], ['Public values hash', result.report.proofVerification.publicValuesHash], ['Proof bytes hash', result.report.proofVerification.proofBytesHash], ['Verifier result', result.report.proofVerification.result]] as [name, value]}

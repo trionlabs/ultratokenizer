@@ -131,7 +131,7 @@ try {
             fixture.policy,
           );
           await page
-            .getByRole('checkbox', { name: /Enable an online proof check/ })
+            .getByRole('checkbox', { name: /Online proof check/ })
             .check();
           await page.getByLabel('Proof verifier RPC URL').fill(ipv6);
           await page
@@ -154,10 +154,13 @@ try {
               rpcUrl: ipv6,
             });
             await expect(
-              page.locator('.issuance-controls .inline-error'),
+              page.locator('.activity-rail .inline-error'),
             ).toContainText(guidance);
-            await expect(page.locator('.claim-quantity')).toHaveText('1.000g');
+            await expect(page.locator('.proof-sheet')).toContainText('1.000 g');
           } else {
+            await page
+              .getByRole('link', { name: 'Transfer', exact: true })
+              .click();
             await page
               .getByLabel('Transfer recipient', { exact: true })
               .fill('alice.eth');
@@ -171,7 +174,7 @@ try {
               })
               .click();
             await expect(
-              page.locator('.token-workspace .inline-error'),
+              page.locator('.transfer-card .inline-error'),
             ).toContainText(guidance);
           }
         }
@@ -187,7 +190,7 @@ try {
       });
       await expect(
         page.getByRole('heading', {
-          name: route ? 'A receipt. A closer look.' : 'A right. A new form.',
+          name: route ? 'Verify a receipt' : 'Your gold. A new form.',
         }),
       ).toBeVisible();
     }
@@ -251,17 +254,17 @@ try {
         await upload(page, 'Import issuance bundle', fixture.bundle);
         assert.equal(calls.length, 0);
         await page
-          .getByRole('button', { name: 'Connect', exact: true })
+          .locator('.stage-action')
+          .getByRole('button', { name: 'Connect wallet', exact: true })
           .click();
-        await expect(
-          page.locator('.issuance-controls .inline-error'),
-        ).toBeVisible();
+        await expect(page.locator('.stage-action .inline-error')).toBeVisible();
         assert(
           calls.some(
             (call) => call.url === rpc && call.method === 'eth_getCode',
           ),
           'Explicit imported RPC must reach the transport',
         );
+        await page.getByRole('link', { name: 'Transfer', exact: true }).click();
         await page
           .getByLabel('Transfer recipient', { exact: true })
           .fill('alice.eth');

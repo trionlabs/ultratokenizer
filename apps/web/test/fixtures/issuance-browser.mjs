@@ -310,11 +310,16 @@ export async function exerciseIssuanceRecovery({
         mimeType: 'application/json',
         buffer: Buffer.from(JSON.stringify(value)),
       });
-    for (const name of ['Connect', 'Check bundle'])
-      await page.getByRole('button', { name, exact: true }).click();
-    await expect(page.locator('.check-row')).toContainText(
-      'Accepted by the pinned verifier',
-    );
+    await page
+      .locator('.stage-action')
+      .getByRole('button', { name: 'Connect wallet', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: 'Check bundle', exact: true })
+      .click();
+    await expect(
+      page.getByRole('heading', { name: 'Authorize issuance' }),
+    ).toBeVisible();
     await page.getByRole('checkbox').check();
     await page
       .getByRole('button', { name: 'Sign request', exact: true })
@@ -323,7 +328,7 @@ export async function exerciseIssuanceRecovery({
       .getByRole('button', { name: 'Check before sending', exact: true })
       .click();
     const issue = page.getByRole('button', {
-      name: 'Issue full claim',
+      name: 'Issue 1.000 g',
       exact: true,
     });
     // Validation performs several sequential RPC checks; allow the configured
@@ -332,9 +337,9 @@ export async function exerciseIssuanceRecovery({
     if (start === 'unknown' && outcome === 'confirmed') {
       failNextPreflight = true;
       await issue.click();
-      await expect(
-        page.locator('.issuance-controls .inline-error'),
-      ).toContainText('Issuance checks could not complete');
+      await expect(page.locator('.stage-action .inline-error')).toContainText(
+        'Issuance checks could not complete',
+      );
       await expect(
         page.getByRole('region', { name: 'Unknown wallet outcome' }),
       ).toHaveCount(0);
@@ -345,10 +350,6 @@ export async function exerciseIssuanceRecovery({
       await expect(issue).toBeEnabled();
     }
     await issue.click();
-    const authorizationSummary = page
-      .locator('.workflow-step > summary')
-      .filter({ hasText: 'Authorize issuance' });
-    await expect(authorizationSummary).not.toContainText('Ready to send');
     const transaction = page.getByRole('region', {
       name: 'Issuance transaction',
       exact: true,
@@ -372,25 +373,20 @@ export async function exerciseIssuanceRecovery({
     assert.equal(beforeRecovery.sends.length, 1);
     assert.equal(beforeRecovery.sends[0].data, callData);
     const input = page.getByLabel(
-      start === 'unknown'
-        ? 'Transaction hash from wallet'
-        : 'Recovered issuance transaction hash',
+      start === 'unknown' ? 'Transaction hash' : 'Recovered transaction hash',
       { exact: true },
     );
     const reconcile = page.getByRole('button', {
-      name:
-        start === 'unknown'
-          ? 'Reconcile wallet hash'
-          : 'Reconcile recovered issuance hash',
+      name: start === 'unknown' ? 'Reconcile hash' : 'Reconcile recovered hash',
       exact: true,
     });
     for (const malformed of ['0x1234', `0x${'00'.repeat(32)}`]) {
       const readCount = rpcCalls.length;
       await input.fill(malformed);
       await reconcile.click();
-      await expect(
-        page.locator('.issuance-controls .inline-error'),
-      ).toContainText('full nonzero 32-byte transaction hash');
+      await expect(page.locator('.stage-action .inline-error')).toContainText(
+        'full nonzero 32-byte transaction hash',
+      );
       assert.equal(rpcCalls.length, readCount);
       if (start === 'unknown') await expect(transaction).toHaveCount(0);
       else await expect(transaction).toContainText(originalHash);
@@ -398,16 +394,16 @@ export async function exerciseIssuanceRecovery({
     await input.fill(badHash);
     await reconcile.click();
     await expect(reconcile).toBeEnabled();
-    await expect(
-      page.locator('.issuance-controls .inline-error'),
-    ).toContainText('does not contain the exact expected issuance');
-    await expect(
-      page.locator('.issuance-controls .inline-error'),
-    ).not.toContainText('full transaction hash');
+    await expect(page.locator('.stage-action .inline-error')).toContainText(
+      'does not contain the exact expected issuance',
+    );
+    await expect(page.locator('.stage-action .inline-error')).not.toContainText(
+      'full transaction hash',
+    );
     if (start === 'unknown') await expect(transaction).toHaveCount(0);
     else await expect(transaction).toContainText(originalHash);
     await expect(
-      page.getByRole('button', { name: 'Save issuance receipt', exact: true }),
+      page.getByRole('button', { name: 'Save receipt', exact: true }),
     ).toHaveCount(0);
     if (start === 'unresolved' && outcome === 'confirmed') {
       await page.setViewportSize({ width: 320, height: 640 });
@@ -428,9 +424,9 @@ export async function exerciseIssuanceRecovery({
     let finalOutcome = outcome;
     if (outcome === 'reverted') {
       await expect(reconcile).toBeEnabled();
-      await expect(
-        page.locator('.issuance-controls .inline-error'),
-      ).toContainText('does not identify the original wallet submission');
+      await expect(page.locator('.stage-action .inline-error')).toContainText(
+        'does not identify the original wallet submission',
+      );
       if (start === 'unknown') await expect(transaction).toHaveCount(0);
       else {
         await expect(transaction.locator('.status-pill')).toHaveText(
@@ -439,8 +435,8 @@ export async function exerciseIssuanceRecovery({
         await expect(transaction).toContainText(originalHash);
       }
       await expect(
-        page.getByRole('button', { name: 'Issue full claim', exact: true }),
-      ).toBeDisabled();
+        page.getByRole('button', { name: 'Issue 1.000 g', exact: true }),
+      ).toHaveCount(0);
       // A foreign sender/nonce's exact-call revert cannot settle the original send.
       finalHash = start === 'unknown' ? successHash : originalHash;
       finalOutcome = start === 'unknown' ? 'confirmed' : 'reverted';
@@ -448,20 +444,15 @@ export async function exerciseIssuanceRecovery({
       await reconcile.click();
     }
     await expect(transaction.locator('.status-pill')).toHaveText(finalOutcome);
-    await expect(authorizationSummary).toContainText(
-      finalOutcome === 'confirmed' ? 'Issued' : 'Reverted',
-    );
     await expect(transaction).toContainText(finalHash);
     await expect(
       page.getByRole('region', { name: 'Unknown wallet outcome' }),
     ).toHaveCount(0);
     await expect(
-      page.getByRole('button', { name: 'Save issuance receipt', exact: true }),
+      page.getByRole('button', { name: 'Save receipt', exact: true }),
     ).toHaveCount(finalOutcome === 'confirmed' ? 1 : 0);
     if (finalOutcome === 'reverted') {
-      await expect(transaction).toContainText(
-        'This transaction did not issue tokens.',
-      );
+      await expect(transaction).toContainText('No tokens were minted.');
       await expect(
         page.getByRole('button', {
           name: 'Check transaction outcome',
@@ -517,7 +508,7 @@ export async function exerciseIssuanceRecovery({
     // when a production browser assertion fails before receipt recovery.
     console.error(
       'Synthetic issuance browser state:',
-      await page.locator('.issuance-controls').innerText(),
+      await page.locator('.stage-action').innerText(),
     );
     console.error(
       'Synthetic wallet methods:',

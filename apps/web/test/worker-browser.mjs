@@ -45,10 +45,15 @@ try {
     reducedMotion: 'reduce',
   });
   const errors = [];
+  const hydrationWarnings = [];
   const workerUrls = [];
   const rpcCalls = [];
   const externalRequests = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => {
+    if (/hydration(?:_mismatch)?/i.test(message.text()))
+      hydrationWarnings.push(message.text());
+  });
   page.on('worker', (worker) => workerUrls.push(worker.url()));
   await page.addInitScript(
     ({ address }) => {
@@ -109,32 +114,18 @@ try {
 
   await page.goto(base, { waitUntil: 'networkidle' });
   await expect(
-    page.getByRole('heading', { name: 'A right. A new form.' }),
+    page.getByRole('heading', { name: 'Your gold. A new form.' }),
   ).toBeVisible();
-  await expect(
-    page.getByRole('button', { name: 'Issue full claim' }),
-  ).toBeDisabled();
-  await expect(
-    page.getByRole('button', {
-      name: 'Connect',
-      exact: true,
-      includeHidden: true,
-    }),
-  ).toBeDisabled();
-  // Expanding a future step must not bypass checks or trigger wallet/RPC work.
-  await page
-    .locator('.workflow-step')
-    .filter({ hasText: 'Authorize issuance' })
-    .locator('summary')
-    .click();
+  await expect(page.getByRole('button', { name: 'Issue 1.000 g' })).toHaveCount(
+    0,
+  );
+  const headerWallet = page.locator('.header-wallet');
+  await expect(headerWallet).toHaveText('Connect wallet');
+  await expect(headerWallet).toBeDisabled();
+  // Future actions are not rendered before their prerequisites.
   await expect(
     page.getByRole('button', { name: 'Sign request', exact: true }),
-  ).toBeDisabled();
-  await page
-    .locator('.workflow-step')
-    .filter({ hasText: 'Authorize issuance' })
-    .locator('summary')
-    .click();
+  ).toHaveCount(0);
   assert.deepEqual(await page.evaluate(() => window.walletCalls), []);
   assert.deepEqual(rpcCalls, []);
   await expect(page.getByRole('button', { name: 'Try a sample' })).toHaveCount(
@@ -190,13 +181,16 @@ try {
   };
   await upload(page, 'Import deployment configuration', deployment);
   await upload(page, 'Import issuance bundle', fixture.bundle);
-  await expect(page.locator('.claim-quantity')).toHaveText('1.000g');
+  await expect(page.locator('.proof-sheet')).toContainText('1.000 g');
   await expect(
-    page.locator('.issuance-controls input[inputmode="decimal"]'),
+    page.locator('.engine-stage input[inputmode="decimal"]'),
   ).toHaveCount(0);
   assert.deepEqual(rpcCalls, []);
-  await page.getByRole('button', { name: 'Connect', exact: true }).click();
-  await expect(page.locator('.issuance-controls .inline-error')).toContainText(
+  await page
+    .locator('.stage-action')
+    .getByRole('button', { name: 'Connect wallet', exact: true })
+    .click();
+  await expect(page.locator('.stage-action .inline-error')).toContainText(
     'do not match',
   );
   assert(rpcCalls.includes('eth_getCode'));
@@ -206,7 +200,7 @@ try {
       exact: true,
       includeHidden: true,
     }),
-  ).toBeDisabled();
+  ).toHaveCount(0);
   await expect(page.locator('.transaction-card')).toHaveCount(0);
   assert(
     !(await page.evaluate(() => window.walletCalls)).includes(
@@ -225,7 +219,7 @@ try {
   });
   await page.goto(new URL('verify/', base).href, { waitUntil: 'networkidle' });
   await expect(
-    page.getByRole('heading', { name: 'A receipt. A closer look.' }),
+    page.getByRole('heading', { name: 'Verify a receipt' }),
   ).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Check receipt offline' }),
@@ -249,7 +243,7 @@ try {
     `${checked.report.checks.filter((check) => check.status === 'verified').length} Passed`,
   );
   await expect(page.locator('.audit-limitations')).toContainText(
-    'do not establish physical gold backing or redemption',
+    'backing, and redemption remain unverified',
   );
   await page.locator('.audit-check-details > summary').click();
   await expect(
@@ -325,7 +319,7 @@ try {
   // An explicit online request reaches the configured RPC, but an unresolved
   // verifier block still cannot promote proof cryptography to verified.
   const onlineToggle = page.getByRole('checkbox', {
-    name: /Enable an online proof check/,
+    name: /Online proof check/,
   });
   await onlineToggle.check();
   await page.getByLabel('Proof verifier RPC URL').fill(deployment.rpcUrl);
@@ -447,6 +441,7 @@ try {
   assert.equal(stats.created, stats.terminated);
   assert.deepEqual(await page.evaluate(() => window.cspViolations), []);
   assert.deepEqual(errors, []);
+  assert.deepEqual(hydrationWarnings, []);
   assert.deepEqual(externalRequests, []);
 
   const unsupported = await browser.newPage();
@@ -469,11 +464,13 @@ try {
     unsupported.getByText(/No browser wallet detected/),
   ).toBeVisible();
   await expect(
-    unsupported.getByRole('button', { name: 'Connect', exact: true }),
+    unsupported
+      .locator('.stage-action')
+      .getByRole('button', { name: 'Connect wallet', exact: true }),
   ).toBeDisabled();
   await expect(
-    unsupported.getByRole('button', { name: 'Issue full claim' }),
-  ).toBeDisabled();
+    unsupported.getByRole('button', { name: 'Issue 1.000 g' }),
+  ).toHaveCount(0);
   await unsupported.goto(new URL('verify/', base).href);
   await upload(unsupported, 'Choose issuance receipt JSON', fixture.receipt);
   await upload(

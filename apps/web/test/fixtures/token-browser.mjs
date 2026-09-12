@@ -224,7 +224,11 @@ export async function exerciseTokenRecovery({
         buffer: Buffer.from(JSON.stringify(value)),
       });
     }
-    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await page
+      .locator('.stage-action')
+      .getByRole('button', { name: 'Connect wallet', exact: true })
+      .click();
+    await page.getByRole('link', { name: 'Transfer', exact: true }).click();
     await expect(
       page.getByRole('button', { name: 'Associate this token', exact: true }),
     ).toBeEnabled();
@@ -254,18 +258,18 @@ export async function exerciseTokenRecovery({
     if (failure === 'pending') {
       await expect(
         page.getByRole('button', {
-          name: 'I checked wallet activity: nothing was sent',
+          name: 'Nothing was sent',
           exact: true,
         }),
       ).toBeDisabled();
       await expect(
-        page.getByRole('button', { name: 'Reconnect', exact: true }),
+        page.getByRole('button', { name: 'Reconnect wallet', exact: true }),
       ).toBeDisabled();
     }
     if (failure === 'decline')
-      await expect(
-        page.locator('.issuance-controls .inline-error'),
-      ).toContainText('reported a transaction rejection');
+      await expect(page.locator('.transfer-card .inline-error')).toContainText(
+        'reported a transaction rejection',
+      );
 
     const frozen = page.getByLabel('Frozen token intent', { exact: true });
     await expect(frozen).toContainText(account);
@@ -294,59 +298,54 @@ export async function exerciseTokenRecovery({
     for (const malformed of ['0x1234', `0x${'00'.repeat(32)}`]) {
       const readCount = rpcCalls.length;
       await page
-        .getByLabel('Transaction hash from wallet', { exact: true })
+        .getByLabel('Transaction hash', { exact: true })
         .fill(malformed);
       await page
-        .getByRole('button', { name: 'Reconcile wallet hash', exact: true })
+        .getByRole('button', { name: 'Reconcile hash', exact: true })
         .click();
-      await expect(
-        page.locator('.issuance-controls .inline-error'),
-      ).toContainText('full nonzero 32-byte transaction hash');
+      await expect(page.locator('.transfer-card .inline-error')).toContainText(
+        'full nonzero 32-byte transaction hash',
+      );
       assert.equal(rpcCalls.length, readCount);
       await expect(
         page.getByRole('region', { name: 'Unknown wallet outcome' }),
       ).toBeVisible();
     }
+    await page.getByLabel('Transaction hash', { exact: true }).fill(badHash);
     await page
-      .getByLabel('Transaction hash from wallet', { exact: true })
-      .fill(badHash);
-    await page
-      .getByRole('button', { name: 'Reconcile wallet hash', exact: true })
+      .getByRole('button', { name: 'Reconcile hash', exact: true })
       .click();
     await expect(
-      page.getByRole('button', { name: 'Reconcile wallet hash', exact: true }),
+      page.getByRole('button', { name: 'Reconcile hash', exact: true }),
     ).toBeEnabled();
     await expect(
       page.getByRole('region', { name: 'Unknown wallet outcome' }),
     ).toBeVisible();
     await expect(frozen).toContainText(account);
-    await expect(page.locator('.token-workspace')).not.toContainText(
+    await expect(page.locator('.activity-rail')).not.toContainText(
       '· confirmed',
     );
+    await page.getByLabel('Transaction hash', { exact: true }).fill(goodHash);
     await page
-      .getByLabel('Transaction hash from wallet', { exact: true })
-      .fill(goodHash);
-    await page
-      .getByRole('button', { name: 'Reconcile wallet hash', exact: true })
+      .getByRole('button', { name: 'Reconcile hash', exact: true })
       .click();
     await expect(
       page.getByRole('region', { name: 'Unknown wallet outcome' }),
     ).toHaveCount(0);
-    await expect(page.locator('.token-workspace')).toContainText(
-      `${kind === 'transfer' ? 'Transfer' : 'Association'} · confirmed`,
+    await expect(page.locator('.activity-rail')).toContainText(
+      kind === 'transfer' ? 'Transfer' : 'Association',
     );
-    await expect(page.locator('.token-workspace')).toContainText(goodHash);
+    await expect(page.locator('.activity-rail')).toContainText('confirmed');
+    await expect(page.locator('.activity-rail')).toContainText(goodHash);
     if (failure === 'pending') {
       await page.evaluate((hash) => window.finishTokenWallet(hash), goodHash);
-      await expect(page.locator('.issuance-controls')).not.toContainText(
+      await expect(page.locator('.transfer-card')).not.toContainText(
         'The original call is still pending.',
       );
-      await expect(page.locator('.token-workspace')).toContainText(
-        `${kind === 'transfer' ? 'Transfer' : 'Association'} · confirmed`,
-      );
+      await expect(page.locator('.activity-rail')).toContainText('confirmed');
     }
 
-    await expect(page.locator('.claim-quantity')).toHaveText('1.000g');
+    await expect(page.locator('.proof-sheet')).toContainText('1.000 g');
     assert.deepEqual(
       await page.evaluate(() => window.tokenWallet.methods),
       beforeRecovery.methods,

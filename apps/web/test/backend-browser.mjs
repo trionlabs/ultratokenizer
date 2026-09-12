@@ -66,29 +66,25 @@ try {
   });
   await page.goto(base.href, { waitUntil: 'networkidle' });
   const associate = page.getByRole('button', { name: 'Associate this token' });
-  const connect = page.getByRole('button', {
-    name: 'Connect',
-    exact: true,
-    includeHidden: true,
-  });
-  const tokenWorkspace = page.locator('.token-workspace');
+  const connect = page.locator('.header-wallet');
+  const tokenWorkspace = page.locator('.transfer-stage');
   await expect(associate).toHaveCount(0);
+  await expect(connect).toHaveText('Connect wallet');
   await expect(connect).toBeDisabled();
+  await page.getByRole('link', { name: 'Transfer', exact: true }).click();
   await expect(tokenWorkspace).toContainText(
-    'Import a deployment to use its token.',
+    'Send any amount in 0.001 g units.',
   );
 
   const invalid = structuredClone(ats.deployment);
   delete invalid.backend.admission;
   await upload(page, 'Import deployment configuration', invalid);
-  await expect(page.locator('.issuance-controls .inline-error')).toContainText(
+  await expect(page.locator('.activity-rail .inline-error')).toContainText(
     'An independent, complete deployment configuration is required.',
   );
   await expect(connect).toBeDisabled();
   await expect(associate).toHaveCount(0);
-  await expect(page.locator('.network-label')).toHaveText(
-    'No deployment loaded',
-  );
+  await expect(page.locator('.session-list')).toContainText('Not loaded');
 
   for (const deployment of [
     hts.deployment,
@@ -102,60 +98,51 @@ try {
     // Existing holders can connect before supplying any new issuance claim.
     await expect(connect).toBeVisible();
     await expect(connect).toBeEnabled();
-    await expect(page.locator('.wallet-row')).toContainText('Your wallet');
     await upload(page, 'Import issuance bundle', hts.bundle);
-    await expect(page.locator('.issuance-controls .inline-error')).toHaveCount(
-      0,
-    );
+    await expect(page.locator('.activity-rail .inline-error')).toHaveCount(0);
     await expect(associate).toBeVisible();
     await expect(associate).toBeDisabled();
     await expect(tokenWorkspace).toContainText(
-      'HTS association and transfers are separate wallet transactions.',
-    );
-    await expect(tokenWorkspace).toContainText(
-      'connected wallet has not associated',
+      'chain checks whether association is needed',
     );
     await expect(page.locator('.technical-details')).toContainText(
       'HTS · native token',
     );
-    await expect(page.locator('.network-label')).toHaveText(
-      'Hedera testnet · 296',
-    );
-    await expect(page.locator('.wallet-row')).toContainText(
-      `Claim recipient · ${hts.bundle.request.recipient}`,
-    );
-    await expect(page.locator('.claim-quantity')).toHaveText('1.000g');
+    await expect(page.locator('.session-list')).toContainText('Hedera testnet');
+    await expect(page.locator('.session-list')).toContainText('1.000 g XAU');
   }
 
   await upload(page, 'Import deployment configuration', ats.deployment);
   await upload(page, 'Import issuance bundle', ats.bundle);
-  await expect(page.locator('.issuance-controls .inline-error')).toHaveCount(0);
+  await expect(page.locator('.activity-rail .inline-error')).toHaveCount(0);
   await expect(associate).toHaveCount(0);
   await expect(tokenWorkspace).toContainText(
-    'ATS token transfers are wallet transactions.',
+    'Transfers use the connected wallet.',
   );
   await expect(tokenWorkspace).not.toContainText('has not associated');
   await expect(tokenWorkspace).not.toContainText('HTS association');
   await expect(page.locator('.technical-details')).toContainText(
     'ATS · EVM token',
   );
-  await expect(page.locator('.claim-quantity')).toHaveText('1.000g');
+  await expect(page.locator('.session-list')).toContainText('1.000 g XAU');
   await expect(
-    page.locator('.issuance-controls input[inputmode="decimal"]'),
+    page.locator('.engine-stage input[inputmode="decimal"]'),
   ).toHaveCount(0);
   await page.getByLabel('Transfer amount (g)', { exact: true }).fill('0.125');
   await expect(
     page.getByLabel('Transfer amount (g)', { exact: true }),
   ).toHaveValue('0.125');
-  await expect(page.locator('.claim-quantity')).toHaveText('1.000g');
-  await expect(
-    page.getByRole('button', { name: 'Issue full claim' }),
-  ).toBeDisabled();
+  await expect(page.locator('.session-list')).toContainText('1.000 g XAU');
+  await expect(page.getByRole('button', { name: 'Issue 1.000 g' })).toHaveCount(
+    0,
+  );
   await expect(
     page.getByRole('button', { name: 'Review transfer in wallet' }),
   ).toBeDisabled();
   await expect(page.locator('.transaction-card')).toHaveCount(0);
-  await expect(page.locator('.check-row')).toContainText('Unchecked.');
+  await expect(page.getByRole('button', { name: 'Check bundle' })).toHaveCount(
+    0,
+  );
 
   const screenshots = new URL('../../../.scratch/web-qa/', import.meta.url);
   await mkdir(screenshots, { recursive: true });
@@ -177,12 +164,12 @@ try {
 
   // A rejected replacement cannot change an already imported backend or claim.
   await upload(page, 'Import deployment configuration', invalid);
-  await expect(page.locator('.issuance-controls .inline-error')).toBeVisible();
+  await expect(page.locator('.activity-rail .inline-error')).toBeVisible();
   await expect(associate).toHaveCount(0);
   await expect(page.locator('.technical-details')).toContainText(
     'ATS · EVM token',
   );
-  await expect(page.locator('.claim-quantity')).toHaveText('1.000g');
+  await expect(page.locator('.session-list')).toContainText('1.000 g XAU');
 
   await page.setViewportSize({ width: 320, height: 640 });
   assert(
