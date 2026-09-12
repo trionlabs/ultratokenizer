@@ -82,6 +82,41 @@ async function answer(query, client, args, mutation = {}) {
   });
 }
 
+await test('HTTPS SDK file read dispatches the exact durable query and accepts its framed response', async (t) => {
+  const args = await fixture();
+  let requests = 0;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    const endpoint = new URL(url);
+    assert.equal(endpoint.origin, 'https://testnet-node00-00-grpc.hedera.com');
+    if (endpoint.pathname === '/')
+      return new Response(null, { headers: { 'grpc-status': '12' } });
+    assert.equal(endpoint.pathname, '/proto.FileService/getFileContent');
+    requests++;
+    const records = (await readFile(args.journalPath, 'utf8'))
+      .trim()
+      .split('\n')
+      .map(JSON.parse);
+    const request = Buffer.from(options.body).subarray(5);
+    assert.equal(request.toString('base64'), records[2].queryBytes);
+    const payload = proto.Response.encode({
+      fileGetContents: {
+        header: {},
+        fileContents: { fileID: { fileNum: '2001' }, contents },
+      },
+    }).finish();
+    const frame = Buffer.alloc(payload.length + 5);
+    frame.writeUInt32BE(payload.length, 1);
+    frame.set(payload, 5);
+    return new Response(frame, {
+      headers: { 'content-type': 'application/grpc-web+proto' },
+    });
+  });
+  const result = await readHfsContentsOnce(args);
+  assert.equal(result.kind, 'file_readback');
+  assert.equal(requests, 1);
+  assert.deepEqual(Buffer.from(result.contents), contents);
+});
+
 await test('recorded query payment hooks preserve the original native ID and signature', async (t) => {
   const args = await fixture();
   let signatures = 0;
