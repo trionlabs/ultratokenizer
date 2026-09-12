@@ -67,7 +67,10 @@ An explicit optional RPC setting uses the caller-pinned SP1 verifier after check
 Every verification job runs in a dedicated Web Worker. UTF-8 bounds are checked before posting and inside the worker. Correlation IDs, cancellation, a 45-second timeout and disposal terminate workers and reject stale results. Worker failures do not fall back to the UI thread. Imported files stay in memory; the user may save the resulting audit report. The static page and worker assets must be available from the host; no offline cache is installed.
 
 Worker replies must have bounded report fields and a receipt identical to the normalized input.
-The v1 report must contain all 18 known checks. Unsupported history/account checks remain unverified;
+The v2 report must contain all 18 known checks and a `proofVerification` field. Completed RPC proof
+observations bind block/hash, verifier identity, proof input hashes and the requested provider origin;
+incomplete or offline checks have no RPC observation. Receipt and policy formats remain v1.
+Unsupported history/account checks remain unverified;
 transaction inclusion cannot be verified, and offline mode cannot report verified proof cryptography.
 Malformed or substituted replies fail the job and allow a fresh retry. This is structural transport
 validation; it does not independently establish the truth of an otherwise well-formed audit report.
