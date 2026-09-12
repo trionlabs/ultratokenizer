@@ -596,6 +596,76 @@ export function openInstitutionLedger(options: {
   }
 
   return Object.freeze<InstitutionLedger>({
+    importAvailableRights(values) {
+      if (!Array.isArray(values) || !values.length || values.length > 1000)
+        throw new InstitutionLedgerError('invalid_input');
+      const inputs = values.map((value) => {
+        const data = record(value, [
+          'rightId',
+          'sourceId',
+          'recordReference',
+          'claimId',
+          'holder',
+          'milligrams',
+        ]);
+        const sourceId = hash(data.sourceId);
+        const claimId = hash(data.claimId);
+        return {
+          rightId: hash(data.rightId),
+          sourceId,
+          recordReference: reference(data.recordReference),
+          claimId,
+          claimUsageId: getClaimUsageId({ sourceId, claimId }),
+          holder: address(data.holder),
+          milligrams: integer(data.milligrams, MAX_AMOUNT),
+        };
+      });
+      // One transaction preserves all identifiers or imports nothing. The caller
+      // must retire the idle source ledger; this method cannot inspect another database.
+      return transaction(true, () =>
+        Object.freeze(
+          inputs.map((input) => {
+            const matches = statement(
+              'SELECT * FROM asset_rights WHERE right_id = ? OR claim_id = ? OR claim_usage_id = ? OR (source_id = ? AND record_reference = ?)',
+            ).all(
+              input.rightId,
+              input.claimId,
+              input.claimUsageId,
+              input.sourceId,
+              input.recordReference,
+            );
+            if (matches.length) {
+              const row = matches[0];
+              if (
+                matches.length !== 1 ||
+                row.right_id !== input.rightId ||
+                row.source_id !== input.sourceId ||
+                row.record_reference !== input.recordReference ||
+                row.claim_id !== input.claimId ||
+                row.claim_usage_id !== input.claimUsageId ||
+                row.holder !== input.holder ||
+                row.milligrams !== input.milligrams
+              )
+                throw new InstitutionLedgerError('right_conflict');
+              // A repeated exact import never resets a pending or issued right.
+              return rightSnapshot(row);
+            }
+            statement(
+              'INSERT INTO asset_rights (right_id,source_id,record_reference,claim_id,claim_usage_id,holder,milligrams) VALUES (?,?,?,?,?,?,?)',
+            ).run(
+              input.rightId,
+              input.sourceId,
+              input.recordReference,
+              input.claimId,
+              input.claimUsageId,
+              input.holder,
+              input.milligrams,
+            );
+            return rightSnapshot(rightRow(input.rightId));
+          }),
+        ),
+      );
+    },
     registerRight(value) {
       const data = record(value, [
         'sourceId',

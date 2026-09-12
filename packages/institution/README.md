@@ -24,6 +24,17 @@ returns the same randomly generated 32-byte `claimId` and public `claimUsageId`.
 Changed quantity or holder is rejected. A source identity must remain stable when
 its signing key rotates.
 
+`importAvailableRights(inputs)` is an operator-only migration boundary for already
+signed rights from a retired, idle ledger. Each input includes the original
+`rightId`, `claimId`, source, reference, holder and milligrams. The whole batch is
+atomic; identity or terms conflicts roll back every insertion. Exact repeated
+imports preserve existing pending/issued allocations and never release backing.
+Before importing, stop the source writer, verify that every source right is
+available with no allocations, retain a private backup, and retire that writer.
+This method cannot authenticate another database or establish that its backing
+is unused elsewhere. Do not expose these private inputs through a holder API or
+use this method to assign arbitrary claim identities during normal registration.
+
 This is a persisted random mapping, not `HMAC(account, period)` or an account-period
 mint allowance. The amount belongs to one right, not necessarily the whole account.
 The usage-ID derivation survives source revisions, but the current ledger has no

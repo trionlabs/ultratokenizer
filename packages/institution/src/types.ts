@@ -21,6 +21,10 @@ export type RegisterRightInput = Readonly<{
   milligrams: string;
 }>;
 
+/** Private migration input, copied from an idle source ledger before it is retired. */
+export type ImportAvailableRightInput = RegisterRightInput &
+  Readonly<{ rightId: Hex; claimId: Hex }>;
+
 export type BackingPool = Readonly<{
   issuerId: Hex;
   token: Address;
@@ -79,6 +83,9 @@ export interface PrivateClaimIdentity {
 
 export interface InstitutionLedger {
   registerRight(input: RegisterRightInput): InstitutionRight;
+  importAvailableRights(
+    inputs: readonly ImportAvailableRightInput[],
+  ): readonly InstitutionRight[];
   findRight(
     input: Readonly<{ sourceId: Hex; recordReference: string }>,
   ): InstitutionRight | null;

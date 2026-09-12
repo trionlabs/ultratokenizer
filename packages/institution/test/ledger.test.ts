@@ -33,7 +33,7 @@ import {
 const word = (pair: string): Hex => `0x${pair.repeat(32)}`;
 const sourceId = word('11');
 const issuerId = word('22');
-const holder = '0x1111111111111111111111111111111111111111';
+const holder: Hex = '0x1111111111111111111111111111111111111111';
 const token = '0x2222222222222222222222222222222222222222';
 const gate = '0x3333333333333333333333333333333333333333';
 const hasCode = (code: InstitutionLedgerError['code']) => (error: unknown) =>
@@ -121,6 +121,108 @@ function expiredUnopened(
     claimUsed: false,
   };
 }
+
+await test('available-right import preserves signed identities across ledgers and survives reopening', (t) => {
+  const source = open(t, storage(t).path);
+  const destinationPath = storage(t).path;
+  const destination = open(t, destinationPath);
+  const registered = ['first-import', 'second-import'].map(
+    (recordReference) => {
+      const right = register(source, recordReference);
+      return {
+        rightId: right.rightId,
+        sourceId,
+        recordReference,
+        claimId: source.privateClaimIdentity(right.rightId).claimId,
+        holder,
+        milligrams: right.milligrams,
+      };
+    },
+  );
+  const imported = destination.importAvailableRights(registered);
+  assert.deepEqual(
+    imported,
+    registered.map((input) => source.getRight(input.rightId)),
+  );
+  assert.deepEqual(destination.importAvailableRights(registered), imported);
+  assert(!JSON.stringify(imported).includes(registered[0]!.claimId));
+  destination.close();
+  const reopened = open(t, destinationPath);
+  assert.deepEqual(reopened.importAvailableRights(registered), imported);
+  assert.equal(
+    reopened.privateClaimIdentity(registered[0]!.rightId).claimId,
+    registered[0]!.claimId,
+  );
+});
+
+await test('right import rolls back the whole batch on conflict and never resets an existing allocation', (t) => {
+  const ledger = open(t, storage(t).path);
+  const right = register(ledger, 'existing-import');
+  const existing = {
+    rightId: right.rightId,
+    sourceId,
+    recordReference: 'existing-import',
+    claimId: ledger.privateClaimIdentity(right.rightId).claimId,
+    holder,
+    milligrams: '1000',
+  };
+  const fresh = {
+    ...existing,
+    rightId: word('71'),
+    claimId: word('72'),
+    recordReference: 'new-import',
+  };
+  for (const conflict of [
+    { ...existing, milligrams: '1001' },
+    { ...existing, claimId: word('73') },
+    { ...fresh, recordReference: 'collision', claimId: existing.claimId },
+  ]) {
+    assert.throws(
+      () => ledger.importAvailableRights([fresh, conflict]),
+      hasCode('right_conflict'),
+    );
+    assert.equal(
+      ledger.findRight({ sourceId, recordReference: fresh.recordReference }),
+      null,
+    );
+  }
+  ledger.setBackingCap({ issuerId, token, milligrams: '1000' });
+  const r = request(right);
+  ledger.reserve({ rightId: right.rightId, request: r });
+  assert.equal(ledger.importAvailableRights([existing])[0]!.state, 'pending');
+  assert.equal(ledger.getPool({ issuerId, token }).pending, '1000');
+  ledger.markIssued(issued(r));
+  assert.equal(ledger.importAvailableRights([existing])[0]!.state, 'issued');
+  assert.equal(ledger.getPool({ issuerId, token }).outstanding, '1000');
+});
+
+await test('right import rejects malformed private identities before any insertion', (t) => {
+  const ledger = open(t, storage(t).path);
+  const valid = {
+    rightId: word('71'),
+    claimId: word('72'),
+    sourceId,
+    recordReference: 'import-validation',
+    holder,
+    milligrams: '1000',
+  };
+  const importUnknown: (value: unknown) => unknown =
+    ledger.importAvailableRights as (value: unknown) => unknown;
+  for (const value of [
+    null,
+    [],
+    [null],
+    [{ ...valid, claimId: word('00') }],
+    [{ ...valid, state: 'issued' }],
+    [{ ...valid, milligrams: '1.5' }],
+  ]) {
+    assert.throws(() => importUnknown(value), hasCode('invalid_input'));
+  }
+  assert.equal(
+    ledger.findRight({ sourceId, recordReference: valid.recordReference }),
+    null,
+  );
+});
 
 await test('expired-unopened release persists once, retains replay identities and permits a fresh allocation', (t) => {
   const { path } = storage(t);

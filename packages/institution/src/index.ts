@@ -8,6 +8,7 @@ export type {
   InstitutionLedger,
   InstitutionRight,
   RegisterRightInput,
+  ImportAvailableRightInput,
   RightState,
   Allocation,
   AllocationState,
