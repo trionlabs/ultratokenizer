@@ -1022,6 +1022,117 @@ function deferred() {
 }
 const flushLateReply = () => new Promise((resolve) => setImmediate(resolve));
 
+for (const operation of ['checking', 'simulating', 'refreshing']) {
+  for (const late of ['result', 'error']) {
+    test(`${operation} deadline allows a new check and ignores the expired ${late}`, async (t) => {
+      const fixture = await createFixture();
+      const original = deferred();
+      const replacement = deferred();
+      let armed = false;
+      let reads = 0;
+      const method = {
+        checking: 'validate',
+        simulating: 'simulate',
+        refreshing: 'balance',
+      }[operation];
+      const { session } = harness(fixture, {
+        [method]: () => {
+          if (!armed) return Promise.resolve();
+          reads++;
+          return reads === 1 ? original.promise : replacement.promise;
+        },
+      });
+      await ready(session);
+      armed = true;
+      t.mock.timers.enable({ apis: ['setTimeout'] });
+      const check = () =>
+        operation === 'checking'
+          ? session.check()
+          : operation === 'simulating'
+            ? session.simulate()
+            : session.refreshBalance();
+      const expired = check();
+      t.mock.timers.tick(120_000);
+      await expired;
+      assert.equal(session.read().busy, undefined);
+      assert.equal(session.read().pendingOperation, undefined);
+      assert.equal(session.read().unknownSubmission, undefined);
+      assert.match(session.read().error, /read-only check timed out/i);
+      const retry = check();
+      assert.equal(reads, 2);
+      const beforeLateReply = session.read();
+      if (late === 'result') original.resolve(900n);
+      else original.reject(new Error('Expired read must not reach the UI'));
+      await flushLateReply();
+      assert.deepEqual(session.read(), beforeLateReply);
+      replacement.resolve(125n);
+      await retry;
+      assert.equal(session.read().busy, undefined);
+      assert.equal(session.read().error, undefined);
+      if (operation === 'checking')
+        assert.equal(session.read().sourceProof, 'accepted');
+      if (operation === 'simulating')
+        assert.equal(session.read().simulation, 'passed');
+      if (operation === 'refreshing')
+        assert.equal(session.read().balanceMg, 125n);
+      assert.equal(session.read().transaction, undefined);
+      session.dispose();
+    });
+  }
+}
+
+for (const operation of ['connecting', 'signing']) {
+  test(`${operation} deadline retains the prompt lock and discards its late approval`, async (t) => {
+    const fixture = await createFixture();
+    const reply = deferred();
+    let armed = false;
+    let prompts = 0;
+    const wallet = {
+      address: fixture.bundle.request.recipient,
+      chainId: '296',
+    };
+    const result =
+      operation === 'connecting' ? wallet : fixture.holderSignature;
+    const { session, calls } = harness(fixture, {
+      [operation === 'connecting' ? 'connect' : 'sign']: () => {
+        if (!armed) return Promise.resolve(result);
+        prompts++;
+        return reply.promise;
+      },
+    });
+    await ready(session);
+    armed = true;
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const prompt = () =>
+      operation === 'connecting' ? session.connect() : session.sign();
+    const pending = prompt();
+    t.mock.timers.tick(120_000);
+    await pending;
+    assert.equal(session.read().pendingOperation, operation);
+    assert.equal(session.read().unknownSubmission, undefined);
+    const snapshot = session.read();
+    const previousCalls = [...calls];
+    await prompt();
+    await session.check();
+    await session.submit();
+    session.acknowledgeNotSent();
+    assert.equal(prompts, 1);
+    assert.deepEqual(calls, previousCalls);
+    assert.deepEqual(session.read(), snapshot);
+    assert.throws(
+      () => session.loadBundle(JSON.stringify(fixture.bundle)),
+      /Reconcile/,
+    );
+    reply.resolve(result);
+    await flushLateReply();
+    assert.equal(session.read().pendingOperation, undefined);
+    if (operation === 'signing')
+      assert.equal(session.read().signature, undefined);
+    assert.match(session.read().error, /delayed check finished/i);
+    session.dispose();
+  });
+}
+
 for (const kind of ['issuance', 'association', 'transfer']) {
   test(`${kind} transaction decline retains the attempt and blocks a new action`, async () => {
     const fixture = await createFixture();

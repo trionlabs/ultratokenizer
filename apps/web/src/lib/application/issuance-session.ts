@@ -216,7 +216,7 @@ export function createIssuanceSession(
   }
   async function run(
     operation: Operation,
-    task: (revision: number) => Promise<void>,
+    task: (revision: number, current: () => boolean) => Promise<void>,
   ) {
     // A deadline does not cancel the original call. Only reconciliation may
     // overlap a delayed send; it cannot start another wallet action.
@@ -228,19 +228,24 @@ export function createIssuanceSession(
     )
       return;
     const id = Symbol(operation);
+    const readOnly = ['checking', 'simulating', 'refreshing'].includes(
+      operation,
+    );
+    const revision = walletRevision;
     foreground = id;
     let expired = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     update({ busy: operation, error: undefined });
     const completion = (async () => {
       try {
-        await task(walletRevision);
-        if (expired && !submissionKind(operation))
+        await task(revision, () => !expired && unchanged(revision));
+        if (expired && !readOnly && !submissionKind(operation))
           update({
             error:
               'The delayed check finished. Run the checks again before a new action.',
           });
       } catch (error) {
+        if (expired && readOnly) return;
         const kind = submissionKind(operation);
         const transaction =
           kind === 'issuance' ? state.transaction : state.tokenTransaction;
@@ -305,16 +310,20 @@ export function createIssuanceSession(
         new Promise<void>((resolve) => {
           timer = setTimeout(() => {
             expired = true;
-            delayed = { id, operation };
+            // These three client methods never sign, prompt or send. Their
+            // expired results are ignored, so they need not lock a new action.
+            if (!readOnly) delayed = { id, operation };
             if (foreground === id) foreground = undefined;
             const kind = submissionKind(operation);
             update({
               busy: undefined,
-              pendingOperation: operation,
+              pendingOperation: readOnly ? undefined : operation,
               ...(kind ? { unknownSubmission: kind } : {}),
-              error: kind
-                ? 'The wallet call is still pending. A timeout does not cancel it. Inspect wallet activity or reconcile its hash; a new submission remains blocked.'
-                : 'The check is still pending. A timeout does not cancel a wallet prompt. Wait for its response before starting another action.',
+              error: readOnly
+                ? 'The read-only check timed out. You can retry; any late result from this check will be ignored.'
+                : kind
+                  ? 'The wallet call is still pending. A timeout does not cancel it. Inspect wallet activity or reconcile its hash; a new submission remains blocked.'
+                  : 'The check is still pending. A timeout does not cancel a wallet prompt. Wait for its response before starting another action.',
             });
             resolve();
           }, OPERATION_DEADLINE_MS);
@@ -547,14 +556,14 @@ export function createIssuanceSession(
       });
     },
     check() {
-      return run('checking', async (revision) => {
+      return run('checking', async (_revision, current) => {
         update({
           sourceProof: 'unchecked',
           signature: undefined,
           simulation: 'unchecked',
         });
         await requireClient().validate(requireBundle());
-        if (unchanged(revision)) update({ sourceProof: 'accepted' });
+        if (current()) update({ sourceProof: 'accepted' });
       });
     },
     sign() {
@@ -572,12 +581,12 @@ export function createIssuanceSession(
       });
     },
     simulate() {
-      return run('simulating', async (revision) => {
+      return run('simulating', async (_revision, current) => {
         if (!state.signature || state.transaction || state.unknownSubmission)
           throw new Error();
         update({ simulation: 'unchecked' });
         await requireClient().simulate(requireBundle(), state.signature);
-        if (unchanged(revision)) update({ simulation: 'passed' });
+        if (current()) update({ simulation: 'passed' });
       });
     },
     submit() {
@@ -692,9 +701,9 @@ export function createIssuanceSession(
       });
     },
     refreshBalance() {
-      return run('refreshing', async (revision) => {
+      return run('refreshing', async (_revision, current) => {
         const balanceMg = await requireClient().balance();
-        if (unchanged(revision)) update({ balanceMg });
+        if (current()) update({ balanceMg });
       });
     },
     associate() {
