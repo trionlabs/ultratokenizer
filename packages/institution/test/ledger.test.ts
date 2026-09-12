@@ -27,6 +27,7 @@ import {
   type InstitutionRight,
   type IssuedObservation,
   type UnusedObservation,
+  type ExpiredUnopenedObservation,
 } from '../src/index.js';
 
 const word = (pair: string): Hex => `0x${pair.repeat(32)}`;
@@ -107,6 +108,169 @@ function unused(r: ReturnType<typeof request>): UnusedObservation {
     claimUsed: false,
   };
 }
+function expiredUnopened(
+  r: ReturnType<typeof request>,
+): ExpiredUnopenedObservation {
+  const { transactionHash: _, ...common } = issued(r);
+  return {
+    ...common,
+    kind: 'expired-unopened',
+    blockTimestamp: r.validUntil,
+    reservationAbsent: true,
+    requestUsed: false,
+    claimUsed: false,
+  };
+}
+
+await test('expired-unopened release persists once, retains replay identities and permits a fresh allocation', (t) => {
+  const { path } = storage(t);
+  const ledger = open(t, path);
+  const right = register(ledger);
+  ledger.setBackingCap({ issuerId, token, milligrams: '1000' });
+  const r = request(right);
+  ledger.reserve({ rightId: right.rightId, request: r });
+  const terminal = ledger.releaseExpiredUnopened(expiredUnopened(r));
+  assert.equal(terminal.state, 'released');
+  assert.equal(ledger.getPool({ issuerId, token }).pending, '0');
+  ledger.close();
+  const reopened = open(t, path);
+  assert.deepEqual(
+    reopened.releaseExpiredUnopened(expiredUnopened(r)),
+    terminal,
+  );
+  assert.deepEqual(
+    reopened.reserve({ rightId: right.rightId, request: r }),
+    terminal,
+  );
+  assert.throws(
+    () => reopened.markIssued(issued(r)),
+    hasCode('terminal_conflict'),
+  );
+  assert.throws(
+    () => reopened.releaseUnused(unused(r)),
+    hasCode('terminal_conflict'),
+  );
+  assert.throws(
+    () =>
+      reopened.releaseExpiredUnopened({
+        ...expiredUnopened(r),
+        blockNumber: '124',
+      }),
+    hasCode('terminal_conflict'),
+  );
+  assert.throws(
+    () =>
+      reopened.reserve({
+        rightId: right.rightId,
+        request: request(right, { nonce: '1' }),
+      }),
+    hasCode('request_conflict'),
+  );
+  const fresh = request(right, {
+    reservationId: word('88'),
+    validUntil: '2000000100',
+  });
+  assert.equal(
+    reopened.reserve({ rightId: right.rightId, request: fresh }).state,
+    'pending',
+  );
+  assert.equal(reopened.getPool({ issuerId, token }).pending, '1000');
+});
+
+await test('expired-unopened evidence rejects early, wrong-phase, malformed and unbound outcomes', (t) => {
+  const { path } = storage(t);
+  const ledger = open(t, path);
+  const right = register(ledger);
+  ledger.setBackingCap({ issuerId, token, milligrams: '1000' });
+  const r = request(right);
+  const pending = ledger.reserve({ rightId: right.rightId, request: r });
+  for (const patch of [
+    { kind: 'unused' },
+    { blockTimestamp: '1999999999' },
+    { blockTimestamp: 2000000000 },
+    { blockTimestamp: '02000000000' },
+    { blockTimestamp: '-1' },
+    { reservationAbsent: false },
+    { requestUsed: true },
+    { claimUsed: true },
+    { gate: token },
+    { chainId: '31337' },
+    { reservationId: word('88') },
+    { claimUsageId: word('88') },
+    { unexpected: true },
+    { reservationReleased: true },
+  ]) {
+    assert.throws(
+      () =>
+        ledger.releaseExpiredUnopened({
+          ...expiredUnopened(r),
+          ...patch,
+        } as ExpiredUnopenedObservation),
+      hasCode('invalid_outcome'),
+    );
+    assert.deepEqual(ledger.getAllocation(pending.requestDigest), pending);
+  }
+  ledger.markIssued(issued(r));
+  assert.throws(
+    () => ledger.releaseExpiredUnopened(expiredUnopened(r)),
+    hasCode('terminal_conflict'),
+  );
+  assert.equal(ledger.getPool({ issuerId, token }).outstanding, '1000');
+});
+
+await test('version-2 upgrade is explicit, transactional and preserves all data and schema', (t) => {
+  const { path } = storage(t);
+  const ledger = open(t, path);
+  const right = register(ledger);
+  const identity = ledger.privateClaimIdentity(right.rightId);
+  ledger.setBackingCap({ issuerId, token, milligrams: '1000' });
+  const r = request(right);
+  const pending = ledger.reserve({ rightId: right.rightId, request: r });
+  ledger.close();
+  const legacy = new DatabaseSync(path);
+  legacy.exec('PRAGMA user_version = 2');
+  const snapshot = () =>
+    ['asset_rights', 'backing_pools', 'allocations', 'sqlite_schema'].map(
+      (table) => legacy.prepare(`SELECT * FROM ${table}`).all(),
+    );
+  const before = snapshot();
+  assert.throws(
+    () => openInstitutionLedger({ path }),
+    hasCode('unsupported_database'),
+  );
+  assert.equal(legacy.prepare('PRAGMA user_version').get()?.user_version, 2);
+  const upgraded = openInstitutionLedger({ path, upgradeFromVersion: 2 });
+  t.after(() => upgraded.close());
+  assert.equal(legacy.prepare('PRAGMA user_version').get()?.user_version, 3);
+  assert.deepEqual(snapshot(), before);
+  assert.deepEqual(upgraded.getAllocation(pending.requestDigest), pending);
+  assert.equal(
+    upgraded.privateClaimIdentity(right.rightId).claimId,
+    identity.claimId,
+  );
+  legacy.close();
+});
+
+await test('explicit upgrade never repairs drifted or older schemas', (t) => {
+  const { path } = storage(t);
+  open(t, path).close();
+  const database = new DatabaseSync(path);
+  database.exec(
+    'PRAGMA user_version = 2; DROP INDEX one_live_allocation_per_right',
+  );
+  assert.throws(
+    () => openInstitutionLedger({ path, upgradeFromVersion: 2 }),
+    hasCode('unsupported_database'),
+  );
+  assert.equal(database.prepare('PRAGMA user_version').get()?.user_version, 2);
+  database.exec('PRAGMA user_version = 1');
+  assert.throws(
+    () => openInstitutionLedger({ path, upgradeFromVersion: 2 }),
+    hasCode('unsupported_database'),
+  );
+  assert.equal(database.prepare('PRAGMA user_version').get()?.user_version, 1);
+  database.close();
+});
 
 await test('a stable source/record pair retains its opaque identity and immutable terms after restart', (t) => {
   const { path } = storage(t);
@@ -767,7 +931,7 @@ await test('current version markers cannot admit missing or altered schema guara
         .all();
       assert.equal(
         edited.prepare('PRAGMA user_version').get()?.user_version,
-        2,
+        3,
       );
       edited.close();
       assert.throws(

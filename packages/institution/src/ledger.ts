@@ -27,6 +27,7 @@ import type {
   AllocationState,
   BackingPool,
   ChainObservation,
+  ExpiredUnopenedObservation,
   InstitutionLedger,
   InstitutionRight,
   IssuedObservation,
@@ -65,7 +66,7 @@ type Row = Record<string, SQLOutputValue>;
 const MAX_AMOUNT = (1n << 63n) - 1n;
 const MAX_UINT = (1n << 256n) - 1n;
 const APPLICATION_ID = 0x55544c47;
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 function record(
   value: unknown,
@@ -301,8 +302,19 @@ function supportedSchema(): string {
 /** Node-only trusted institution module. Observations are caller assertions, not chain authentication. */
 export function openInstitutionLedger(options: {
   path: string;
+  upgradeFromVersion?: 2;
 }): InstitutionLedger {
-  const input = record(options, ['path']);
+  const input = record(
+    options,
+    options && Object.hasOwn(options, 'upgradeFromVersion')
+      ? ['path', 'upgradeFromVersion']
+      : ['path'],
+  );
+  if (
+    Object.hasOwn(input, 'upgradeFromVersion') &&
+    input.upgradeFromVersion !== 2
+  )
+    throw new InstitutionLedgerError('invalid_input');
   const path = privatePath(input.path);
   let database: DatabaseSync;
   try {
@@ -366,11 +378,16 @@ export function openInstitutionLedger(options: {
         );
       } else if (
         application !== BigInt(APPLICATION_ID) ||
-        version !== BigInt(SCHEMA_VERSION)
+        (version !== BigInt(SCHEMA_VERSION) &&
+          !(version === 2n && input.upgradeFromVersion === 2))
       )
         throw new InstitutionLedgerError('unsupported_database');
       if (schemaDefinition(database) !== supportedSchema())
         throw new InstitutionLedgerError('unsupported_database');
+      // Version 3 introduces a distinct terminal observation without changing DDL.
+      // Explicit opt-in is required; old writers must be stopped before upgrading.
+      if (version === 2n)
+        database.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
     // Node 22.17 embeds SQLite 3.50.0, predating the WAL-reset race fix.
     // Keep rollback journaling; EXTRA also syncs its directory after commit deletion.
@@ -459,22 +476,29 @@ export function openInstitutionLedger(options: {
   ] as const;
   function observation(
     value: unknown,
-    issued: boolean,
-  ): IssuedObservation | UnusedObservation {
+    kind: 'issued' | 'unused' | 'expired-unopened',
+  ): IssuedObservation | UnusedObservation | ExpiredUnopenedObservation {
     try {
       const data = record(value, [
         ...observationFields,
-        ...(issued
+        ...(kind === 'issued'
           ? ['transactionHash']
-          : [
-              'reason',
-              'reservationReleased',
-              'reservationUsed',
-              'requestUsed',
-              'claimUsed',
-            ]),
+          : kind === 'expired-unopened'
+            ? [
+                'blockTimestamp',
+                'reservationAbsent',
+                'requestUsed',
+                'claimUsed',
+              ]
+            : [
+                'reason',
+                'reservationReleased',
+                'reservationUsed',
+                'requestUsed',
+                'claimUsed',
+              ]),
       ]);
-      if (data.kind !== (issued ? 'issued' : 'unused')) throw new Error();
+      if (data.kind !== kind) throw new Error();
       const common: ChainObservation = {
         requestDigest: hash(data.requestDigest),
         chainId: integer(data.chainId),
@@ -484,12 +508,28 @@ export function openInstitutionLedger(options: {
         blockHash: hash(data.blockHash),
         blockNumber: integer(data.blockNumber, MAX_UINT, true),
       };
-      if (issued)
+      if (kind === 'issued')
         return Object.freeze({
           ...common,
           kind: 'issued',
           transactionHash: hash(data.transactionHash),
         });
+      if (kind === 'expired-unopened') {
+        if (
+          data.reservationAbsent !== true ||
+          data.requestUsed !== false ||
+          data.claimUsed !== false
+        )
+          throw new Error();
+        return Object.freeze({
+          ...common,
+          kind,
+          blockTimestamp: integer(data.blockTimestamp, MAX_UINT, true),
+          reservationAbsent: true,
+          requestUsed: false,
+          claimUsed: false,
+        });
+      }
       if (
         (data.reason !== 'revoked-unused' &&
           data.reason !== 'expired-unused') ||
@@ -512,8 +552,11 @@ export function openInstitutionLedger(options: {
       throw new InstitutionLedgerError('invalid_outcome');
     }
   }
-  function settle(value: unknown, issued: boolean): Allocation {
-    const outcome = observation(value, issued);
+  function settle(
+    value: unknown,
+    kind: 'issued' | 'unused' | 'expired-unopened',
+  ): Allocation {
+    const outcome = observation(value, kind);
     return transaction(true, () => {
       const row = one(
         'SELECT * FROM allocations WHERE request_digest = ?',
@@ -526,10 +569,12 @@ export function openInstitutionLedger(options: {
         request.chainId !== outcome.chainId ||
         request.gate !== outcome.gate ||
         request.reservationId !== outcome.reservationId ||
-        request.claimUsageId !== outcome.claimUsageId
+        request.claimUsageId !== outcome.claimUsageId ||
+        (outcome.kind === 'expired-unopened' &&
+          BigInt(outcome.blockTimestamp) < BigInt(request.validUntil))
       )
         throw new InstitutionLedgerError('invalid_outcome');
-      const target = issued ? 'issued' : 'released';
+      const target = kind === 'issued' ? 'issued' : 'released';
       if (current.state !== 'pending') {
         if (
           current.state !== target ||
@@ -728,10 +773,13 @@ export function openInstitutionLedger(options: {
       });
     },
     markIssued(value) {
-      return settle(value, true);
+      return settle(value, 'issued');
     },
     releaseUnused(value) {
-      return settle(value, false);
+      return settle(value, 'unused');
+    },
+    releaseExpiredUnopened(value) {
+      return settle(value, 'expired-unopened');
     },
     close() {
       if (closed) return;

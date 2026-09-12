@@ -12,6 +12,7 @@ import {
   encodeFunctionResult,
   keccak256,
   zeroAddress,
+  zeroHash,
   type Address,
   type Hex,
 } from 'viem';
@@ -496,6 +497,21 @@ async function fixture(t: TestContext) {
       outstanding: '0',
     });
   }
+  function unopened() {
+    unused();
+    state.reservation = [
+      zeroAddress,
+      zeroAddress,
+      0n,
+      0n,
+      0n,
+      false,
+      zeroHash,
+      zeroHash,
+      false,
+    ];
+    state.timestamp = BigInt(request.validUntil);
+  }
   return {
     bridge,
     ledger,
@@ -513,10 +529,189 @@ async function fixture(t: TestContext) {
     bundle,
     signature,
     unused,
+    unopened,
     pending,
   };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
+
+await test('expired-unopened closure uses the confirmed request deadline and retains a distinct terminal anchor', async (t) => {
+  for (const delta of [-1n, 0n, 1n])
+    await t.test(`request expiry ${delta}`, async (t) => {
+      const f = await fixture(t);
+      f.unopened();
+      f.state.timestamp += delta;
+      if (delta < 0n) {
+        await assert.rejects(
+          f.bridge.settleExpiredUnopened(f.digest),
+          hasCode('mismatch'),
+        );
+        f.pending();
+        return;
+      }
+      const settled = await f.bridge.settleExpiredUnopened(f.digest);
+      assert.deepEqual(settled.observation, {
+        kind: 'expired-unopened',
+        requestDigest: f.digest,
+        chainId: '31337',
+        gate,
+        reservationId: f.request.reservationId,
+        claimUsageId: f.request.claimUsageId,
+        blockHash: targetHash,
+        blockNumber: '100',
+        blockTimestamp: String(f.state.timestamp),
+        reservationAbsent: true,
+        requestUsed: false,
+        claimUsed: false,
+      });
+      assert.equal(settled.state, 'released');
+      assert.equal(f.ledger.getPool({ issuerId, token }).pending, '0');
+      assert.equal(f.ledger.getRight(f.right.rightId).state, 'available');
+      const reads = f.calls.length;
+      // A later reservation does not rewrite historical closure or report chain release.
+      f.state.reservation[0] = holder;
+      assert.deepEqual(await f.bridge.settleExpiredUnopened(f.digest), settled);
+      assert.equal(f.calls.length, reads);
+      await assert.rejects(
+        f.bridge.settleUnused(f.digest),
+        hasCode('terminal_conflict'),
+      );
+      await assert.rejects(
+        f.bridge.settleIssued(f.digest, transactionHash),
+        hasCode('terminal_conflict'),
+      );
+    });
+});
+
+await test('expired-unopened closure rejects every nonempty reservation field and consumed identity', async (t) => {
+  const mutations: Array<[string, (f: Fixture) => void]> = [
+    [
+      'recipient',
+      (f) => {
+        f.state.reservation[0] = holder;
+      },
+    ],
+    [
+      'token',
+      (f) => {
+        f.state.reservation[1] = token;
+      },
+    ],
+    [
+      'capacity',
+      (f) => {
+        f.state.reservation[2] = 1n;
+      },
+    ],
+    [
+      'used',
+      (f) => {
+        f.state.reservation[3] = 1n;
+      },
+    ],
+    [
+      'expiry',
+      (f) => {
+        f.state.reservation[4] = 1n;
+      },
+    ],
+    [
+      'revoked',
+      (f) => {
+        f.state.reservation[5] = true;
+      },
+    ],
+    [
+      'digest',
+      (f) => {
+        f.state.reservation[6] = f.digest;
+      },
+    ],
+    [
+      'claim',
+      (f) => {
+        f.state.reservation[7] = f.request.claimUsageId;
+      },
+    ],
+    [
+      'released',
+      (f) => {
+        f.state.reservation[8] = true;
+      },
+    ],
+    [
+      'request consumed',
+      (f) => {
+        f.state.requestUsed = true;
+      },
+    ],
+    [
+      'claim consumed',
+      (f) => {
+        f.state.claimUsed = true;
+      },
+    ],
+    [
+      'timestamp changes under same hash',
+      (f) => {
+        f.state.onCall = (call) => {
+          if (call.method === 'eth_call') f.state.timestamp += 1n;
+        };
+      },
+    ],
+  ];
+  for (const [name, mutate] of mutations)
+    await t.test(name, async (t) => {
+      const f = await fixture(t);
+      f.unopened();
+      mutate(f);
+      await assert.rejects(
+        f.bridge.settleExpiredUnopened(f.digest),
+        hasCode('mismatch'),
+      );
+      f.pending();
+    });
+});
+
+await test('an issued settlement winning during absence reads cannot be released', async (t) => {
+  const f = await fixture(t);
+  f.unopened();
+  f.state.onCall = (call) => {
+    if (call.method !== 'eth_call') return;
+    f.ledger.markIssued({
+      kind: 'issued',
+      requestDigest: f.digest,
+      chainId: '31337',
+      gate,
+      reservationId: f.request.reservationId,
+      claimUsageId: f.request.claimUsageId,
+      blockHash: targetHash,
+      blockNumber: '100',
+      transactionHash,
+    });
+  };
+  await assert.rejects(
+    f.bridge.settleExpiredUnopened(f.digest),
+    hasCode('unresolved'),
+  );
+  assert.equal(f.ledger.getAllocation(f.digest)?.state, 'issued');
+  assert.equal(f.ledger.getPool({ issuerId, token }).outstanding, '1000');
+});
+
+await test('expired-unopened deadline overrun retains pending', async (t) => {
+  const f = await fixture(t);
+  f.unopened();
+  let now = 0;
+  t.mock.method(performance, 'now', () => now);
+  f.state.onCall = (call) => {
+    if (call.method === 'eth_call') now = 120_001;
+  };
+  await assert.rejects(
+    f.bridge.settleExpiredUnopened(f.digest),
+    hasCode('unresolved'),
+  );
+  f.pending();
+});
 
 await test('trusted RPC issuance settles SQLite exactly once despite different transaction and Gate nonces or later revocation', async (t) => {
   const f = await fixture(t);
@@ -1048,16 +1243,19 @@ await test('both settlement paths retain pending on inconsistent chain, deployme
       },
     ],
   ];
-  for (const mode of ['issued', 'unused'] as const)
+  for (const mode of ['issued', 'unused', 'expired-unopened'] as const)
     for (const [name, mutate] of mutations)
       await t.test(`${mode}: ${name}`, async (t) => {
         const f = await fixture(t);
         if (mode === 'unused') f.unused();
+        if (mode === 'expired-unopened') f.unopened();
         mutate(f);
         await assert.rejects(
           mode === 'issued'
             ? f.bridge.settleIssued(f.digest, transactionHash)
-            : f.bridge.settleUnused(f.digest),
+            : mode === 'unused'
+              ? f.bridge.settleUnused(f.digest)
+              : f.bridge.settleExpiredUnopened(f.digest),
           InstitutionChainError,
         );
         f.pending();
@@ -1114,7 +1312,7 @@ await test('missing transactions and malformed calldata retain pending without l
 });
 
 await test('JSON-RPC, transport and malformed-response errors stay sanitized and retain pending in both paths', async (t) => {
-  for (const operation of ['issued', 'unused'] as const)
+  for (const operation of ['issued', 'unused', 'expired-unopened'] as const)
     for (const mode of [
       'rpc',
       'disconnect',
@@ -1124,11 +1322,14 @@ await test('JSON-RPC, transport and malformed-response errors stay sanitized and
       await t.test(`${operation}: ${mode}`, async (t) => {
         const f = await fixture(t);
         if (operation === 'unused') f.unused();
+        if (operation === 'expired-unopened') f.unopened();
         f.state.failure = { method: 'eth_call', mode };
         await assert.rejects(
           operation === 'issued'
             ? f.bridge.settleIssued(f.digest, transactionHash)
-            : f.bridge.settleUnused(f.digest),
+            : operation === 'unused'
+              ? f.bridge.settleUnused(f.digest)
+              : f.bridge.settleExpiredUnopened(f.digest),
           (error: unknown) => {
             assert.ok(error instanceof InstitutionChainError);
             assert.equal(error.code, 'unresolved');
@@ -1179,15 +1380,18 @@ await test('invalid pins and identifiers fail without RPC calls or ledger mutati
 });
 
 await test('eight concurrent reconciliations settle one allocation without multiplying backing counters', async (t) => {
-  for (const mode of ['issued', 'unused'] as const)
+  for (const mode of ['issued', 'unused', 'expired-unopened'] as const)
     await t.test(mode, async (t) => {
       const f = await fixture(t);
       if (mode === 'unused') f.unused();
+      if (mode === 'expired-unopened') f.unopened();
       const results = await Promise.all(
         Array.from({ length: 8 }, () =>
           mode === 'issued'
             ? f.bridge.settleIssued(f.digest, transactionHash)
-            : f.bridge.settleUnused(f.digest),
+            : mode === 'unused'
+              ? f.bridge.settleUnused(f.digest)
+              : f.bridge.settleExpiredUnopened(f.digest),
         ),
       );
       for (const result of results) assert.deepEqual(result, results[0]);

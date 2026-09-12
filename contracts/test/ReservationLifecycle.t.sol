@@ -15,6 +15,62 @@ contract LegacyProgramGate is IssuanceGate {
 }
 
 contract ReservationLifecycleTest is GateFixture {
+    function testLateLongerReservationCannotReviveAnExpiredSignedRequest() public {
+        RequestHash.Request memory r = freshRequest(20, 1000);
+        r.validUntil = EXPIRY - 100;
+        RequestHash.Permit memory p = permit(r);
+        bytes memory values = evidence(r);
+        verifier.configure(keccak256(values), false);
+        bytes memory hs = signature(HOLDER_KEY, RequestHash.digest(r));
+        bytes memory ps = signature(ISSUER_KEY, RequestHash.permitDigest(p, r.chainId, r.gate));
+        (address recipient,,,,,,,,) = gate.reservations(ISSUER, r.reservationId);
+        require(recipient == address(0), "reservation already exists");
+
+        vm.warp(r.validUntil);
+        vm.expectRevert(IssuanceGate.Expired.selector);
+        gate.issue(r, hs, p, ps, values, hex"cafe");
+        vm.expectRevert(IssuanceGate.InvalidConfiguration.selector);
+        reserve(r);
+
+        // A delayed issuer call can still open a longer-lived reservation. Local
+        // expired-unopened closure must not claim this chain capacity is released.
+        vm.prank(issuer);
+        gate.openReservation(
+            ISSUER, 1, r.reservationId, holder, r.token, r.amount, EXPIRY, RequestHash.digest(r), r.claimUsageId
+        );
+        assertPool(r.token, 2000, 0);
+        vm.warp(uint256(r.validUntil) + 1);
+        vm.expectRevert(IssuanceGate.Expired.selector);
+        gate.issue(r, hs, p, ps, values, hex"cafe");
+        require(!gate.usedRequests(RequestHash.digest(r)) && !gate.usedClaims(r.claimUsageId), "expired claim consumed");
+        require(adapter.balances(holder) == 0, "expired request minted");
+        vm.expectRevert(IssuanceGate.ReservationNotExpired.selector);
+        gate.expireReservation(ISSUER, r.reservationId);
+
+        // A changed deadline needs a new holder signature as well as a new permit.
+        r.validUntil = EXPIRY;
+        vm.expectRevert(IssuanceGate.InvalidSignature.selector);
+        gate.issue(r, hs, p, ps, values, hex"cafe");
+        gate.revokeReservation(ISSUER, 1, r.reservationId);
+        assertPool(r.token, 1000, 0);
+
+        r.reservationId = bytes32(uint256(99));
+        reserve(r);
+        issue(r, 0);
+        require(adapter.balances(holder) == 1000, "fresh request did not mint exactly once");
+        assertPool(r.token, 1000, 1000);
+    }
+
+    function testRequestCanStillMintImmediatelyBeforeExpiry() public {
+        RequestHash.Request memory r = freshRequest(20, 1000);
+        r.validUntil = EXPIRY - 100;
+        reserve(r);
+        vm.warp(uint256(r.validUntil) - 1);
+        issue(r, 0);
+        require(gate.usedClaims(r.claimUsageId), "live request not consumed");
+        assertPool(r.token, 1000, 1000);
+    }
+
     function freshRequest(uint256 id, uint256 amount) internal view returns (RequestHash.Request memory r) {
         r = request();
         r.requestId = bytes32(id);

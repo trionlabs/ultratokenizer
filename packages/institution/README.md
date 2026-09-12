@@ -49,12 +49,13 @@ recycle reservation identifiers. Collisions return `request_conflict`.
 
 ## Lifecycle and cap
 
-| Operation             | Allocation                          | Pool accounting              |
-| --------------------- | ----------------------------------- | ---------------------------- |
-| `reserve`             | New exact request becomes `pending` | Full amount enters pending   |
-| Exact `reserve` retry | Existing state is preserved         | Unchanged                    |
-| `markIssued`          | Pending becomes `issued`            | Pending moves to outstanding |
-| `releaseUnused`       | Pending becomes `released`          | Pending is released once     |
+| Operation                | Allocation                                                    | Pool accounting                |
+| ------------------------ | ------------------------------------------------------------- | ------------------------------ |
+| `reserve`                | New exact request becomes `pending`                           | Full amount enters pending     |
+| Exact `reserve` retry    | Existing state is preserved                                   | Unchanged                      |
+| `markIssued`             | Pending becomes `issued`                                      | Pending moves to outstanding   |
+| `releaseUnused`          | Pending becomes `released`                                    | Pending is released once       |
+| `releaseExpiredUnopened` | Expired request with an absent reservation becomes `released` | Local pending is released once |
 
 `setBackingCap({ issuerId, token, milligrams })` sets the local pool cap. A missing
 pool has zero capacity. Aggregate pending plus outstanding exposure cannot exceed
@@ -64,19 +65,26 @@ signed integer range. Pools aggregate the same issuer/token across requests for
 different Gates or chains in this database.
 
 Issued obligations never expire and have no release, burn or redemption method.
-An expired request, expired permit, RPC outage, missing transaction hash, or
-reservation that was never opened leaves the local allocation pending. A failed
-or uncertain `openReservation` attempt can safely retry its identical local
-allocation. A never-opened allocation remains locked until a separate verified
-absence/cancellation process is designed; a timeout is insufficient.
+Local time, expired permits, RPC outages and missing transaction hashes cannot release
+an allocation. A failed or uncertain `openReservation` attempt retains its identical
+local allocation. An expired request with no reservation can close only through
+`releaseExpiredUnopened` with the distinct authenticated observation described below.
 
-Terminal observations must have explicit `kind: 'issued'` or `kind: 'unused'`, the
+Terminal observations must have explicit `kind: 'issued'`, `kind: 'unused'` or
+`kind: 'expired-unopened'`, the
 matching request, chain, Gate, reservation and claim identifiers, and a block
 anchor. Issued observations also identify the issuance transaction. Unused
 observations require `reason: 'revoked-unused' | 'expired-unused'`, a released,
 zero-use reservation and unused request/claim flags. A reservation-opened receipt
 is not an issuance observation. Identical terminal observations are idempotent;
 conflicting terminal observations are rejected.
+
+`kind: 'expired-unopened'` additionally requires a canonical `blockTimestamp` at or
+after the request's `validUntil`, `reservationAbsent: true`, and unused request/claim
+flags. It reports historical absence, not transaction cancellation or future absence.
+The ledger preserves the original digest and permanent reservation-ID lock after release.
+A fresh allocation needs a new request digest and reservation ID; an exact retry stays
+released. Existing issued or released outcomes cannot change to this outcome.
 
 These observations are trusted caller evidence. The library checks their shape
 and binding, but cannot verify their truth. Trusted orchestration must authenticate
@@ -107,7 +115,20 @@ claim, and either actual revocation or an expired reservation. Time passing, an 
 a reverted transaction or a missing response cannot release the local allocation. Unrelated
 requests consuming a holder nonce are not treated as consumption of this claim.
 
-Both paths check Gate runtime, chain and deployment anchor and recheck the target block after
+`settleExpiredUnopened(requestDigest)` checks that the confirmed numeric block's timestamp
+has reached the signed request deadline, all nine reservation fields are at their zero
+defaults, and the exact request and claim remain unused. It rechecks the block hash and
+timestamp before releasing local pending exposure. The admitted immutable Gate rejects
+the old request at and after that deadline; changing the deadline changes its signed digest.
+The runtime pin must identify that reviewed Gate implementation, not arbitrary proxy code.
+
+A delayed issuer call with a longer reservation expiry can still open a reservation for the
+expired request. It cannot mint that request, but its chain pending capacity needs explicit
+revocation or expiry. This local terminal path neither cancels the issuer call nor reports
+chain capacity as released. It does not exclude independently authorized, untracked requests;
+institutional issuance must remain under the authoritative ledger.
+
+All paths check Gate runtime, chain and deployment anchor and recheck the target block after
 dependent reads. A 120-second monotonic operation deadline is checked before any ledger mutation;
 each RPC has a ten-second timeout, no retry and a 512-KiB response bound. There is no history-to-latest
 fallback. Exact terminal retries return the original persisted observation rather than a new block
@@ -139,10 +160,17 @@ Use local storage with working SQLite file locking and protected backups. Copied
 stale-restored or separately recreated databases do not share allocation locks;
 reconciliation before resumed issuance is an operator responsibility.
 
-The database schema is version 2. Earlier schema files are rejected with
-`unsupported_database`; there is no automatic migration, recreation or identity
-reset. Existing institutional state must be preserved for a separately reviewed
-migration and reconciliation process.
+The database schema is version 3, introducing the distinct expired-unopened observation.
+Version-2 databases require explicit `openInstitutionLedger({ path, upgradeFromVersion: 2 })`.
+The upgrade first validates the complete version-2 table/index definitions, which are unchanged,
+then updates only the version marker in the same initialization transaction. Rights, private
+identities, allocations, terminal observations and exposure are preserved. Retrying this option
+on version 3 is harmless. Older, foreign and drifted databases remain rejected without repair.
+
+Stop every prior-version writer and preserve a private backup before the explicit upgrade.
+Version-2 binaries reject version 3 when reopened, but already-open old processes do not check
+the marker again. SQLite transaction locking does not fence out those processes. Never recreate
+a database or reset identities to get around an unsupported version.
 
 Opening a supported version also compares its complete stored table/index definitions with
 the version's creation recipe, under the initialization transaction. Missing or altered fields,

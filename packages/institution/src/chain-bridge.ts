@@ -7,6 +7,7 @@ import {
   http,
   keccak256,
   zeroAddress,
+  zeroHash,
   type Address,
   type Hex,
 } from 'viem';
@@ -198,6 +199,13 @@ export function createInstitutionChainBridge(input: {
         blockNumber,
       }),
     ]);
+    return { reservation, requestUsed, claimUsed };
+  }
+  function matchingReservation(
+    request: IssuanceRequest,
+    observed: Awaited<ReturnType<typeof state>>,
+  ) {
+    const { reservation } = observed;
     requireMatch(
       getAddress(reservation[0]) === request.recipient &&
         getAddress(reservation[1]) === request.token &&
@@ -206,7 +214,6 @@ export function createInstitutionChainBridge(input: {
         reservation[6] === getIssuanceRequestDigest(request) &&
         reservation[7] === request.claimUsageId,
     );
-    return { reservation, requestUsed, claimUsed };
   }
   async function guarded(
     run: (withinDeadline: () => void) => Promise<Allocation>,
@@ -225,6 +232,55 @@ export function createInstitutionChainBridge(input: {
     }
   }
   return Object.freeze({
+    settleExpiredUnopened(digest: Hex): Promise<Allocation> {
+      return guarded(async (withinDeadline) => {
+        const current = allocation(digest);
+        if (current.state !== 'pending') {
+          if (current.observation?.kind === 'expired-unopened') return current;
+          throw new InstitutionChainError('terminal_conflict');
+        }
+        const request = current.request;
+        const head = await reader.getBlockNumber({ cacheTime: 0 });
+        const number = head - BigInt(pins.confirmations) + 1n;
+        requireMatch(number >= BigInt(pins.deploymentBlockNumber));
+        const block = await anchored(number);
+        requireMatch(block.timestamp >= BigInt(request.validUntil));
+        const observed = await state(request, number);
+        const reservation = observed.reservation;
+        // Absence at this block is not cancellation: a late issuer transaction
+        // may still open a reservation, but the original request has expired.
+        requireMatch(
+          reservation[0] === zeroAddress &&
+            reservation[1] === zeroAddress &&
+            reservation[2] === 0n &&
+            reservation[3] === 0n &&
+            reservation[4] === 0n &&
+            reservation[5] === false &&
+            reservation[6] === zeroHash &&
+            reservation[7] === zeroHash &&
+            reservation[8] === false &&
+            !observed.requestUsed &&
+            !observed.claimUsed,
+        );
+        const rechecked = await anchored(number, block.hash);
+        requireMatch(rechecked.timestamp === block.timestamp);
+        withinDeadline();
+        return ledger.releaseExpiredUnopened({
+          kind: 'expired-unopened',
+          requestDigest: current.requestDigest,
+          chainId: request.chainId,
+          gate: request.gate,
+          reservationId: request.reservationId,
+          claimUsageId: request.claimUsageId,
+          blockHash: block.hash,
+          blockNumber: String(block.number),
+          blockTimestamp: String(block.timestamp),
+          reservationAbsent: true,
+          requestUsed: false,
+          claimUsed: false,
+        });
+      });
+    },
     settleIssued(digest: Hex, transactionHash: Hex): Promise<Allocation> {
       return guarded(async (withinDeadline) => {
         const hash = word(transactionHash);
@@ -383,6 +439,7 @@ export function createInstitutionChainBridge(input: {
               blockNumber: block.number,
             }),
           ]);
+        matchingReservation(request, observed);
         requireMatch(
           observed.reservation[3] === BigInt(request.amount) &&
             !observed.reservation[8] &&
@@ -420,6 +477,7 @@ export function createInstitutionChainBridge(input: {
         requireMatch(number >= BigInt(pins.deploymentBlockNumber));
         const block = await anchored(number);
         const observed = await state(request, number);
+        matchingReservation(request, observed);
         requireMatch(
           observed.reservation[8] &&
             observed.reservation[3] === 0n &&

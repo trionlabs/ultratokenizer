@@ -49,13 +49,25 @@ export type UnusedObservation = ChainObservation &
     requestUsed: false;
     claimUsed: false;
   }>;
+export type ExpiredUnopenedObservation = ChainObservation &
+  Readonly<{
+    kind: 'expired-unopened';
+    blockTimestamp: string;
+    reservationAbsent: true;
+    requestUsed: false;
+    claimUsed: false;
+  }>;
 
 export type Allocation = Readonly<{
   rightId: Hex;
   requestDigest: Hex;
   request: IssuanceRequest;
   state: AllocationState;
-  observation: IssuedObservation | UnusedObservation | null;
+  observation:
+    | IssuedObservation
+    | UnusedObservation
+    | ExpiredUnopenedObservation
+    | null;
 }>;
 
 /** Explicit private access for constructing an institution-signed source document. */
@@ -82,5 +94,6 @@ export interface InstitutionLedger {
   getAllocation(requestDigest: Hex): Allocation | null;
   markIssued(observation: IssuedObservation): Allocation;
   releaseUnused(observation: UnusedObservation): Allocation;
+  releaseExpiredUnopened(observation: ExpiredUnopenedObservation): Allocation;
   close(): void;
 }

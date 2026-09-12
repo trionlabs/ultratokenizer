@@ -15,5 +15,6 @@ export type {
   ChainObservation,
   IssuedObservation,
   UnusedObservation,
+  ExpiredUnopenedObservation,
   PrivateClaimIdentity,
 } from './types.js';
