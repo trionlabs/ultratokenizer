@@ -26,6 +26,7 @@ type Operation =
   | 'associating'
   | 'refreshing'
   | 'transferring';
+const OPERATION_DEADLINE_MS = 120_000;
 type Outcome = 'pending' | 'confirmed' | 'unresolved' | 'reverted';
 export type IssuanceSnapshot = Readonly<{
   deployment?: DeploymentConfig;
@@ -37,6 +38,7 @@ export type IssuanceSnapshot = Readonly<{
   simulation: 'unchecked' | 'passed';
   disclosed: boolean;
   busy?: Operation;
+  pendingOperation?: Operation;
   error?: string;
   unknownSubmission?: 'issuance' | 'association' | 'transfer';
   transaction?: Readonly<{ hash: Hex; outcome: Outcome }>;
@@ -90,6 +92,8 @@ export function createIssuanceSession(
   let tokenAttempted:
     { client: IssuanceClient; intent: TokenTransactionIntent } | undefined;
   let tokenSendStarted = false;
+  let foreground: symbol | undefined;
+  let delayed: { id: symbol; operation: Operation } | undefined;
   const listeners = new Set<(value: IssuanceSnapshot) => void>();
   function update(patch: Partial<IssuanceSnapshot>) {
     if (disposed) return;
@@ -99,6 +103,7 @@ export function createIssuanceSession(
   function canReplace() {
     if (
       state.busy ||
+      state.pendingOperation ||
       state.unknownSubmission ||
       state.transaction?.outcome === 'pending' ||
       state.transaction?.outcome === 'unresolved' ||
@@ -132,39 +137,144 @@ export function createIssuanceSession(
     if (!state.bundle) throw new Error();
     return state.bundle;
   }
+  function retainIssuanceHash(hash: Hex) {
+    const previous = state.transaction;
+    update({
+      unknownSubmission: undefined,
+      transaction:
+        previous?.hash === hash
+          ? previous
+          : { hash, outcome: previous ? 'unresolved' : 'pending' },
+      ...(previous && previous.hash !== hash
+        ? {
+            receipt: undefined,
+            error:
+              'The late wallet hash differs from the reconciled hash. Check the original issuance again.',
+          }
+        : { error: undefined }),
+    });
+  }
+  function submissionKind(operation: Operation) {
+    if (operation === 'submitting') return 'issuance' as const;
+    if (tokenSendStarted && operation === 'associating')
+      return 'association' as const;
+    if (tokenSendStarted && operation === 'transferring')
+      return 'transfer' as const;
+    return undefined;
+  }
   async function run(
     operation: Operation,
     task: (revision: number) => Promise<void>,
   ) {
-    if (state.busy || disposed) return;
+    // A deadline does not cancel the original call. Only reconciliation may
+    // overlap a delayed send; it cannot start another wallet action.
+    if (
+      state.busy ||
+      disposed ||
+      (delayed &&
+        !(operation === 'confirming' && submissionKind(delayed.operation)))
+    )
+      return;
+    const id = Symbol(operation);
+    foreground = id;
+    let expired = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     update({ busy: operation, error: undefined });
+    const completion = (async () => {
+      try {
+        await task(walletRevision);
+        if (expired && !submissionKind(operation))
+          update({
+            error:
+              'The delayed check finished. Run the checks again before a new action.',
+          });
+      } catch (error) {
+        const kind = submissionKind(operation);
+        const transaction =
+          kind === 'issuance' ? state.transaction : state.tokenTransaction;
+        // Reconciliation may have completed while the original provider was
+        // silent. Its later error cannot erase an authenticated outcome.
+        if (
+          kind &&
+          ['confirmed', 'reverted'].includes(transaction?.outcome ?? '')
+        )
+          return;
+        if (
+          kind &&
+          error instanceof IssuanceClientError &&
+          ['transaction_uncertain', 'transaction_declined'].includes(error.code)
+        ) {
+          update({
+            unknownSubmission: kind,
+            error:
+              error.code === 'transaction_declined'
+                ? error.message
+                : 'The wallet may have sent this transaction but returned no hash. Inspect wallet activity before any retry.',
+          });
+        } else {
+          // A delayed preflight may eventually prove that no transaction method
+          // was called. Only an explicit client error can clear that ambiguity.
+          const noSend =
+            expired &&
+            kind &&
+            error instanceof IssuanceClientError &&
+            [
+              'issuance_preflight_unavailable',
+              'token_preflight_unavailable',
+              'wrong_chain',
+              'wrong_account',
+              'wallet_rejected',
+              'stale_token_intent',
+            ].includes(error.code);
+          update({
+            ...(noSend ? { unknownSubmission: undefined } : {}),
+            error: operationError(error),
+          });
+        }
+      } finally {
+        if (operation === 'associating' || operation === 'transferring')
+          tokenSendStarted = false;
+        if (delayed?.id === id) {
+          delayed = undefined;
+          update({ pendingOperation: undefined });
+        }
+        if (foreground === id) {
+          foreground = undefined;
+          update({ busy: undefined });
+        }
+      }
+    })();
+    // Receipt reconciliation already has a bounded RPC/receipt deadline and
+    // never creates a wallet transaction. Do not detach concurrent readers.
+    if (operation === 'confirming') return completion;
     try {
-      await task(walletRevision);
-    } catch (error) {
-      if (
-        error instanceof IssuanceClientError &&
-        error.code === 'transaction_uncertain' &&
-        (operation === 'submitting' ||
-          (tokenSendStarted &&
-            ['associating', 'transferring'].includes(operation)))
-      ) {
-        update({
-          unknownSubmission:
-            operation === 'submitting'
-              ? 'issuance'
-              : operation === 'associating'
-                ? 'association'
-                : 'transfer',
-          error:
-            'The wallet may have sent this transaction but returned no hash. Inspect wallet activity before any retry.',
-        });
-      } else update({ error: operationError(error) });
+      await Promise.race([
+        completion,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(() => {
+            expired = true;
+            delayed = { id, operation };
+            if (foreground === id) foreground = undefined;
+            const kind = submissionKind(operation);
+            update({
+              busy: undefined,
+              pendingOperation: operation,
+              ...(kind ? { unknownSubmission: kind } : {}),
+              error: kind
+                ? 'The wallet call is still pending. A timeout does not cancel it. Inspect wallet activity or reconcile its hash; a new submission remains blocked.'
+                : 'The check is still pending. A timeout does not cancel a wallet prompt. Wait for its response before starting another action.',
+            });
+            resolve();
+          }, OPERATION_DEADLINE_MS);
+        }),
+      ]);
     } finally {
-      tokenSendStarted = false;
-      update({ busy: undefined });
+      clearTimeout(timer);
     }
   }
   function unchanged(revision: number) {
+    // Discard late checks and never turn expired token preparation into a send.
+    if (disposed || state.pendingOperation) return false;
     if (revision === walletRevision) return true;
     update({
       error:
@@ -203,8 +313,24 @@ export function createIssuanceSession(
     tokenSendStarted = true;
     const hash = await currentClient.sendTokenTransaction(intent);
     // A wallet/provider change must never discard a returned transaction hash.
+    const previous = state.tokenTransaction;
     update({
-      tokenTransaction: { hash, kind: intent.kind, outcome: 'pending' },
+      unknownSubmission: undefined,
+      tokenTransaction:
+        previous?.hash === hash
+          ? previous
+          : {
+              hash,
+              kind: intent.kind,
+              outcome: previous ? 'unresolved' : 'pending',
+            },
+      ...(previous && previous.hash !== hash
+        ? {
+            error:
+              'The late wallet hash differs from the reconciled hash. Check the original token intent again.',
+            balanceMg: undefined,
+          }
+        : { error: undefined }),
     });
   }
   return {
@@ -330,7 +456,7 @@ export function createIssuanceSession(
         const hash = await currentClient.submit(bundle, signature);
         // Keep a real submitted hash even if the wallet changed while its dialog was open.
         submitted = { client: currentClient, bundle, signature, hash };
-        update({ transaction: { hash, outcome: 'pending' } });
+        retainIssuanceHash(hash);
       });
     },
     recoverIssuanceHash(hash: string) {
@@ -381,7 +507,8 @@ export function createIssuanceSession(
       });
     },
     acknowledgeNotSent() {
-      if (state.busy || !state.unknownSubmission) return;
+      if (state.busy || state.pendingOperation || !state.unknownSubmission)
+        return;
       attempted = undefined;
       if (state.unknownSubmission !== 'issuance') tokenAttempted = undefined;
       update({

@@ -16,9 +16,31 @@ The supported portable signing/receipt path uses canonical 65-byte EOA signature
 
 `validate` checks the imported request/permit/evidence bindings and compares live program, source, issuer, rights, adapter and exact reservation records at one selected block. It checks pending/outstanding exposure and asks the pinned verifier to verify the proof at that same block, then confirms that the block remains canonical according to the RPC. This is a preflight snapshot: state can change before execution. `simulate` executes the complete Gate call without submitting it.
 
-`sign` rechecks the selected wallet after the signing prompt. `submit` and `sendTokenTransaction` recheck account and chain immediately before sending. Explicit user rejection is retained as rejection; other send failures are unresolved because a disconnected wallet may have submitted before returning a hash. Preserve any known hash and reconcile before offering another submission. A client cannot make wallet state checks and network submission one atomic operation.
+`sign` rechecks the selected wallet after the signing prompt. `submit` and `sendTokenTransaction`
+recheck account and chain immediately before sending. A client cannot make wallet state checks
+and network submission one atomic operation.
 
-During `submit()`, an issuance simulation or final preflight outage returns `issuance_preflight_unavailable` before calling the wallet's transaction method. This includes viem's internal chain lookup before dispatch; a different chain produces `wrong_chain`. The boundary is the actual provider transaction method, not the invocation of `writeContract()`. Once that method is dispatched, transport loss or an invalid returned hash remains `transaction_uncertain`; retain the request and any hash and reconcile before retrying. A send uses its own observation state and never dispatches a second transaction through viem's method fallback. Explicit numeric wallet rejection, including nested provider errors, produces `wallet_rejected` for connect, sign and send prompts. Error text alone cannot establish rejection.
+Holder `connect`, `validate`, `sign`, `simulate` and pre-send `submit` checks sanitize ambiguous or
+raw RPC failures as `issuance_preflight_unavailable`. Institution connect/reservation/permit checks
+use that boundary too. These errors mean no new wallet transaction was requested; signing a
+message and reconciling a previous reservation remain distinct. Receipt-only `wait` methods retain
+`transaction_uncertain` when the already-submitted transaction cannot be reconciled. Token reads
+and preparation retain their separate read/preflight codes.
+
+The send boundary is the actual provider transaction method, not the invocation of `writeContract`.
+Viem's internal pre-dispatch chain reads can fail without sending anything. Each send owns its
+own dispatch state and cannot fall back to a second wallet transaction method. After dispatch,
+transport loss or an invalid hash yields `transaction_uncertain`; a recognized nested numeric
+rejection yields `transaction_declined`. Both require retaining the original attempt and
+reconciling before a new submission. Connect/sign rejection remains `wallet_rejected`.
+
+[EIP-1193](https://eips.ethereum.org/EIPS/eip-1193#provider-errors) defines 4001 as user rejection.
+A conforming wallet's decline is not a broadcast. The engine deliberately treats a transaction
+rejection as a provider report, not authenticated evidence of non-submission, because a faulty
+provider may misreport after acceptance. This conservative policy adds a wallet-activity check
+for an ordinary transaction decline. Error text alone cannot establish rejection. No API error
+can stop a caller from deliberately creating another intent; applications must retain pending
+attempts and avoid unsafe new-nonce retries.
 
 Issuance reconciliation binds the exact logical request and holder signature, not an original wallet sender/nonce intent. A confirmed success for that request establishes its issuance. A newly supplied reverted transaction cannot establish that another unknown or retained submission failed, even when its calldata matches. The web session preserves that ambiguity with `issuance_recovery_unresolved`; only the already retained original hash can resolve that attempt as reverted. Invalid recovery candidates never replace the original reference.
 

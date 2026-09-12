@@ -16,11 +16,13 @@ export async function exerciseTokenRecovery({
   tokenAbi,
   screenshots,
   kind,
+  failure = 'lost-hash',
 }) {
   const page = await browser.newPage({
     viewport: { width: 1280, height: 900 },
     reducedMotion: 'reduce',
   });
+  if (failure === 'pending') await page.clock.install();
   const policy = fixture.deployment.auditPolicy;
   const account = fixture.bundle.request.recipient;
   const recipient = '0x9999999999999999999999999999999999999999';
@@ -165,7 +167,7 @@ export async function exerciseTokenRecovery({
     await route.abort();
   });
   await page.addInitScript(
-    ({ initialAccount }) => {
+    ({ initialAccount, failure }) => {
       const listeners = new Map();
       window.tokenWallet = {
         account: initialAccount,
@@ -196,13 +198,19 @@ export async function exerciseTokenRecovery({
             return [window.tokenWallet.account];
           if (method === 'eth_sendTransaction') {
             window.tokenWallet.sends.push(params[0]);
+            if (failure === 'pending')
+              return new Promise((resolve) => {
+                window.finishTokenWallet = resolve;
+              });
+            if (failure === 'decline')
+              throw { code: 4001, message: 'Synthetic rejection report' };
             throw new Error('Synthetic wallet disconnected after broadcast');
           }
           throw new Error(`Unexpected wallet method: ${method}`);
         },
       };
     },
-    { initialAccount: account },
+    { initialAccount: account, failure },
   );
   try {
     await page.goto(base.href, { waitUntil: 'networkidle' });
@@ -234,9 +242,31 @@ export async function exerciseTokenRecovery({
       await page
         .getByRole('button', { name: 'Associate this token', exact: true })
         .click();
+    if (failure === 'pending') {
+      await expect
+        .poll(() => page.evaluate(() => window.tokenWallet.sends.length))
+        .toBe(1);
+      await page.clock.fastForward(120_001);
+    }
     await expect(
       page.getByRole('region', { name: 'Unknown wallet outcome' }),
     ).toBeVisible();
+    if (failure === 'pending') {
+      await expect(
+        page.getByRole('button', {
+          name: 'I checked wallet activity: nothing was sent',
+          exact: true,
+        }),
+      ).toBeDisabled();
+      await expect(
+        page.getByRole('button', { name: 'Reconnect', exact: true }),
+      ).toBeDisabled();
+    }
+    if (failure === 'decline')
+      await expect(
+        page.locator('.issuance-controls .inline-error'),
+      ).toContainText('reported a transaction rejection');
+
     const frozen = page.getByLabel('Frozen token intent', { exact: true });
     await expect(frozen).toContainText(account);
     if (kind === 'transfer') {
@@ -306,6 +336,16 @@ export async function exerciseTokenRecovery({
       `${kind === 'transfer' ? 'Transfer' : 'Association'} · confirmed`,
     );
     await expect(page.locator('.token-workspace')).toContainText(goodHash);
+    if (failure === 'pending') {
+      await page.evaluate((hash) => window.finishTokenWallet(hash), goodHash);
+      await expect(page.locator('.issuance-controls')).not.toContainText(
+        'The original call is still pending.',
+      );
+      await expect(page.locator('.token-workspace')).toContainText(
+        `${kind === 'transfer' ? 'Transfer' : 'Association'} · confirmed`,
+      );
+    }
+
     await expect(page.locator('.claim-quantity')).toHaveText('1.000g');
     assert.deepEqual(
       await page.evaluate(() => window.tokenWallet.methods),
@@ -318,7 +358,7 @@ export async function exerciseTokenRecovery({
     );
     assert.deepEqual(unexpectedRequests, []);
     assert.deepEqual(errors, []);
-    if (kind === 'transfer') {
+    if (kind === 'transfer' && failure === 'lost-hash') {
       await page.screenshot({
         path: new URL('token-recovery-desktop.png', screenshots).pathname,
         fullPage: true,
@@ -335,7 +375,7 @@ export async function exerciseTokenRecovery({
       });
     }
     console.log(
-      `Token browser recovery passed: ${kind}, lost hash, account/chain change, old nonce rejected, exact intent confirmed; one synthetic send, no external RPC.`,
+      `Token browser recovery passed: ${kind}, ${failure}, account/chain change, old nonce rejected, exact intent confirmed; one synthetic send, no external RPC.`,
     );
   } finally {
     await page.close();

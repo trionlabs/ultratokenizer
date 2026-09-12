@@ -40,6 +40,8 @@ const messages = {
     'Enter the full nonzero 32-byte transaction hash from the wallet that submitted this operation.',
   wallet_rejected:
     'The wallet request was declined. No authorization was returned.',
+  transaction_declined:
+    'The wallet reported a transaction rejection without a hash. Retain the original intent and check wallet activity before another submission.',
   transaction_reverted: 'The transaction reverted and did not complete.',
   issuance_mismatch:
     'The transaction does not contain the exact expected issuance.',

@@ -248,7 +248,10 @@ export function createChainContext(input: {
     try {
       return nonzeroHash(await operation(sender));
     } catch (error) {
-      if (rejected(error)) throw new IssuanceClientError('wallet_rejected');
+      if (rejected(error))
+        throw new IssuanceClientError(
+          dispatched ? 'transaction_declined' : 'wallet_rejected',
+        );
       if (
         !dispatched &&
         errorMatches(error, (value) => value instanceof ChainMismatchError)
@@ -269,6 +272,18 @@ export function createChainContext(input: {
     ]);
     if (canonical.hash !== block.hash || rpcChain !== chainId)
       throw new IssuanceClientError('transaction_uncertain');
+  }
+  async function preflight<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (
+        error instanceof IssuanceClientError &&
+        error.code !== 'transaction_uncertain'
+      )
+        throw error;
+      throw new IssuanceClientError('issuance_preflight_unavailable');
+    }
   }
   async function verifyEvidence(proof: ClaimProof) {
     assertProofDeployment(proof, deployment);
@@ -395,6 +410,7 @@ export function createChainContext(input: {
     canonicalReceipt,
     send,
     walletPrompt,
+    preflight,
     verifyEvidence,
     assertCanonical,
   };

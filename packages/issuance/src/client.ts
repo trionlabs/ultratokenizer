@@ -48,6 +48,7 @@ export function createIssuanceClient(input: {
     walletPrompt,
     verifyEvidence,
     assertCanonical,
+    preflight,
   } = context;
   function bundleForDeployment(value: unknown) {
     const bundle = parseIssuanceBundle(value);
@@ -130,46 +131,43 @@ export function createIssuanceClient(input: {
 
   return Object.freeze({
     deployment,
-    async connect() {
-      const [address] = await walletPrompt(() => wallet.requestAddresses());
-      if (!address) throw new IssuanceClientError('wrong_account');
-      await deploymentMatches();
-      return Object.freeze({
-        address: getAddress(address),
-        chainId: policy.chainId,
+    connect() {
+      return preflight(async () => {
+        const [address] = await walletPrompt(() => wallet.requestAddresses());
+        if (!address) throw new IssuanceClientError('wrong_account');
+        await deploymentMatches();
+        return Object.freeze({
+          address: getAddress(address),
+          chainId: policy.chainId,
+        });
       });
     },
-    validate: validateBundle,
-    async sign(value: unknown): Promise<Hex> {
-      const bundle = await validateBundle(value);
-      const account = await activeAccount(bundle.request.recipient);
-      const signature = await walletPrompt(() =>
-        wallet.signTypedData({
-          account,
-          ...getIssuanceRequestTypedData(bundle.request),
-        }),
-      );
-      const checked = await checkedSignature(bundle, signature);
-      await activeAccount(bundle.request.recipient);
-      return checked;
+    validate: (value: unknown) => preflight(() => validateBundle(value)),
+    sign(value: unknown): Promise<Hex> {
+      return preflight(async () => {
+        const bundle = await validateBundle(value);
+        const account = await activeAccount(bundle.request.recipient);
+        const signature = await walletPrompt(() =>
+          wallet.signTypedData({
+            account,
+            ...getIssuanceRequestTypedData(bundle.request),
+          }),
+        );
+        const checked = await checkedSignature(bundle, signature);
+        await activeAccount(bundle.request.recipient);
+        return checked;
+      });
     },
     async simulate(value: unknown, holderSignature: Hex): Promise<void> {
-      await simulation(value, holderSignature);
+      await preflight(() => simulation(value, holderSignature));
     },
     async submit(value: unknown, holderSignature: Hex): Promise<Hex> {
-      let simulated;
-      try {
-        simulated = await simulation(value, holderSignature);
+      const simulated = await preflight(async () => {
+        const result = await simulation(value, holderSignature);
         // Recheck immediately before sending; preflight never requests a transaction.
         await activeAccount(bundleForDeployment(value).request.recipient);
-      } catch (error) {
-        if (
-          error instanceof IssuanceClientError &&
-          error.code !== 'transaction_uncertain'
-        )
-          throw error;
-        throw new IssuanceClientError('issuance_preflight_unavailable');
-      }
+        return result;
+      });
       return send((sender) => sender.writeContract(simulated.request));
     },
     async wait(

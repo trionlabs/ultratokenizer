@@ -836,3 +836,219 @@ for (const outcome of ['confirmed', 'reverted']) {
     assert.equal(session.read().tokenTransaction, undefined);
   });
 }
+
+function deferred() {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+const flushLateReply = () => new Promise((resolve) => setImmediate(resolve));
+
+for (const kind of ['issuance', 'association', 'transfer']) {
+  test(`${kind} transaction decline retains the attempt and blocks a new action`, async () => {
+    const fixture = await createFixture();
+    let sends = 0;
+    const decline = async () => {
+      sends++;
+      throw new IssuanceClientError('transaction_declined');
+    };
+    const { session } = harness(fixture, {
+      submit: decline,
+      sendTokenTransaction: decline,
+    });
+    await ready(session);
+    const send = () =>
+      kind === 'issuance'
+        ? session.submit()
+        : kind === 'association'
+          ? session.associate()
+          : session.transfer(fixture.bundle.request.recipient, '1');
+    await send();
+    assert.equal(session.read().unknownSubmission, kind);
+    assert.match(session.read().error, /reported a transaction rejection/);
+    const intent = session.read().tokenIntent;
+    await send();
+    assert.equal(sends, 1);
+    assert.equal(session.read().tokenIntent, intent);
+    if (kind === 'issuance')
+      await session.recoverIssuanceHash(fixture.transactionHash);
+    else await session.recoverTokenHash(fixture.transactionHash);
+    assert.equal(session.read().unknownSubmission, undefined);
+    assert.equal(
+      (kind === 'issuance'
+        ? session.read().transaction
+        : session.read().tokenTransaction
+      ).outcome,
+      'confirmed',
+    );
+  });
+
+  for (const late of ['hash', 'rejection', 'different-hash']) {
+    test(`${kind} deadline preserves recovery and a late ${late} cannot unlock another wallet call`, async (t) => {
+      const fixture = await createFixture();
+      const entered = deferred();
+      const reply = deferred();
+      let sends = 0;
+      const pending = () => {
+        sends++;
+        entered.resolve();
+        return reply.promise;
+      };
+      const { session } = harness(fixture, {
+        submit: pending,
+        sendTokenTransaction: pending,
+      });
+      await ready(session);
+      t.mock.timers.enable({ apis: ['setTimeout'] });
+      const call =
+        kind === 'issuance'
+          ? session.submit()
+          : kind === 'association'
+            ? session.associate()
+            : session.transfer(fixture.bundle.request.recipient, '1');
+      await entered.promise;
+      t.mock.timers.tick(120_000);
+      await call;
+      assert.equal(session.read().busy, undefined);
+      assert.ok(session.read().pendingOperation);
+      assert.equal(session.read().unknownSubmission, kind);
+      session.acknowledgeNotSent();
+      assert.equal(session.read().unknownSubmission, kind);
+      assert.throws(
+        () => session.loadBundle(JSON.stringify(fixture.bundle)),
+        /Reconcile/,
+      );
+      await session.transfer(fixture.bundle.request.recipient, '1');
+      assert.equal(sends, 1);
+      session.walletChanged();
+      session.setProvider({
+        request() {
+          throw new Error('Use the captured reader');
+        },
+      });
+      if (kind === 'issuance')
+        await session.recoverIssuanceHash(fixture.transactionHash);
+      else await session.recoverTokenHash(fixture.transactionHash);
+      assert.equal(
+        (kind === 'issuance'
+          ? session.read().transaction
+          : session.read().tokenTransaction
+        ).outcome,
+        'confirmed',
+      );
+      // Even a reconciled hash cannot cancel the still-open provider call.
+      assert.ok(session.read().pendingOperation);
+      if (late === 'rejection')
+        reply.reject(new IssuanceClientError('transaction_declined'));
+      else
+        reply.resolve(
+          late === 'hash' ? fixture.transactionHash : `0x${'ab'.repeat(32)}`,
+        );
+      await flushLateReply();
+      assert.equal(session.read().pendingOperation, undefined);
+      assert.equal(session.read().unknownSubmission, undefined);
+      assert.equal(
+        (kind === 'issuance'
+          ? session.read().transaction
+          : session.read().tokenTransaction
+        ).outcome,
+        late === 'different-hash' ? 'unresolved' : 'confirmed',
+      );
+      assert.equal(sends, 1);
+      session.dispose();
+    });
+  }
+}
+
+test('a late wallet hash cannot clear a newer recovery operation busy state', async (t) => {
+  const fixture = await createFixture();
+  const reply = deferred();
+  const recovery = deferred();
+  const { session } = harness(fixture, {
+    submit: () => reply.promise,
+    wait: () => recovery.promise,
+  });
+  await ready(session);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const call = session.submit();
+  t.mock.timers.tick(120_000);
+  await call;
+  const confirming = session.recoverIssuanceHash(fixture.transactionHash);
+  assert.equal(session.read().busy, 'confirming');
+  reply.resolve(fixture.transactionHash);
+  await flushLateReply();
+  assert.equal(session.read().busy, 'confirming');
+  assert.equal(session.read().transaction.hash, fixture.transactionHash);
+  assert.equal(session.read().pendingOperation, undefined);
+  recovery.resolve(fixture.receipt);
+  await confirming;
+  assert.equal(session.read().transaction.outcome, 'confirmed');
+  assert.equal(session.read().busy, undefined);
+});
+
+test('expired token preparation cannot resume into a late wallet send', async (t) => {
+  const fixture = await createFixture();
+  const preparation = deferred();
+  const { session, calls } = harness(fixture, {
+    prepareTokenTransaction: () => preparation.promise,
+  });
+  await session.connect();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const call = session.transfer(fixture.bundle.request.recipient, '1');
+  t.mock.timers.tick(120_000);
+  await call;
+  assert.equal(session.read().unknownSubmission, undefined);
+  assert.equal(session.read().pendingOperation, 'transferring');
+  preparation.resolve(
+    tokenIntent(fixture, {
+      kind: 'transfer',
+      recipient: fixture.bundle.request.recipient,
+      milligrams: '1',
+    }),
+  );
+  await flushLateReply();
+  assert.equal(calls.includes('send-token'), false);
+  assert.equal(session.read().tokenIntent, undefined);
+  assert.equal(session.read().pendingOperation, undefined);
+});
+
+test('a delayed explicit preflight failure clears uncertainty without inventing a transaction', async (t) => {
+  const fixture = await createFixture();
+  const reply = deferred();
+  const { session } = harness(fixture, { submit: () => reply.promise });
+  await ready(session);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const call = session.submit();
+  t.mock.timers.tick(120_000);
+  await call;
+  assert.equal(session.read().unknownSubmission, 'issuance');
+  reply.reject(new IssuanceClientError('issuance_preflight_unavailable'));
+  await flushLateReply();
+  assert.equal(session.read().pendingOperation, undefined);
+  assert.equal(session.read().unknownSubmission, undefined);
+  assert.equal(session.read().transaction, undefined);
+  assert.match(session.read().error, /No wallet transaction was requested/);
+});
+
+test('disposing during token preparation prevents a later wallet call', async () => {
+  const fixture = await createFixture();
+  const preparation = deferred();
+  const { session, calls } = harness(fixture, {
+    prepareTokenTransaction: () => preparation.promise,
+  });
+  await session.connect();
+  const call = session.transfer(fixture.bundle.request.recipient, '1');
+  session.dispose();
+  preparation.resolve(
+    tokenIntent(fixture, {
+      kind: 'transfer',
+      recipient: fixture.bundle.request.recipient,
+      milligrams: '1',
+    }),
+  );
+  await call;
+  assert.equal(calls.includes('send-token'), false);
+});

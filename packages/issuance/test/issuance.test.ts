@@ -923,11 +923,63 @@ await test('nested provider rejection is normalized for actual wallet send and s
           : action === 'token'
             ? client.sendTokenTransaction(intent)
             : client.sign(bundle),
-        hasCode('wallet_rejected'),
+        hasCode(action === 'sign' ? 'wallet_rejected' : 'transaction_declined'),
       );
       assert.equal(state.sends, action === 'sign' ? 0 : 1);
       assert.equal(state.signs, action === 'sign' ? 1 : 0);
     });
+});
+
+await test('a provider rejection after simulated acceptance retains the original nonce for reconciliation', async (t) => {
+  const { state, client, hash } = await rpcFixture(t);
+  const intent = await client.prepareTokenTransaction({
+    kind: 'transfer',
+    recipient: issuer.address,
+    milligrams: '125',
+  });
+  state.onSend = async () => {
+    state.pendingNonce = '0x8';
+    state.transferLog = true;
+  };
+  state.sendError = {
+    code: 4001,
+    message: 'Incorrect rejection after acceptance',
+  };
+  await assert.rejects(
+    client.sendTokenTransaction(intent),
+    hasCode('transaction_declined'),
+  );
+  assert.equal(state.sends, 1);
+  assert.equal(state.sentNonce, '0x7');
+  state.txTo = request.token;
+  state.txData = state.sentData as Hex;
+  await client.waitTokenTransaction(hash, intent);
+  await assert.rejects(
+    client.sendTokenTransaction(intent),
+    hasCode('stale_token_intent'),
+  );
+  assert.equal(state.sends, 1);
+});
+
+await test('holder preflight APIs sanitize read outages before any transaction or signature request', async (t) => {
+  for (const action of ['connect', 'validate', 'sign', 'simulate'] as const) {
+    await t.test(action, async (subtest) => {
+      const { state, client, holderSignature } = await rpcFixture(subtest);
+      state.onRpcRequest = () => {
+        throw new Error('Private provider diagnostic');
+      };
+      await assert.rejects(
+        action === 'connect'
+          ? client.connect()
+          : action === 'simulate'
+            ? client.simulate(bundle, holderSignature)
+            : client[action](bundle),
+        hasCode('issuance_preflight_unavailable'),
+      );
+      assert.equal(state.sends, 0);
+      assert.equal(state.signs, 0);
+    });
+  }
 });
 
 await test('provider transaction failures never trigger a second broadcast or a false rejection', async (t) => {
@@ -1197,7 +1249,7 @@ await test('an internal verifier RPC error is unresolved, while an explicit reve
         : { code: -32603, message: 'backend temporarily unavailable' };
       await assert.rejects(
         client.validate(bundle),
-        hasCode(rejected ? 'invalid_proof' : 'transaction_uncertain'),
+        hasCode(rejected ? 'invalid_proof' : 'issuance_preflight_unavailable'),
       );
     });
 });
@@ -1410,7 +1462,9 @@ await test('institution wallet dispatch and signature errors use the shared boun
             ? 'wrong_chain'
             : scenario === 'outage'
               ? 'issuance_preflight_unavailable'
-              : 'wallet_rejected',
+              : signing
+                ? 'wallet_rejected'
+                : 'transaction_declined',
         ),
       );
       assert.equal(state.sends, scenario === 'rejection' ? 1 : 0);
@@ -1451,7 +1505,7 @@ await test('institution rejects capacity, replay, wrong wallet, changed signer a
         wallet: 'wrong_account',
         revoke: 'deployment_mismatch',
         proof: 'invalid_proof',
-        rpc: 'transaction_uncertain',
+        rpc: 'issuance_preflight_unavailable',
         switch: 'wrong_account',
       } as const;
       await assert.rejects(
@@ -1508,7 +1562,7 @@ await test('institution reservation reconciliation rejects wrong log, calldata, 
         }),
         hasCode(
           scenario === 'reorg'
-            ? 'transaction_uncertain'
+            ? 'issuance_preflight_unavailable'
             : 'reservation_mismatch',
         ),
       );

@@ -38,7 +38,8 @@
   let connected = $derived(!!snapshot.wallet);
   let busy = $derived(!!snapshot.busy || reading || resolving);
   let unresolved = $derived(
-    !!snapshot.unknownSubmission ||
+    !!snapshot.pendingOperation ||
+      !!snapshot.unknownSubmission ||
       ['pending', 'unresolved'].includes(snapshot.transaction?.outcome ?? '') ||
       ['pending', 'unresolved'].includes(
         snapshot.tokenTransaction?.outcome ?? '',
@@ -375,7 +376,10 @@
         </div>
         <button
           class="secondary-button"
-          disabled={!snapshot.providerAvailable || !snapshot.deployment || busy}
+          disabled={!snapshot.providerAvailable ||
+            !snapshot.deployment ||
+            busy ||
+            !!snapshot.pendingOperation}
           onclick={() => session.connect()}
           ><Glyph name="wallet" size={16} />{connected
             ? 'Reconnect'
@@ -478,6 +482,14 @@
           {snapshot.error}
         </p>{/if}
 
+      {#if snapshot.pendingOperation}
+        <p class="status-line" role="status">
+          The original call is still pending. Close or complete its wallet
+          prompt. New wallet actions remain blocked; a returned transaction hash
+          will be retained.
+        </p>
+      {/if}
+
       {#if snapshot.unknownSubmission}
         <section class="transaction-card" aria-label="Unknown wallet outcome">
           <h2>Wallet outcome unknown</h2>
@@ -500,7 +512,7 @@
           >
           <button
             class="secondary-button"
-            disabled={busy}
+            disabled={busy || !!snapshot.pendingOperation}
             onclick={() => session.acknowledgeNotSent()}
             >I checked wallet activity: nothing was sent</button
           >
@@ -592,7 +604,7 @@
               : `${formatGrams(snapshot.balanceMg)} g`}</strong
           ><button
             class="text-link"
-            disabled={!connected || busy}
+            disabled={!connected || busy || !!snapshot.pendingOperation}
             onclick={() => session.refreshBalance()}>Refresh</button
           >
         </div>

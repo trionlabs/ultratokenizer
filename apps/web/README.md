@@ -33,6 +33,23 @@ pending or unknown actions still prevent replacement.
 
 The token panel uses the imported backend configuration. Native HTS exposes association for the connected wallet; ATS omits that action and the session and client both reject it before sending anything. Balance and transfer use the shared ERC-20 methods. Transfer quantities can divide the issued amount into whole milligrams. ENS is optional only for transfers: an explicit Ethereum mainnet RPC resolves the intended Hedera coin type, displays the full resulting address and resolver-default fallback boundary, then freezes that address for the transfer. Changing the input clears the resolution. ENS never changes an imported issuance recipient or grants source/issuer authority.
 
+The session applies a two-minute local deadline to non-reconciliation operations. A deadline
+returns control for inspection; it does not cancel a provider promise or imply non-submission.
+A pending send permits hash reconciliation through its captured client while blocking new wallet
+actions, configuration replacement and the no-send acknowledgement. Expired token preparation
+cannot resume into a wallet send. Late hashes retain their original request or nonce-bound token
+intent; an already confirmed matching hash is not downgraded. A conflicting late hash requires
+reconciliation again. A late original callback cannot clear a newer reconciliation's busy state.
+
+Transaction rejection reports use `transaction_declined` and the same retained-attempt recovery
+path as transport uncertainty. Signing-only decline does not create a transaction recovery state.
+After the provider has settled, explicit wallet-activity review can acknowledge that nothing was
+sent. This is an operator assertion, not a chain proof. A provider that never settles continues
+to block new wallet actions; a local deadline cannot safely cancel it. Session state is in memory,
+so reloading or closing the page is not a safe cancellation mechanism and does not preserve these
+locks. Retain the original request, token intent and any wallet hash outside the page before
+restarting; durable cross-session orchestration is a separate integration requirement.
+
 The currently integrated signing and receipt flow requires EOA signatures. Arbitrary native Ed25519 accounts and contract-wallet issuance are not promised by the UI.
 
 ## Independent verification

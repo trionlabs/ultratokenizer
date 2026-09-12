@@ -41,6 +41,7 @@ export function createIssuerClient(input: {
     verifyEvidence,
     assertCanonical,
     walletPrompt,
+    preflight,
   } = context;
 
   function reservationArgs(proof: ClaimProof) {
@@ -230,34 +231,39 @@ export function createIssuerClient(input: {
 
   return Object.freeze({
     deployment,
-    async connect() {
-      await walletPrompt(() => wallet.requestAddresses());
-      return {
-        address: getAddress(await activeAccount(policy.issuerAddress)),
-        chainId: policy.chainId,
-      };
+    connect() {
+      return preflight(async () => {
+        await walletPrompt(() => wallet.requestAddresses());
+        return {
+          address: getAddress(await activeAccount(policy.issuerAddress)),
+          chainId: policy.chainId,
+        };
+      });
     },
     async openReservation(value: unknown): Promise<Hex> {
-      const proof = parseClaimProofExport(value);
-      const { block, issuer, pool } = await verifyEvidence(proof);
-      const state = await stateAt(proof, block.number);
-      if (state.consumed) throw new IssuanceClientError('already_used');
-      if (state.reservation[0] !== zeroAddress)
-        throw new IssuanceClientError('reservation_mismatch');
-      if (BigInt(proof.request.validUntil) > issuer[1])
-        throw new IssuanceClientError('expired');
-      if (pool[1] + pool[2] + BigInt(proof.request.amount) > pool[0])
-        throw new IssuanceClientError('capacity_exceeded');
-      await assertCanonical(block);
-      const account = await activeAccount(policy.issuerAddress);
-      const simulated = await reader.simulateContract({
-        account,
-        address: policy.gate,
-        abi: ISSUANCE_GATE_ABI,
-        functionName: 'openReservation',
-        args: reservationArgs(proof),
+      const simulated = await preflight(async () => {
+        const proof = parseClaimProofExport(value);
+        const { block, issuer, pool } = await verifyEvidence(proof);
+        const state = await stateAt(proof, block.number);
+        if (state.consumed) throw new IssuanceClientError('already_used');
+        if (state.reservation[0] !== zeroAddress)
+          throw new IssuanceClientError('reservation_mismatch');
+        if (BigInt(proof.request.validUntil) > issuer[1])
+          throw new IssuanceClientError('expired');
+        if (pool[1] + pool[2] + BigInt(proof.request.amount) > pool[0])
+          throw new IssuanceClientError('capacity_exceeded');
+        await assertCanonical(block);
+        const account = await activeAccount(policy.issuerAddress);
+        const simulated = await reader.simulateContract({
+          account,
+          address: policy.gate,
+          abi: ISSUANCE_GATE_ABI,
+          functionName: 'openReservation',
+          args: reservationArgs(proof),
+        });
+        await activeAccount(policy.issuerAddress);
+        return simulated;
       });
-      await activeAccount(policy.issuerAddress);
       return context.send((sender) => sender.writeContract(simulated.request));
     },
     waitReservation,
@@ -266,64 +272,66 @@ export function createIssuerClient(input: {
       reservationTransactionHash: Hex,
       options: { nonce: string; validForSeconds: number },
     ): Promise<IssuanceBundle> {
-      if (
-        !Number.isSafeInteger(options.validForSeconds) ||
-        options.validForSeconds < 1 ||
-        options.validForSeconds > 600
-      )
-        throw new IssuanceClientError('invalid_bundle');
-      const proof = parseClaimProofExport(value);
-      await waitReservation(value, reservationTransactionHash);
-      const { block, issuer } = await liveReservation(proof);
-      const expiry = [
-        block.timestamp + BigInt(options.validForSeconds),
-        issuer[1],
-        BigInt(proof.request.validUntil),
-      ].reduce((a, b) => (a < b ? a : b));
-      const permit = parseIssuerPermit({
-        requestDigest: getIssuanceRequestDigest(proof.request),
-        issuerId: policy.issuerId,
-        keyVersion: policy.issuerKeyVersion,
-        nonce: options.nonce,
-        validUntil: String(expiry),
-      });
-      const used = () =>
-        reader.readContract({
-          address: policy.gate,
-          abi: ISSUANCE_GATE_ABI,
-          functionName: 'usedPermitNonces',
-          args: [
-            policy.issuerId,
-            BigInt(permit.keyVersion),
-            BigInt(permit.nonce),
-          ],
+      return preflight(async () => {
+        if (
+          !Number.isSafeInteger(options.validForSeconds) ||
+          options.validForSeconds < 1 ||
+          options.validForSeconds > 600
+        )
+          throw new IssuanceClientError('invalid_bundle');
+        const proof = parseClaimProofExport(value);
+        await waitReservation(value, reservationTransactionHash);
+        const { block, issuer } = await liveReservation(proof);
+        const expiry = [
+          block.timestamp + BigInt(options.validForSeconds),
+          issuer[1],
+          BigInt(proof.request.validUntil),
+        ].reduce((a, b) => (a < b ? a : b));
+        const permit = parseIssuerPermit({
+          requestDigest: getIssuanceRequestDigest(proof.request),
+          issuerId: policy.issuerId,
+          keyVersion: policy.issuerKeyVersion,
+          nonce: options.nonce,
+          validUntil: String(expiry),
         });
-      if (await used()) throw new IssuanceClientError('already_used');
-      const account = await activeAccount(policy.issuerAddress);
-      const typedData = getIssuerPermitTypedData(proof.request, permit);
-      const signature = bytes(
-        await walletPrompt(() =>
-          wallet.signTypedData({ account, ...typedData }),
-        ),
-        65,
-        65,
-      );
-      if (
-        getAddress(
-          await recoverTypedDataAddress({ ...typedData, signature }),
-        ) !== policy.issuerAddress
-      )
-        throw new IssuanceClientError('invalid_signature');
-      await activeAccount(policy.issuerAddress);
-      const refreshed = await liveReservation(proof);
-      if (refreshed.block.timestamp >= expiry)
-        throw new IssuanceClientError('expired');
-      if (await used()) throw new IssuanceClientError('already_used');
-      return parseIssuanceBundle({
-        format: BUNDLE_FORMAT,
-        ...proof,
-        permit,
-        issuerSignature: signature,
+        const used = () =>
+          reader.readContract({
+            address: policy.gate,
+            abi: ISSUANCE_GATE_ABI,
+            functionName: 'usedPermitNonces',
+            args: [
+              policy.issuerId,
+              BigInt(permit.keyVersion),
+              BigInt(permit.nonce),
+            ],
+          });
+        if (await used()) throw new IssuanceClientError('already_used');
+        const account = await activeAccount(policy.issuerAddress);
+        const typedData = getIssuerPermitTypedData(proof.request, permit);
+        const signature = bytes(
+          await walletPrompt(() =>
+            wallet.signTypedData({ account, ...typedData }),
+          ),
+          65,
+          65,
+        );
+        if (
+          getAddress(
+            await recoverTypedDataAddress({ ...typedData, signature }),
+          ) !== policy.issuerAddress
+        )
+          throw new IssuanceClientError('invalid_signature');
+        await activeAccount(policy.issuerAddress);
+        const refreshed = await liveReservation(proof);
+        if (refreshed.block.timestamp >= expiry)
+          throw new IssuanceClientError('expired');
+        if (await used()) throw new IssuanceClientError('already_used');
+        return parseIssuanceBundle({
+          format: BUNDLE_FORMAT,
+          ...proof,
+          permit,
+          issuerSignature: signature,
+        });
       });
     },
   });

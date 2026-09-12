@@ -207,14 +207,17 @@ try {
     }
   }
   for (const kind of ['transfer', 'association']) {
-    await exerciseTokenRecovery({
-      browser,
-      base,
-      fixture: hts,
-      tokenAbi: HTS_TOKEN_ABI,
-      screenshots,
-      kind,
-    });
+    for (const failure of ['lost-hash', 'decline', 'pending']) {
+      await exerciseTokenRecovery({
+        browser,
+        base,
+        fixture: hts,
+        tokenAbi: HTS_TOKEN_ABI,
+        screenshots,
+        kind,
+        failure,
+      });
+    }
   }
 } finally {
   await browser.close();

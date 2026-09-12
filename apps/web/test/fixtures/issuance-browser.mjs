@@ -326,7 +326,9 @@ export async function exerciseIssuanceRecovery({
       name: 'Issue full claim',
       exact: true,
     });
-    await expect(issue).toBeEnabled();
+    // Validation performs several sequential RPC checks; allow the configured
+    // ten-second transport timeout without confusing it with the test runner default.
+    await expect(issue).toBeEnabled({ timeout: 15_000 });
     if (start === 'unknown' && outcome === 'confirmed') {
       failNextPreflight = true;
       await issue.click();
@@ -503,6 +505,22 @@ export async function exerciseIssuanceRecovery({
     console.log(
       `Issuance browser recovery passed: ${start}, candidate ${outcome} → ${finalOutcome}; unrelated calldata rejected, foreign exact-call revert preserves ambiguity, original hash or successful issuance reconciled; one synthetic send, no external RPC.`,
     );
+  } catch (error) {
+    // This helper loads only synthetic fixtures; keep actionable UI diagnostics
+    // when a production browser assertion fails before receipt recovery.
+    console.error(
+      'Synthetic issuance browser state:',
+      await page.locator('.issuance-controls').innerText(),
+    );
+    console.error(
+      'Synthetic wallet methods:',
+      await page.evaluate(() => window.issuanceWallet.methods),
+    );
+    console.error(
+      'Synthetic RPC methods:',
+      rpcCalls.map((call) => call.method),
+    );
+    throw error;
   } finally {
     await page.close();
   }
