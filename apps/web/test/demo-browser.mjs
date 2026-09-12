@@ -6,20 +6,7 @@ const base = process.env.PREVIEW_URL ?? 'http://127.0.0.1:4173/';
 const origin = new URL(base).origin;
 const demo = new URL('demo/', base).href;
 const browser = await chromium.launch({ headless: true });
-const parts = ['Claim', 'Proof', 'Permission', 'Check'];
-const steps = [
-  'The problem it solves',
-  'What the document carries',
-  'Proving the signature without showing the document',
-  'One hash for the whole request',
-  'Three languages, one answer',
-  'All of it, or none of it',
-  'What the institution does',
-  'The ten checks',
-  'One door into the token',
-  'What the registry is for',
-];
-const reference = ['Current state', 'Prize criteria', 'Where to look next'];
+const acts = ['Prove', 'Authorise', 'Mint'];
 const published = await readFile('static/deployment.json', 'utf8').catch(
   () => undefined,
 );
@@ -47,10 +34,10 @@ function isolate(page, external, config) {
   });
 }
 
-/** Every heading inside a visible step must be readable without scrolling. */
-function parkedHeadings(page) {
+/** Nothing a reader must see may sit invisible behind an unfired observer. */
+function parked(page) {
   return page.evaluate(() =>
-    [...document.querySelectorAll('main .step:not([hidden]) h3')]
+    [...document.querySelectorAll('main .act h2, main .act .plain')]
       .filter((node) => {
         const style = getComputedStyle(node);
         const box = node.getBoundingClientRect();
@@ -66,7 +53,8 @@ function parkedHeadings(page) {
 }
 
 try {
-  // The walkthrough must teach the protocol without a published deployment.
+  // The whole shape of the system is readable without a published deployment
+  // and without clicking anything.
   {
     const external = [];
     const errors = [];
@@ -76,17 +64,14 @@ try {
     for (const width of [1440, 768, 390, 320]) {
       await page.setViewportSize({ width, height: 960 });
       await page.goto(demo, { waitUntil: 'networkidle' });
-      await expect(
-        page.getByRole('heading', {
-          name: 'A signed document becomes exactly one token.',
-        }),
-      ).toBeVisible();
-      // Every step stays in the document even while its part is closed.
-      for (const label of [...steps, ...reference])
+      for (const name of acts)
         await expect(
-          page.locator(`main section[aria-label="${label}"]`),
-        ).toHaveCount(1);
+          page.locator(`main section[aria-label="${name}"]`),
+        ).toBeVisible();
+      // Five stations carry the end-to-end journey above the three acts.
+      await expect(page.locator('.journey li')).toHaveCount(5);
       await expect(page.locator('.header-wallet')).toHaveCount(0);
+      assert.deepEqual(await parked(page), []);
       assert(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -99,16 +84,14 @@ try {
           fullPage: true,
         });
     }
-    await expect(page.locator('.notice')).toContainText(
-      'has not published a deployment configuration',
-    );
-    assert.deepEqual(await parkedHeadings(page), []);
+    // The honest limit is stated on the page itself, not only in the detail.
+    await expect(page.locator('.pending-badge')).toContainText('Not live yet');
     assert.deepEqual(external, []);
     assert.deepEqual(errors, []);
     await page.close();
   }
 
-  // Four parts, stepped in order, each showing only its own steps.
+  // Detail is available under every act and opens together on request.
   {
     const external = [];
     const errors = [];
@@ -117,60 +100,41 @@ try {
     await isolate(page, external, published);
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(demo, { waitUntil: 'networkidle' });
-    await expect(page.locator('.rail button')).toHaveCount(parts.length);
-    await expect(page.getByRole('button', { name: 'Back' })).toBeDisabled();
-    const visible = async () =>
-      page.locator('main .step:not([hidden])').count();
-    // Exactly one step owns the frame, so a 16:9 screen never has to scroll.
-    assert.equal(await visible(), 1, 'one step at a time');
-    for (let index = 1; index < steps.length; index += 1) {
-      await page.getByRole('button', { name: 'Next' }).click();
-      await expect(
-        page.locator(`main section[aria-label="${steps[index]}"]`),
-      ).toBeVisible();
-      assert.equal(await visible(), 1, `step ${index + 1} stands alone`);
-      assert.deepEqual(await parkedHeadings(page), []);
-    }
-    await expect(page.getByRole('button', { name: 'Next' })).toBeDisabled();
-    // A part chip jumps to where that part begins.
-    await page.getByRole('button', { name: 'Permission' }).click();
+    const open = async () =>
+      page.locator('main .act details.deeper[open]').count();
+    assert.equal(await open(), 0, 'detail starts closed');
+    await page.getByRole('button', { name: 'Show the detail' }).click();
+    assert.equal(await open(), acts.length, 'every act opens together');
+    // The three names a reader will otherwise conflate are told apart.
     await expect(
-      page.locator('main section[aria-label="All of it, or none of it"]'),
-    ).toBeVisible();
-    assert.deepEqual(external, []);
-    assert.deepEqual(errors, []);
-    await page.close();
-  }
-
-  // "Show everything" must open all ten steps and retire the stepper controls.
-  {
-    const external = [];
-    const errors = [];
-    const page = await browser.newPage();
-    page.on('pageerror', (error) => errors.push(error.message));
-    await isolate(page, external, published);
-    await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto(demo, { waitUntil: 'networkidle' });
-    await page.getByRole('button', { name: 'Show everything' }).click();
-    await expect(page.locator('main .step[hidden]')).toHaveCount(0);
-    await expect(page.locator('.rail')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Next' })).toHaveCount(0);
-    assert.deepEqual(await parkedHeadings(page), []);
+      page.locator('main section[aria-label="Prove"] .names'),
+    ).toContainText('zkPDF is the library');
+    await expect(
+      page.locator('main section[aria-label="Prove"] .names'),
+    ).toContainText('SP1 is the zero-knowledge VM');
+    // Sub-steps are numbered inside their act, so they read as a sequence.
+    await expect(
+      page.locator('main section[aria-label="Prove"] .deeper-index'),
+    ).toHaveText(['1.1', '1.2', '1.3']);
+    await expect(
+      page.locator('main section[aria-label="Mint"] .deeper-index'),
+    ).toHaveText(['3.1', '3.2']);
+    assert.deepEqual(await parked(page), []);
     assert(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth,
       ),
       'expanded view overflows',
     );
-    await page.getByRole('button', { name: 'Step through it' }).click();
-    await expect(page.locator('main .step:not([hidden])')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Hide the detail' }).click();
+    assert.equal(await open(), 0, 'detail closes again');
     assert.deepEqual(external, []);
     assert.deepEqual(errors, []);
     await page.close();
   }
 
-  // With a published configuration the reference block shows outbound links.
-  if (published) {
+  // Every act cites something a reader can open independently.
+  {
     const external = [];
     const errors = [];
     const page = await browser.newPage();
@@ -178,26 +142,25 @@ try {
     await isolate(page, external, published);
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(demo, { waitUntil: 'networkidle' });
-    const gate = JSON.parse(published).auditPolicy.gate;
-    const state = page.locator('main section[aria-label="Current state"]');
-    await expect(state).toContainText(gate);
-    await expect(
-      state.locator(`a[href="https://hashscan.io/testnet/contract/${gate}"]`),
-    ).toHaveCount(1);
-    await expect(
-      state.locator(`a[href="https://repo.sourcify.dev/296/${gate}"]`),
-    ).toHaveCount(1);
-    // Every step cites something a reader can open independently.
-    for (const label of steps)
+    for (const name of acts)
       await expect(
-        page.locator(`main section[aria-label="${label}"] .sources a`).first(),
+        page.locator(`main section[aria-label="${name}"] .sources a`).first(),
       ).toHaveAttribute('href', /^https:\/\//);
+    if (published) {
+      const gate = JSON.parse(published).auditPolicy.gate;
+      const state = page.locator('details[aria-label="Current state"]');
+      await state.locator('summary').click();
+      await expect(state).toContainText(gate);
+      await expect(
+        state.locator(`a[href="https://hashscan.io/testnet/contract/${gate}"]`),
+      ).toHaveCount(1);
+    }
     assert.deepEqual(external, [], 'citations must never be fetched');
     assert.deepEqual(errors, []);
     await page.close();
   }
 
-  // Reduced motion must leave every visible step complete.
+  // Reduced motion must leave the journey strip complete and stationary.
   {
     const external = [];
     const errors = [];
@@ -207,17 +170,17 @@ try {
     await isolate(page, external, published);
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(demo, { waitUntil: 'networkidle' });
-    await page.getByRole('button', { name: 'Show everything' }).click();
-    await page.waitForTimeout(1200);
-    await expect(page.locator('main .step[hidden]')).toHaveCount(0);
-    assert.deepEqual(await parkedHeadings(page), []);
+    await expect(page.locator('.journey li[data-on="true"]')).toHaveCount(5);
+    await page.waitForTimeout(1400);
+    await expect(page.locator('.journey li[data-on="true"]')).toHaveCount(5);
+    assert.deepEqual(await parked(page), []);
     assert.deepEqual(external, []);
     assert.deepEqual(errors, []);
     await page.close();
   }
 
   console.log(
-    'Walkthrough: four parts over ten steps, every step cited, fail-closed configuration, expanded view complete, reduced motion stationary, no external requests.',
+    'Walkthrough: three acts side by side, journey strip complete, numbered sub-steps, every act cited, fail-closed configuration, reduced motion stationary, no external requests.',
   );
 } finally {
   await browser.close();
