@@ -304,12 +304,36 @@ export async function exerciseIssuanceRecovery({
     for (const [label, value] of [
       ['Import deployment configuration', fixture.deployment],
       ['Import issuance bundle', bundle],
-    ])
+    ]) {
+      await expect(page.getByLabel(label, { exact: true })).toBeEnabled();
       await page.getByLabel(label, { exact: true }).setInputFiles({
         name: 'synthetic-issuance-recovery.json',
         mimeType: 'application/json',
         buffer: Buffer.from(JSON.stringify(value)),
       });
+      await expect(page.getByLabel(label, { exact: true })).toBeEnabled();
+    }
+    if (start === 'unknown' && outcome === 'confirmed') {
+      await page.evaluate((address) => {
+        window.issuanceWallet.account = address;
+      }, foreignSender);
+      await page
+        .locator('.stage-action')
+        .getByRole('button', { name: 'Connect wallet', exact: true })
+        .click();
+      await expect(page.locator('.stage-action')).toContainText(
+        'This wallet does not match.',
+      );
+      await expect(
+        page.locator('.flow-rail [aria-current="step"]'),
+      ).toContainText('Wallet');
+      await expect(
+        page.getByRole('button', { name: 'Check bundle', exact: true }),
+      ).toHaveCount(0);
+      await page.evaluate((address) => {
+        window.issuanceWallet.account = address;
+      }, request.recipient);
+    }
     await page
       .locator('.stage-action')
       .getByRole('button', { name: 'Connect wallet', exact: true })
@@ -318,8 +342,13 @@ export async function exerciseIssuanceRecovery({
       .getByRole('button', { name: 'Check bundle', exact: true })
       .click();
     await expect(
-      page.getByRole('heading', { name: 'Authorize issuance' }),
+      page.getByRole('heading', { name: 'Approve the mint' }),
     ).toBeVisible();
+    await expect(page.locator('.proof-object')).toHaveAttribute(
+      'data-state',
+      'verified',
+    );
+    await expect(page.locator('.artifact-body')).not.toHaveClass(/is-coin/);
     await page.getByRole('checkbox').check();
     await page
       .getByRole('button', { name: 'Sign request', exact: true })
@@ -328,7 +357,7 @@ export async function exerciseIssuanceRecovery({
       .getByRole('button', { name: 'Check before sending', exact: true })
       .click();
     const issue = page.getByRole('button', {
-      name: 'Issue 1.000 g',
+      name: 'Mint 1.000 g',
       exact: true,
     });
     // Validation performs several sequential RPC checks; allow the configured
@@ -350,6 +379,10 @@ export async function exerciseIssuanceRecovery({
       await expect(issue).toBeEnabled();
     }
     await issue.click();
+    await expect(page.locator('.artifact-body')).not.toHaveClass(/is-coin/);
+    await expect(
+      page.locator('.flow-rail [aria-current="step"]'),
+    ).toContainText('Mint');
     const transaction = page.getByRole('region', {
       name: 'Issuance transaction',
       exact: true,
@@ -435,7 +468,7 @@ export async function exerciseIssuanceRecovery({
         await expect(transaction).toContainText(originalHash);
       }
       await expect(
-        page.getByRole('button', { name: 'Issue 1.000 g', exact: true }),
+        page.getByRole('button', { name: 'Mint 1.000 g', exact: true }),
       ).toHaveCount(0);
       // A foreign sender/nonce's exact-call revert cannot settle the original send.
       finalHash = start === 'unknown' ? successHash : originalHash;
@@ -444,6 +477,19 @@ export async function exerciseIssuanceRecovery({
       await reconcile.click();
     }
     await expect(transaction.locator('.status-pill')).toHaveText(finalOutcome);
+    await expect(page.locator('.proof-object')).toHaveAttribute(
+      'data-state',
+      finalOutcome === 'confirmed' ? 'minted' : 'reverted',
+    );
+    if (finalOutcome === 'confirmed') {
+      await expect(page.locator('.artifact-body')).toHaveClass(/is-coin/);
+      await expect(page.locator('.flow-rail li.done')).toHaveCount(6);
+    } else {
+      await expect(page.locator('.artifact-body')).not.toHaveClass(/is-coin/);
+      await expect(
+        page.locator('.flow-rail [aria-current="step"]'),
+      ).toContainText('Mint');
+    }
     await expect(transaction).toContainText(finalHash);
     await expect(
       page.getByRole('region', { name: 'Unknown wallet outcome' }),

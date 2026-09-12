@@ -13,6 +13,7 @@
       | 'reset'
       | 'wallet'
       | 'plus'
+      | 'receipt'
       | 'shield';
     size?: number;
   } = $props();
@@ -48,6 +49,9 @@
       d="M4 6h15v4M4 6V4h13M4 6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h15V10H4"
     /><path d="M19 13h-5v5h5m-2-3h.01" />
   {:else if name === 'plus'}<path d="M12 5v14M5 12h14" />
+  {:else if name === 'receipt'}<path
+      d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Zm3 5h6m-6 4h6"
+    />
   {:else}<path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z" /><path
       d="m8 12 3 3 5-6"
     />{/if}

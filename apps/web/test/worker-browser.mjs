@@ -27,12 +27,15 @@ const browser = await chromium.launch({
     : {}),
   headless: true,
 });
-const upload = (page, label, value, filename = 'input.json') =>
-  page.getByLabel(label, { exact: true }).setInputFiles({
+const upload = async (page, label, value, filename = 'input.json') => {
+  await expect(page.getByLabel(label, { exact: true })).toBeEnabled();
+  await page.getByLabel(label, { exact: true }).setInputFiles({
     name: filename,
     mimeType: 'application/json',
     buffer: Buffer.isBuffer(value) ? value : Buffer.from(JSON.stringify(value)),
   });
+  await expect(page.getByLabel(label, { exact: true })).toBeEnabled();
+};
 const noOverflow = async (page) =>
   assert(
     await page.evaluate(
@@ -116,7 +119,7 @@ try {
   await expect(
     page.getByRole('heading', { name: 'Your gold. A new form.' }),
   ).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Issue 1.000 g' })).toHaveCount(
+  await expect(page.getByRole('button', { name: 'Mint 1.000 g' })).toHaveCount(
     0,
   );
   const headerWallet = page.locator('.header-wallet');
@@ -147,13 +150,40 @@ try {
     ).pathname,
     fullPage: true,
   });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const stillTransform = await page
+    .locator('.artifact-body')
+    .evaluate((element) => getComputedStyle(element).transform);
+  const motionScene = await page.locator('.proof-object').boundingBox();
+  await page.mouse.move(motionScene.x + 30, motionScene.y + 50);
+  await expect
+    .poll(() =>
+      page
+        .locator('.artifact-body')
+        .evaluate((element) => getComputedStyle(element).transform),
+    )
+    .not.toBe(stillTransform);
+  await page.mouse.move(0, 0);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(page.locator('.artifact-lift')).toHaveCSS(
+    'animation-name',
+    'none',
+  );
   await page.evaluate(() => {
     document.documentElement.style.fontSize = '200%';
   });
   await noOverflow(page);
+  await page
+    .getByRole('button', { name: 'Set up network', exact: true })
+    .click();
   await expect(
     page.getByLabel('Import deployment configuration', { exact: true }),
   ).toBeVisible();
+  await noOverflow(page);
+  await page.getByRole('button', { name: 'Close network setup' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Set up network', exact: true }),
+  ).toBeFocused();
   await page.screenshot({
     path: new URL(
       '../../../.scratch/web-qa/issuance-large-text.png',
@@ -167,11 +197,22 @@ try {
   await page.setViewportSize({ width: 320, height: 640 });
   await noOverflow(page);
   const firstUpload = await page
-    .getByLabel('Import deployment configuration', { exact: true })
+    .getByRole('button', { name: 'Set up network', exact: true })
     .boundingBox();
   assert.ok(
     firstUpload && firstUpload.y + firstUpload.height <= 640,
     'Mobile setup starts in the first viewport',
+  );
+  const sceneBox = await page.locator('.proof-object').boundingBox();
+  const paperBox = await page.locator('.artifact-body').boundingBox();
+  const captionBox = await page.locator('.artifact-caption').boundingBox();
+  assert.ok(
+    sceneBox &&
+      paperBox &&
+      captionBox &&
+      paperBox.y >= sceneBox.y &&
+      paperBox.y + paperBox.height < captionBox.y,
+    'The mobile document is fully visible above its caption',
   );
   await page.setViewportSize({ width: 1280, height: 900 });
 
@@ -179,9 +220,27 @@ try {
     ...fixture.deployment,
     rpcUrl: new URL('rpc-test', base).href,
   };
+  await page
+    .getByRole('button', { name: 'Set up network', exact: true })
+    .click();
+  await page
+    .getByLabel('Import deployment configuration', { exact: true })
+    .setInputFiles({
+      name: 'invalid.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from('{}'),
+    });
+  await expect(page.locator('.setup-dialog .inline-error')).toBeVisible();
   await upload(page, 'Import deployment configuration', deployment);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('#issuance-title')).toBeFocused();
   await upload(page, 'Import issuance bundle', fixture.bundle);
   await expect(page.locator('.proof-sheet')).toContainText('1.000 g');
+  await expect(page.locator('.proof-object')).toHaveAttribute(
+    'data-state',
+    'loaded',
+  );
+  await expect(page.locator('.artifact-seal')).not.toHaveClass(/visible/);
   await expect(
     page.locator('.engine-stage input[inputmode="decimal"]'),
   ).toHaveCount(0);
@@ -469,7 +528,7 @@ try {
       .getByRole('button', { name: 'Connect wallet', exact: true }),
   ).toBeDisabled();
   await expect(
-    unsupported.getByRole('button', { name: 'Issue 1.000 g' }),
+    unsupported.getByRole('button', { name: 'Mint 1.000 g' }),
   ).toHaveCount(0);
   await unsupported.goto(new URL('verify/', base).href);
   await upload(unsupported, 'Choose issuance receipt JSON', fixture.receipt);

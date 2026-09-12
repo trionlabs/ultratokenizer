@@ -1,16 +1,16 @@
 :root {
   font-family: 'DM Sans', sans-serif;
-  color: #242d29;
-  background: #f6f5f0;
+  color: #302b38;
+  background: #f7f6f9;
   font-synthesis: none;
   font-weight: 400;
   line-height: 1.5;
-  --ink: #242d29;
-  --muted: #677069;
-  --line: #dfe2d9;
-  --green: #194e3d;
-  --gold: #a17a30;
-  --soft: #edf2ea;
+  --ink: #302b38;
+  --muted: #736c7e;
+  --line: #e4e0e9;
+  --green: #75628f;
+  --gold: #88769f;
+  --soft: #eeebf2;
 }
 * {
   box-sizing: border-box;
@@ -42,7 +42,7 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 summary:focus-visible {
-  outline: 3px solid #315e44;
+  outline: 3px solid #75628f;
   outline-offset: 4px;
 }
 a {

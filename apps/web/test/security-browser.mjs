@@ -95,12 +95,15 @@ async function pageFor(base, javaScriptEnabled = true) {
   });
   return { page, external };
 }
-const upload = (page, label, value) =>
-  page.getByLabel(label, { exact: true }).setInputFiles({
+const upload = async (page, label, value) => {
+  await expect(page.getByLabel(label, { exact: true })).toBeEnabled();
+  await page.getByLabel(label, { exact: true }).setInputFiles({
     name: 'synthetic-policy-test.json',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(value)),
   });
+  await expect(page.getByLabel(label, { exact: true })).toBeEnabled();
+};
 try {
   for (const kind of ['deployment', 'ENS', 'verification']) {
     await check(
@@ -154,7 +157,7 @@ try {
               rpcUrl: ipv6,
             });
             await expect(
-              page.locator('.activity-rail .inline-error'),
+              page.locator('.stage-action .inline-error'),
             ).toContainText(guidance);
             await expect(page.locator('.proof-sheet')).toContainText('1.000 g');
           } else {

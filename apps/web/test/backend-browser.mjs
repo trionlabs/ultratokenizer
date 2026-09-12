@@ -27,12 +27,15 @@ const browser = await chromium.launch({
     : {}),
   headless: true,
 });
-const upload = (page, label, value) =>
-  page.getByLabel(label, { exact: true }).setInputFiles({
+const upload = async (page, label, value) => {
+  await expect(page.getByLabel(label, { exact: true })).toBeEnabled();
+  await page.getByLabel(label, { exact: true }).setInputFiles({
     name: 'synthetic-backend-test.json',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(value)),
   });
+  await expect(page.getByLabel(label, { exact: true })).toBeEnabled();
+};
 
 try {
   const page = await browser.newPage({
@@ -133,7 +136,7 @@ try {
     page.getByLabel('Transfer amount (g)', { exact: true }),
   ).toHaveValue('0.125');
   await expect(page.locator('.session-list')).toContainText('1.000 g XAU');
-  await expect(page.getByRole('button', { name: 'Issue 1.000 g' })).toHaveCount(
+  await expect(page.getByRole('button', { name: 'Mint 1.000 g' })).toHaveCount(
     0,
   );
   await expect(
