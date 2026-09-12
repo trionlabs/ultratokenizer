@@ -705,32 +705,12 @@
   .ub-verdict {
     padding: 17px;
   }
-  .nav-tabs[data-slot='tabs-list'] {
-    gap: 14px;
-    flex-wrap: wrap;
-    height: auto;
-  }
-  .tabbar {
-    flex-wrap: wrap;
-    padding-bottom: 10px;
-  }
-  .nav-tabs [data-slot='tabs-trigger'] {
-    font-size: 0.875rem;
-    min-height: 44px;
-    padding-bottom: 10px;
-  }
   .topbar {
     padding: 0 5%;
     height: 74px;
   }
   .brand {
     font-size: 1.25rem;
-  }
-  .header-right .edition {
-    display: none;
-  }
-  .tag {
-    font-size: 0.75rem;
   }
   .ub-test-heading h3,
   .ub-contract h3,
