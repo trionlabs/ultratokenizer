@@ -136,6 +136,21 @@
     </p>{/if}
   {#if deployment && snapshot}
     {@const policy = deployment.auditPolicy}
+    {#snippet contractLinks(address: string)}
+      {#if policy.chainId === '296'}
+        <br /><a
+          href={`https://hashscan.io/testnet/contract/${address}`}
+          target="_blank"
+          rel="noopener noreferrer">HashScan</a
+        >
+        ·
+        <a
+          href={`https://repo.sourcify.dev/296/${address}`}
+          target="_blank"
+          rel="noopener noreferrer">View source</a
+        >
+      {/if}
+    {/snippet}
     <div class="portal-grid">
       <div>
         <section class="portal-card">
@@ -158,7 +173,9 @@
             </div>
             <div>
               <dt>Gate</dt>
-              <dd class="mono">{policy.gate}</dd>
+              <dd class="mono">
+                {policy.gate}{@render contractLinks(policy.gate)}
+              </dd>
             </div>
             <div>
               <dt>Governor</dt>
@@ -166,7 +183,11 @@
             </div>
             <div>
               <dt>Token</dt>
-              <dd class="mono">{snapshot.rights.token}</dd>
+              <dd class="mono">
+                {snapshot.rights.token}{@render contractLinks(
+                  snapshot.rights.token,
+                )}
+              </dd>
             </div>
             <div>
               <dt>Issuer ID</dt>
@@ -243,7 +264,11 @@
             </div>
             <div>
               <dt>Verifier</dt>
-              <dd class="mono">{snapshot.program.verifier}</dd>
+              <dd class="mono">
+                {snapshot.program.verifier}{@render contractLinks(
+                  snapshot.program.verifier,
+                )}
+              </dd>
             </div>
             <div>
               <dt>Verifier runtime hash</dt>
@@ -352,6 +377,10 @@
                   <dd>{entry.agentId}</dd>
                 </div>
                 <div>
+                  <dt>NFT owner</dt>
+                  <dd class="mono">{entry.owner}</dd>
+                </div>
+                <div>
                   <dt>Service wallet</dt>
                   <dd class="mono">{entry.wallet}</dd>
                 </div>
@@ -360,7 +389,27 @@
                   <dd class="mono">{entry.metadataHash}</dd>
                 </div>
               </dl>
-              {#if entry.role === 'auditor'}<p class="muted">
+              {#if entry.role === 'auditor'}
+                {@const accounts = [
+                  entry.owner.toLowerCase(),
+                  entry.wallet.toLowerCase(),
+                ]}
+                {@const sharedGovernor = accounts.includes(
+                  snapshot.governor.toLowerCase(),
+                )}
+                {@const sharedIssuer = accounts.includes(
+                  snapshot.issuer.signer.toLowerCase(),
+                )}
+                {#if sharedGovernor || sharedIssuer}<p class="notice">
+                    Shared control: this audit record's NFT owner or service
+                    wallet matches {sharedGovernor
+                      ? 'the Gate governor'
+                      : ''}{sharedGovernor && sharedIssuer
+                      ? ' and '
+                      : ''}{sharedIssuer ? 'the issuer signer' : ''}. Auditor
+                    independence is not established.
+                  </p>{/if}
+                <p class="muted">
                   A registered audit identity is not evidence that an audit was
                   performed or that its author is independent.
                 </p>{/if}

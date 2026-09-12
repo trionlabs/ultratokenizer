@@ -276,6 +276,11 @@
     The issuer reserves an allocation and signs its permit. The demo authority
     admits the configured signer and manages the Gate.
   </p>
+  <p class="muted">
+    Signed source documents and proof preparation happen outside this browser.
+    This console starts with a public claim-proof export. Follow the
+    <a href="/demo/">demo institution workflow</a> from source to permit.
+  </p>
   <div class="status-line">
     <div class="actions" role="group" aria-label="Institution role">
       <button

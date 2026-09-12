@@ -209,6 +209,13 @@ page reload.
 
 ## Institution and Trust workspaces
 
+`/demo/` is the three-role walkthrough for holders, institutions and reviewers. Its illustrated
+document/proof/token flow explains the protocol; it does not report completed transactions.
+Role selectors show the required materials and link to the corresponding live workspace. Source
+document signing and private ledger operations remain institution tooling outside the browser.
+The holder imports the institution's public proof-and-permit package, and receipt verification
+needs no wallet. The walkthrough does not fetch third-party resources or create transactions.
+
 `/institution/` loads the same site-managed deployment as the holder. It offers two wallet roles:
 
 - The configured issuer imports a strict Groth16 claim-proof export, reviews its exact allocation,
@@ -239,6 +246,11 @@ zkEmail are not implemented by this UI.
 RPC: role denial, an exact cap transaction and reconciliation, no automatic sends, and 320px layout.
 It does not establish live Hedera acceptance. `npm test` includes the authority client's canonical
 state, nonce, runtime, amount and submission-failure checks.
+
+The Trust page links Gate, token and verifier addresses to HashScan and Sourcify on chain 296.
+A link alone is not a source-match result. Discovery cards expose NFT owners and service wallets;
+an auditor owner or wallet matching the current governor or issuer signer is labelled shared
+control. Different addresses alone do not establish an independent audit.
 
 The optional `/discovery.json` sidecar is read only by `/trust/`. Its strict
 `ultratokenizer.discovery.v1` schema binds `chainId`, `gate`, `issuerId`, an `identityRegistry`
