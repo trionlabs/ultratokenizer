@@ -21,39 +21,28 @@
   const steps = [
     {
       id: 'The problem it solves',
-      short: 'The problem',
-      title: 'A paper allocation only works inside one institution.',
-      lead: 'A gold allocation on paper is a promise from one institution to one person. You cannot send it, split it, or let anyone else check it without asking that institution first.',
-      contrast: {
-        head: 'Not this, but that',
-        body: 'Minting a token for it does not fix that by itself. It moves the trust to whoever runs the minter. This engine removes that step: the minter cannot mint without a proof.',
-      },
-      sources: [
-        {
-          label: 'Engine scope and its four separate claims',
-          href: `${repo}README.md`,
-        },
-      ],
+      part: 'Claim',
+      title: 'A paper allocation only moves inside one institution.',
+      lead: 'You cannot send it, split it, or let anyone else check it.',
+      contrast:
+        'A token alone does not fix that. It moves the trust to whoever runs the minter.',
+      sources: [{ label: 'Engine scope', href: `${repo}README.md` }],
       visual: Step01Problem,
     },
     {
       id: 'What the document carries',
-      short: 'The document',
-      title: "The wallet address is inside the signature's reach.",
-      lead: 'The signed document carries a 196-byte block, and the recipient wallet address sits inside it.',
-      evidence:
-        'Eight fields at fixed offsets: magic, source id, claim id, issuer id, holder address at bytes 104 to 124, a capacity of 1000 milligrams, a unit binding, and an expiry. The signature covers all of them.',
-      contrast: {
-        head: 'Not this, but that',
-        body: 'A stolen document is useless to a thief. The circuit rejects any recipient other than the one signed in.',
-      },
+      part: 'Claim',
+      title: 'The wallet address sits inside the signature.',
+      lead: 'A 196-byte block, eight fields, the holder at bytes 104 to 124.',
+      contrast:
+        'So a stolen document is useless. The circuit rejects any other recipient.',
       sources: [
         {
           label: 'Supported profile',
           href: `${repo}proofs/README.md#supported-profile`,
         },
         {
-          label: 'Exact byte layout in capsule.rs',
+          label: 'capsule.rs',
           href: `${repo}proofs/claim-evidence/src/capsule.rs`,
         },
       ],
@@ -61,26 +50,18 @@
     },
     {
       id: 'Proving the signature without showing the document',
-      short: 'The proof',
+      part: 'Proof',
       title: 'The document never leaves the holder.',
-      lead: "The proof checks the document's signature without the document ever leaving the holder's machine.",
-      evidence:
-        'zkPDF verifies the RSA-2048 and SHA-256 signature inside an SP1 zero-knowledge VM. What comes out is 224 bytes.',
-      contrast: {
-        head: 'Not this, but that',
-        body: 'This is zkPDF, not zkEmail. There is no DKIM and no email anywhere in this system.',
-      },
+      lead: 'zkPDF checks its RSA-2048 signature inside an SP1 zkVM. Out comes 224 bytes.',
+      contrast: 'This is zkPDF, not zkEmail. No DKIM and no email anywhere.',
       sources: [
         {
           label: 'Dependency provenance',
           href: `${repo}proofs/README.md#dependency-provenance-and-review-boundary`,
         },
+        { label: 'zkPDF', href: 'https://github.com/privacy-ethereum/zkpdf' },
         {
-          label: 'zkPDF upstream',
-          href: 'https://github.com/privacy-ethereum/zkpdf',
-        },
-        {
-          label: 'SP1 verifier provenance',
+          label: 'SP1 verifier',
           href: `${repo}contracts/src/vendor/sp1/README.md`,
         },
       ],
@@ -88,19 +69,14 @@
     },
     {
       id: 'One hash for the whole request',
-      short: 'The digest',
-      title: 'One hash pins down the entire issuance.',
-      lead: 'A single 32-byte hash fixes which chain, which contract, which token, which wallet and how much.',
-      evidence:
-        'It is an EIP-712 digest over thirteen fields. Change any one of them and the proof no longer matches.',
-      contrast: {
-        head: 'Not this, but that',
-        body: 'Signing an amount is not the same as signing a whole request.',
-      },
-      note: 'The hash shown here is the pinned synthetic test fixture from the domain package, kept so a regression is caught in CI. It is not a live issuance.',
+      part: 'Proof',
+      title: 'One hash pins the whole issuance.',
+      lead: 'An EIP-712 digest over thirteen fields: chain, contract, token, wallet, amount.',
+      contrast: 'Change any one field and the proof stops matching.',
+      note: 'The hash shown is the pinned test fixture, not a live issuance.',
       sources: [
         {
-          label: 'Request format, version 1',
+          label: 'Request format',
           href: `${repo}packages/domain/README.md#request-format-version-1`,
         },
         { label: 'EIP-712', href: 'https://eips.ethereum.org/EIPS/eip-712' },
@@ -109,16 +85,11 @@
     },
     {
       id: 'Three languages, one answer',
-      short: 'Three languages',
-      title: 'Three separate programs must agree.',
-      lead: 'Three independently written programs compute that hash and they have to produce the same answer.',
-      evidence:
-        'TypeScript in the browser, Rust inside the proof, Solidity inside the contract. A parity check runs 64 adversarial cases in CI.',
-      contrast: {
-        head: 'Not this, but that',
-        body: 'You do not have to trust our implementation. You have to trust that three of them, written separately, agree.',
-      },
-      note: 'The value they agree on here is the same pinned test fixture, not a live issuance.',
+      part: 'Proof',
+      title: 'Three programs must agree on it.',
+      lead: 'TypeScript in the browser, Rust in the proof, Solidity in the contract. 64 adversarial cases in CI.',
+      contrast:
+        'You trust that three separate implementations agree, not that ours is right.',
       sources: [
         {
           label: 'The parity checker',
@@ -129,18 +100,14 @@
     },
     {
       id: 'All of it, or none of it',
-      short: 'Exact amount',
-      title: 'A 1.000 g right mints 1.000 g, or nothing.',
-      lead: 'The circuit rejects any amount that is not the full authenticated capacity.',
-      evidence:
-        'Of the four amounts a holder might request against a 1.000 g right, exactly one is accepted.',
-      contrast: {
-        head: 'Not this, but that',
-        body: 'A right is not a balance you draw down. Once minted, the token divides normally, down to 0.001 g.',
-      },
+      part: 'Permission',
+      title: '1.000 g mints 1.000 g, or nothing.',
+      lead: 'The circuit rejects any amount below or above the authenticated capacity.',
+      contrast:
+        'A right is not a balance. Once minted, the token divides to 0.001 g.',
       sources: [
         {
-          label: 'Claim profile 2 in claim-evidence',
+          label: 'Claim profile 2',
           href: `${repo}proofs/claim-evidence/src/lib.rs`,
         },
       ],
@@ -148,14 +115,10 @@
     },
     {
       id: 'What the institution does',
-      short: 'The institution',
-      title: 'Capacity is set aside before anything is minted.',
-      lead: 'The institution reserves the exact amount on chain, then signs a permit that authorizes this one request and expires in minutes.',
-      evidence: 'Cap 1000 mg, reserved 1000 mg, issued 0.',
-      contrast: {
-        head: 'Not this, but that',
-        body: 'Reserving is not issuing. At this point no token exists.',
-      },
+      part: 'Permission',
+      title: 'Capacity is reserved before any mint.',
+      lead: 'Cap 1000 mg, reserved 1000, issued 0. Then a permit that expires in minutes.',
+      contrast: 'Reserving is not issuing. No token exists yet.',
       sources: [
         {
           label: 'Reservations and governance',
@@ -166,18 +129,14 @@
     },
     {
       id: 'The ten checks',
-      short: 'The Gate',
-      title: 'One contract decides, in a fixed order.',
-      lead: 'The Gate runs ten checks in sequence and reverts the whole transaction if any one fails.',
-      evidence:
-        'Not paused, request well formed, digest recomputed in Solidity, four replay registers clear, holder signature, issuer permit, registered rights, SP1 proof, reservation match, then mint.',
-      contrast: {
-        head: 'Not this, but that',
-        body: 'The mint is not a separate step running alongside the accounting. They share one transaction.',
-      },
+      part: 'Check',
+      title: 'Ten checks, one transaction.',
+      lead: 'Fixed order, fail-closed. Any failure reverts everything.',
+      contrast:
+        'The mint is not a step beside the accounting. They share one transaction.',
       sources: [
         {
-          label: 'Authorization and proof contracts',
+          label: 'Authorization',
           href: `${repo}contracts/README.md#authorization-and-proof-contracts`,
         },
         {
@@ -189,22 +148,18 @@
     },
     {
       id: 'One door into the token',
-      short: 'Hedera ATS',
+      part: 'Check',
       title: 'Exactly one address may mint.',
-      lead: "The token lives in Hedera's Asset Tokenization Studio, and the mint adapter holds the sole ISSUER role.",
-      evidence:
-        'Nineteen addresses are deployed. Ten other roles, including pauser, controller and control list, are checked to have zero members.',
-      contrast: {
-        head: 'Not this, but that',
-        body: 'Those controls are off on purpose. If anyone else could change supply, the Gate would not be the authority.',
-      },
+      lead: 'Nineteen contracts deployed. The adapter holds the sole ISSUER role; ten other roles have zero members.',
+      contrast:
+        'Those controls are off on purpose, or the Gate would not be the authority.',
       sources: [
         {
-          label: 'Source and compiler provenance',
+          label: 'ATS provenance',
           href: `${repo}contracts/ats/README.md#source-and-compiler-provenance`,
         },
         {
-          label: 'Sole-issuer verification',
+          label: 'Sole-issuer check',
           href: `${repo}packages/issuance/src/ats.ts`,
         },
       ],
@@ -212,19 +167,14 @@
     },
     {
       id: 'What the registry is for',
-      short: 'ERC-8004',
+      part: 'Check',
       title: 'The registry says who. The Gate decides whether.',
-      lead: 'The registry tells you who the issuer is. It never decides whether a token gets minted.',
-      evidence:
-        'Three agents are registered on Hedera testnet: issuer 116, deployment 117, auditor 118. Before the app shows any of it, every claim in the record is checked against live contract state on eight points.',
-      contrast: {
-        head: 'Not this, but that',
-        body: 'The registry has no concept of a mint. It can hold a pointer and a hash, nothing more.',
-      },
-      note: 'Our auditor record shares the governor key, so it is not independent, and the Trust page says so wherever it appears.',
+      lead: 'Three agents on Hedera testnet, each record cross-checked against live contract state on eight points.',
+      contrast: 'The registry has no concept of a mint.',
+      note: 'Our auditor record shares the governor key, so it is not independent.',
       sources: [
         {
-          label: 'ERC-8004 registration',
+          label: 'ERC-8004',
           href: 'https://eips.ethereum.org/EIPS/eip-8004#registration-v1',
         },
         {
@@ -232,7 +182,7 @@
           href: 'https://github.com/erc-8004/erc-8004-contracts',
         },
         {
-          label: 'How this app cross-checks a record',
+          label: 'Cross-check code',
           href: `${repo}apps/web/src/lib/application/discovery.ts`,
         },
       ],
@@ -240,46 +190,17 @@
     },
   ];
 
-  const chapters = [
-    {
-      key: 'Claim',
-      thesis: 'A signed document, and the wallet address is inside it.',
-      from: 0,
-      to: 2,
-    },
-    {
-      key: 'Proof',
-      thesis:
-        'Verified inside a zkVM, and out comes one hash that three languages agree on.',
-      from: 2,
-      to: 5,
-    },
-    {
-      key: 'Permission',
-      thesis:
-        'The exact amount is reserved on chain, and the permit expires in minutes.',
-      from: 5,
-      to: 7,
-    },
-    {
-      key: 'Check',
-      thesis:
-        'Ten ordered checks, one door into the token, and a registry that decides nothing.',
-      from: 7,
-      to: 10,
-    },
-  ];
+  const parts = ['Claim', 'Proof', 'Permission', 'Check'];
+  const firstOfPart = parts.map((name) =>
+    steps.findIndex((item) => item.part === name),
+  );
 
   let active = $state(0);
   let showAll = $state(false);
-  const chapter = $derived(chapters[active]);
+  const step = $derived(steps[active]);
 
   function go(index: number) {
-    active = Math.min(Math.max(index, 0), chapters.length - 1);
-  }
-
-  function inChapter(index: number) {
-    return index >= chapter.from && index < chapter.to;
+    active = Math.min(Math.max(index, 0), steps.length - 1);
   }
 
   let deployment = $state<DeploymentConfig>();
@@ -311,7 +232,7 @@
       status: 'Met',
       met: true,
       evidence:
-        'ATS compiled from pinned upstream sources. Nineteen addresses live, the adapter holds the sole ISSUER role, issuance is managed through the Gate. No mint has executed yet.',
+        'Nineteen addresses live, the adapter holds the sole ISSUER role, issuance is managed through the Gate. No mint has executed yet.',
     },
     {
       need: 'Deploy and demonstrate on Hedera testnet',
@@ -325,24 +246,24 @@
       status: 'Met',
       met: true,
       evidence:
-        'Twenty of twenty source-verified with exact runtime matches. Three lack a creation match because they have no creation transaction of their own: the profile constructor made them.',
+        'Twenty of twenty source-verified with exact runtime matches. Three lack a creation match because the profile constructor made them.',
     },
     {
       need: 'Video showing issuance, configuration and one lifecycle operation',
       status: 'Partly met',
       met: false,
       evidence:
-        'Configuration, authority registration and the Gate decision path are demonstrable now. Issuance and a transfer cannot run while the Groth16 proof is outstanding.',
+        'Configuration and the Gate decision path are demonstrable now. Issuance and a transfer cannot run while the Groth16 proof is outstanding.',
     },
   ];
 
   const extras = [
-    'Secondary market for ATS-issued assets',
+    'Secondary market',
     'Compliance controls: KYC, freezes, transfer restrictions, pauses',
-    'Custom fee schedules, coupon or dividend distributions',
-    'Oracle integration for asset pricing',
-    'Scheduled Transactions for vesting or coupons',
-    'Upstream contributions to ATS',
+    'Fee schedules, coupon or dividend distributions',
+    'Oracle pricing',
+    'Scheduled Transactions for vesting',
+    'Upstream ATS contributions',
   ];
 
   let showUnmetOnly = $state(false);
@@ -386,48 +307,33 @@
 </svelte:head>
 
 <PortalShell current="demo">
-  <section aria-label="Summary">
-    <p class="eyebrow">How it works</p>
-    <h1>A signed document becomes exactly one token.</h1>
-    <p class="intro">
-      Ten steps, one idea each. Each step says what the part is for, what it
-      cannot do, and where to check the claim yourself.
-    </p>
-    <div class="actions">
-      <button
-        class="view-toggle"
-        type="button"
-        aria-pressed={showAll}
-        onclick={() => (showAll = !showAll)}
-        >{showAll ? 'Step through them' : 'Show everything'}</button
-      >
-      <span class="muted counter"
-        >{showAll
-          ? `${chapters.length} parts, ${steps.length} steps`
-          : `Part ${active + 1} of ${chapters.length}`}</span
-      >
+  <section class="masthead" aria-label="Summary">
+    <div>
+      <p class="eyebrow">How it works</p>
+      <h1>A signed document becomes exactly one token.</h1>
     </div>
+    <button
+      class="view-toggle"
+      type="button"
+      aria-pressed={showAll}
+      onclick={() => (showAll = !showAll)}
+      >{showAll ? 'Step through it' : 'Show everything'}</button
+    >
   </section>
 
   {#if !showAll}
     <nav class="rail" aria-label="Parts">
-      {#each chapters as item, index}
+      {#each parts as name, index}
         <button
           class="rail-step"
           type="button"
-          data-on={index === active}
-          aria-current={index === active ? 'step' : undefined}
-          onclick={() => go(index)}
-          ><span class="rail-number">{index + 1}</span><span class="rail-label"
-            >{item.key}</span
-          ></button
+          data-on={step.part === name}
+          aria-current={step.part === name ? 'step' : undefined}
+          onclick={() => go(firstOfPart[index])}
+          ><span class="rail-number">{index + 1}</span>{name}</button
         >
       {/each}
     </nav>
-    <div class="chapter-head">
-      <h2>{chapter.key}</h2>
-      <p>{chapter.thesis}</p>
-    </div>
   {/if}
 
   <div class="steps" data-all={showAll}>
@@ -435,29 +341,18 @@
       <section
         class="step"
         aria-label={item.id}
-        hidden={!showAll && !inChapter(index)}
+        hidden={!showAll && index !== active}
       >
-        <div class="step-visual">
-          <item.visual />
-        </div>
+        <div class="step-visual"><item.visual /></div>
         <div class="step-copy">
-          <p class="step-index">Step {index + 1} of {steps.length}</p>
-          <h3>{item.title}</h3>
+          <p class="step-index">
+            {item.part} · step {index + 1} of {steps.length}
+          </p>
+          <h2>{item.title}</h2>
           <p class="step-lead">{item.lead}</p>
-          {#if item.evidence}
-            <p class="step-evidence">{item.evidence}</p>
-          {/if}
-          {#if item.contrast}
-            <div class="contrast">
-              <p class="contrast-head">{item.contrast.head}</p>
-              <p>{item.contrast.body}</p>
-            </div>
-          {/if}
-          {#if item.note}
-            <p class="step-note">{item.note}</p>
-          {/if}
+          <p class="contrast">{item.contrast}</p>
+          {#if item.note}<p class="step-note">{item.note}</p>{/if}
           <p class="sources">
-            <span class="sources-head">Check it</span>
             {#each item.sources as link, position}
               {#if position > 0}<span aria-hidden="true"> · </span>{/if}<a
                 href={link.href}
@@ -480,10 +375,24 @@
         onclick={() => go(active - 1)}
         ><Glyph name="back" size={15} /> Back</button
       >
+      <ol class="dots" aria-label="Progress">
+        {#each steps as item, index}
+          <li>
+            <button
+              class="dot"
+              type="button"
+              data-on={index === active}
+              aria-label={item.id}
+              aria-current={index === active ? 'step' : undefined}
+              onclick={() => go(index)}
+            ></button>
+          </li>
+        {/each}
+      </ol>
       <button
         class="step-move primary"
         type="button"
-        disabled={active === chapters.length - 1}
+        disabled={active === steps.length - 1}
         onclick={() => go(active + 1)}
         >Next <Glyph name="arrow" size={15} /></button
       >
@@ -596,18 +505,29 @@
 </PortalShell>
 
 <style>
-  .counter {
-    font-size: 0.78rem;
+  /* masthead: one row, so the frame belongs to the step */
+  .masthead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px 24px;
+  }
+  :global(.portal-shell .masthead h1) {
+    font-size: clamp(1.5rem, 2.9vw, 2.1rem);
+    letter-spacing: -0.035em;
+    margin: 2px 0 0;
+    max-width: 26ch;
   }
   button.view-toggle,
   button.filter {
-    min-height: 44px;
-    padding: 10px 18px;
+    min-height: 42px;
+    padding: 9px 17px;
     border-radius: 999px;
     border: 1px solid var(--p-line);
     background: var(--p-paper);
     color: var(--p-ink);
-    font-size: 0.82rem;
+    font-size: 0.8rem;
   }
   button.view-toggle[aria-pressed='true'],
   button.filter[data-on='true'] {
@@ -620,17 +540,17 @@
   .rail {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 34px;
-    padding-bottom: 22px;
+    gap: 5px;
+    margin-top: 16px;
+    padding-bottom: 12px;
     border-bottom: 1px solid var(--p-line);
   }
   button.rail-step {
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    min-height: 38px;
-    padding: 6px 13px 6px 8px;
+    min-height: 34px;
+    padding: 5px 13px 5px 6px;
     border-radius: 999px;
     border: 1px solid transparent;
     background: transparent;
@@ -639,7 +559,6 @@
   }
   button.rail-step[data-on='true'] {
     background: var(--p-accent-soft);
-    border-color: var(--p-line);
     color: var(--p-ink);
   }
   .rail-number {
@@ -659,16 +578,16 @@
     color: white;
   }
 
-  /* steps */
+  /* one step fills the frame */
   .step {
     display: grid;
-    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr);
-    gap: 40px;
+    grid-template-columns: minmax(0, 1.02fr) minmax(0, 1fr);
+    gap: 44px;
     align-items: center;
-    padding: 40px 0 8px;
+    padding: 12px 0 6px;
   }
   .steps[data-all='true'] .step {
-    padding: 44px 0;
+    padding: 34px 0;
     border-bottom: 1px solid var(--p-line);
   }
   .step-visual {
@@ -676,119 +595,84 @@
     justify-content: center;
     min-width: 0;
   }
+  /* The art is 320x280, so capping width by viewport height keeps one step
+     inside a 16:9 frame on short screens without letterboxing it. */
+  .step-visual :global(svg) {
+    width: 100%;
+    max-width: min(470px, 52vh);
+    height: auto;
+  }
   .step-copy {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 11px;
     min-width: 0;
   }
   .step-index {
-    font-size: 0.66rem;
+    font-size: 0.64rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--p-accent);
     font-weight: 700;
     margin: 0;
   }
-  .step-copy h3 {
+  :global(.portal-shell .step-copy h2) {
     margin: 0;
-    font-size: 1.18rem;
+    font-size: clamp(1.25rem, 2.2vw, 1.55rem);
     font-weight: 650;
-    letter-spacing: -0.02em;
-    line-height: 1.3;
+    letter-spacing: -0.025em;
+    line-height: 1.22;
     text-wrap: balance;
-  }
-  .chapter-head {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 30px 0 2px;
-  }
-  .chapter-head h2 {
-    margin: 0;
-    font-size: clamp(1.7rem, 3.4vw, 2.3rem);
-    letter-spacing: -0.035em;
-    line-height: 1.05;
-  }
-  .chapter-head p {
-    margin: 0;
-    max-width: 620px;
-    font-size: 0.95rem;
-    line-height: 1.55;
-    color: var(--p-muted);
   }
   .step-lead {
     margin: 0;
-    font-size: 0.94rem;
+    font-size: 0.92rem;
     line-height: 1.6;
-  }
-  .step-evidence {
-    margin: 0;
-    font-size: 0.83rem;
-    line-height: 1.65;
-    color: var(--p-muted);
   }
   .contrast {
-    border-left: 2px solid var(--p-accent);
-    padding: 2px 0 2px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .contrast p {
     margin: 0;
+    border-left: 2px solid var(--p-accent);
+    padding-left: 13px;
     font-size: 0.83rem;
-    line-height: 1.6;
-  }
-  .contrast-head {
-    font-size: 0.64rem !important;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--p-accent);
-    font-weight: 700;
+    line-height: 1.55;
+    color: var(--p-muted);
   }
   .step-note {
     margin: 0;
-    font-size: 0.79rem;
-    line-height: 1.6;
+    font-size: 0.73rem;
+    line-height: 1.5;
     color: var(--p-muted);
   }
   .sources {
-    margin: 4px 0 0;
-    font-size: 0.75rem;
+    margin: 3px 0 0;
+    font-size: 0.72rem;
     color: var(--p-muted);
-    line-height: 1.8;
-  }
-  .sources-head {
-    display: block;
-    font-size: 0.62rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--p-muted);
-    margin-bottom: 2px;
+    line-height: 1.7;
   }
   .sources a {
     color: var(--p-accent);
   }
 
+  /* controls */
   .step-controls {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 18px 0 8px;
+    gap: 14px;
+    padding: 10px 0 2px;
     border-top: 1px solid var(--p-line);
   }
   button.step-move {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    min-height: 46px;
-    padding: 10px 20px;
+    min-height: 42px;
+    padding: 9px 18px;
     border-radius: 999px;
     border: 1px solid var(--p-line);
     background: var(--p-paper);
     color: var(--p-ink);
-    font-size: 0.86rem;
+    font-size: 0.84rem;
   }
   button.step-move.primary {
     background: var(--p-accent);
@@ -796,14 +680,39 @@
     color: white;
   }
   button.step-move:disabled {
-    opacity: 0.4;
+    opacity: 0.35;
+  }
+  .dots {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  button.dot {
+    display: block;
+    width: 8px;
+    height: 8px;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--p-line);
+    transition:
+      background 200ms ease,
+      transform 200ms ease;
+  }
+  button.dot[data-on='true'] {
+    background: var(--p-accent);
+    transform: scale(1.5);
   }
 
   /* reference blocks */
   .reference {
-    margin-top: 56px;
+    margin-top: 52px;
     border-top: 1px solid var(--p-line);
-    padding-top: 32px;
+    padding-top: 30px;
   }
   .note-line {
     margin-top: 16px;
@@ -861,13 +770,13 @@
     display: grid;
     grid-template-columns: 104px minmax(0, 1fr);
     gap: 6px 16px;
-    padding: 16px 18px;
+    padding: 15px 18px;
     border: 1px solid var(--p-line);
     border-radius: 14px;
     background: var(--p-paper);
   }
   .criterion strong {
-    font-size: 0.86rem;
+    font-size: 0.85rem;
     font-weight: 650;
   }
   .criterion .muted {
@@ -887,7 +796,7 @@
     color: #8b3f3f;
   }
   .extras-head {
-    margin-top: 28px;
+    margin-top: 26px;
   }
   .extras {
     list-style: none;
@@ -905,17 +814,17 @@
     font-size: 0.68rem;
   }
 
-  @media (max-width: 820px) {
+  @media (max-width: 860px) {
     .step {
       grid-template-columns: 1fr;
-      gap: 26px;
-      padding-top: 30px;
+      gap: 22px;
+      padding-top: 18px;
     }
-    .rail-label {
+    .step-visual :global(svg) {
+      max-width: 340px;
+    }
+    .dots {
       display: none;
-    }
-    button.rail-step {
-      padding: 6px 8px;
     }
     .criterion {
       grid-template-columns: 1fr;
@@ -929,6 +838,9 @@
   @media (prefers-reduced-motion: reduce) {
     .state-list .pending {
       animation: none;
+    }
+    button.dot {
+      transition: none;
     }
   }
 </style>

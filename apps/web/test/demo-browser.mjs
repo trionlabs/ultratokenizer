@@ -118,20 +118,25 @@ try {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(demo, { waitUntil: 'networkidle' });
     await expect(page.locator('.rail button')).toHaveCount(parts.length);
-    await expect(page.locator('.chapter-head h2')).toHaveText(parts[0]);
     await expect(page.getByRole('button', { name: 'Back' })).toBeDisabled();
     const visible = async () =>
       page.locator('main .step:not([hidden])').count();
-    assert.equal(await visible(), 2, 'Claim opens with two steps');
-    for (const name of parts.slice(1)) {
+    // Exactly one step owns the frame, so a 16:9 screen never has to scroll.
+    assert.equal(await visible(), 1, 'one step at a time');
+    for (let index = 1; index < steps.length; index += 1) {
       await page.getByRole('button', { name: 'Next' }).click();
-      await expect(page.locator('.chapter-head h2')).toHaveText(name);
+      await expect(
+        page.locator(`main section[aria-label="${steps[index]}"]`),
+      ).toBeVisible();
+      assert.equal(await visible(), 1, `step ${index + 1} stands alone`);
       assert.deepEqual(await parkedHeadings(page), []);
     }
-    assert.equal(await visible(), 3, 'Check closes with three steps');
     await expect(page.getByRole('button', { name: 'Next' })).toBeDisabled();
-    await page.getByRole('button', { name: 'Back' }).click();
-    await expect(page.locator('.chapter-head h2')).toHaveText('Permission');
+    // A part chip jumps to where that part begins.
+    await page.getByRole('button', { name: 'Permission' }).click();
+    await expect(
+      page.locator('main section[aria-label="All of it, or none of it"]'),
+    ).toBeVisible();
     assert.deepEqual(external, []);
     assert.deepEqual(errors, []);
     await page.close();
@@ -157,8 +162,8 @@ try {
       ),
       'expanded view overflows',
     );
-    await page.getByRole('button', { name: 'Step through them' }).click();
-    await expect(page.locator('.chapter-head h2')).toHaveText('Claim');
+    await page.getByRole('button', { name: 'Step through it' }).click();
+    await expect(page.locator('main .step:not([hidden])')).toHaveCount(1);
     assert.deepEqual(external, []);
     assert.deepEqual(errors, []);
     await page.close();
