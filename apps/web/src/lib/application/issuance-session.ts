@@ -1,4 +1,4 @@
-import type { EIP1193Provider, Hex } from 'viem';
+import { getAddress, type EIP1193Provider, type Hex } from 'viem';
 import { parseBrowserRpcUrl } from '../browser-rpc';
 import {
   createIssuanceClient,
@@ -401,13 +401,17 @@ export function createIssuanceSession(
       canReplace();
       const deployment = parseDeploymentConfig(text);
       parseBrowserRpcUrl(deployment.rpcUrl);
+      const wallet =
+        state.wallet?.chainId === deployment.auditPolicy.chainId
+          ? state.wallet
+          : undefined;
       client = undefined;
       tokenAttempted = undefined;
       resetChecks();
       update({
         deployment,
         bundle: undefined,
-        wallet: undefined,
+        wallet,
         balanceMg: undefined,
         tokenTransaction: undefined,
         tokenIntent: undefined,
@@ -431,7 +435,26 @@ export function createIssuanceSession(
     },
     connect() {
       return run('connecting', async (revision) => {
-        const wallet = await requireClient().connect();
+        const currentProvider = provider;
+        if (!currentProvider) throw new IssuanceClientError('wrong_account');
+        let wallet: ConnectedWallet;
+        if (state.deployment) wallet = await requireClient().connect();
+        else {
+          const addresses = await currentProvider.request({
+            method: 'eth_requestAccounts',
+          });
+          if (!Array.isArray(addresses) || !addresses[0])
+            throw new IssuanceClientError('wrong_account');
+          const chainId = await currentProvider.request({
+            method: 'eth_chainId',
+          });
+          if (typeof chainId !== 'string' || !/^0x[0-9a-f]+$/i.test(chainId))
+            throw new IssuanceClientError('wrong_chain');
+          wallet = Object.freeze({
+            address: getAddress(addresses[0]),
+            chainId: BigInt(chainId).toString(),
+          });
+        }
         if (unchanged(revision)) update({ wallet });
       });
     },

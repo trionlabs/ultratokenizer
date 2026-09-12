@@ -3,12 +3,18 @@
   import Glyph from './Glyph.svelte';
   import OrbitField from './OrbitField.svelte';
   let {
+    configured,
     amount,
     verified,
     minted,
     outcome,
-  }: { amount?: string; verified: boolean; minted: boolean; outcome?: string } =
-    $props();
+  }: {
+    configured: boolean;
+    amount?: string;
+    verified: boolean;
+    minted: boolean;
+    outcome?: string;
+  } = $props();
   const tilt = new Spring({ x: 0, y: 0 }, { stiffness: 0.1, damping: 0.75 });
   let state = $derived(
     minted
@@ -34,7 +40,9 @@
               ? 'Proof verified'
               : amount
                 ? 'Ready to verify'
-                : 'Waiting for evidence',
+                : configured
+                  ? 'Waiting for proof package'
+                  : 'Proof becomes token',
   );
   function move(event: PointerEvent) {
     if (prefersReducedMotion.current || event.pointerType !== 'mouse') return;
@@ -70,11 +78,11 @@
   <div class="artifact-lift">
     <div class="artifact-body" class:is-coin={minted}>
       <div class="proof-sheet">
-        <div class="sheet-top"><b>u.</b><span>EVIDENCE / XAU</span></div>
-        <strong>Gold<br />allocation</strong>
+        <div class="sheet-top"><b>u.</b><span>PROOF / XAU</span></div>
+        <strong>Gold<br />right</strong>
         <div class="sheet-lines"><span></span><span></span><span></span></div>
         <div class="sheet-bottom">
-          <span>{amount ? `${amount} g` : '— g'}</span><small
+          <span>{amount ? `${amount} g` : ''}</span><small
             >{amount ? 'EXACT AMOUNT' : ''}</small
           >
         </div>

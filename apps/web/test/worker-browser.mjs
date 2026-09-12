@@ -124,7 +124,7 @@ try {
   );
   const headerWallet = page.locator('.header-wallet');
   await expect(headerWallet).toHaveText('Connect wallet');
-  await expect(headerWallet).toBeDisabled();
+  await expect(headerWallet).toBeEnabled();
   // Future actions are not rendered before their prerequisites.
   await expect(
     page.getByRole('button', { name: 'Sign mint request', exact: true }),
@@ -173,14 +173,14 @@ try {
     document.documentElement.style.fontSize = '200%';
   });
   await noOverflow(page);
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Operator setup' }).click();
   await expect(
     page.getByLabel('Import deployment configuration', { exact: true }),
   ).toBeVisible();
   await noOverflow(page);
   await page.getByRole('button', { name: 'Close network setup' }).click();
   await expect(
-    page.getByRole('button', { name: 'Settings', exact: true }),
+    page.getByRole('button', { name: 'Operator setup' }),
   ).toBeFocused();
   await page.screenshot({
     path: new URL(
@@ -194,12 +194,12 @@ try {
   });
   await page.setViewportSize({ width: 320, height: 640 });
   await noOverflow(page);
-  const firstUpload = await page
-    .getByRole('button', { name: 'Check availability', exact: true })
+  const setupStatus = await page
+    .getByRole('heading', { name: 'Gold issuance is not open yet' })
     .boundingBox();
   assert.ok(
-    firstUpload && firstUpload.y + firstUpload.height <= 640,
-    'Mobile availability action starts in the first viewport',
+    setupStatus && setupStatus.y + setupStatus.height <= 640,
+    'Mobile setup status starts in the first viewport',
   );
   const sceneBox = await page.locator('.proof-object').boundingBox();
   const paperBox = await page.locator('.artifact-body').boundingBox();
@@ -218,7 +218,7 @@ try {
     ...fixture.deployment,
     rpcUrl: new URL('rpc-test', base).href,
   };
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Operator setup' }).click();
   await page
     .getByLabel('Import deployment configuration', { exact: true })
     .setInputFiles({
@@ -513,6 +513,11 @@ try {
     };
   });
   await unsupported.goto(base);
+  await expect(unsupported.locator('.header-wallet')).toBeEnabled();
+  await unsupported.locator('.header-wallet').click();
+  await expect(unsupported.locator('.wallet-help')).toContainText(
+    'Open this page in an EVM wallet browser',
+  );
   await upload(unsupported, 'Import deployment configuration', deployment);
   await upload(unsupported, 'Import issuance bundle', fixture.bundle);
   await expect(

@@ -30,6 +30,7 @@
   let resolving = $state(false);
   let transferError = $state('');
   let recoveryHash = $state('');
+  let walletHelp = $state(false);
   let workspaceView = $state<'issue' | 'transfer'>('issue');
   let setupDialog = $state<HTMLDialogElement>();
   let setupOpen = $state(false);
@@ -43,6 +44,15 @@
   function clearEns() {
     resolutionVersion++;
     ens = undefined;
+  }
+
+  function connectWallet() {
+    if (!snapshot.providerAvailable) {
+      walletHelp = true;
+      return;
+    }
+    walletHelp = false;
+    void session.connect();
   }
 
   let connected = $derived(!!snapshot.wallet);
@@ -65,6 +75,7 @@
   let request = $derived(snapshot.bundle?.request);
   let recipientConnected = $derived(
     connected &&
+      snapshot.wallet?.chainId === snapshot.deployment?.auditPolicy.chainId &&
       snapshot.wallet?.address.toLowerCase() ===
         request?.recipient.toLowerCase(),
   );
@@ -82,7 +93,7 @@
     !!snapshot.transaction || snapshot.unknownSubmission === 'issuance',
   );
   let flowSteps = $derived([
-    { label: 'Evidence', done: !!request },
+    { label: 'Proof', done: !!request },
     { label: 'Wallet', done: recipientConnected || issuanceStarted },
     {
       label: 'Verify',
@@ -286,21 +297,27 @@
     </nav>
     <button
       class="header-wallet"
-      disabled={!snapshot.providerAvailable ||
-        !snapshot.deployment ||
-        busy ||
-        !!snapshot.pendingOperation}
-      onclick={() => session.connect()}
-      title={!snapshot.deployment
-        ? 'Waiting for the app network configuration'
-        : undefined}
+      disabled={busy || !!snapshot.pendingOperation}
+      onclick={connectWallet}
+      title={snapshot.wallet?.address}
       ><Glyph name="wallet" size={15} />{connected
-        ? 'Reconnect wallet'
+        ? `${snapshot.wallet?.address.slice(0, 6)}…${snapshot.wallet?.address.slice(-4)}`
         : 'Connect wallet'}</button
     >
   </header>
+  {#if walletHelp}
+    <p class="wallet-help" role="status">
+      No browser wallet found. Open this page in an EVM wallet browser or
+      install a browser wallet, then reload.
+    </p>
+  {/if}
 
-  <main id="engine" tabindex="-1" class="engine-layout">
+  <main
+    id="engine"
+    tabindex="-1"
+    class="engine-layout"
+    class:unavailable={!snapshot.deployment}
+  >
     <section
       class="engine-stage"
       aria-labelledby="issuance-title"
@@ -308,7 +325,9 @@
     >
       <div class="stage-copy">
         <p class="scene-kicker">
-          Evidence → token <span>{activeStep + 1} / 6</span>
+          {#if snapshot.deployment}Proof → token <span
+              >{activeStep + 1} / 6</span
+            >{:else}How issuance works{/if}
         </p>
         <h1 id="issuance-title" tabindex="-1">
           Proof first. <em>Tokens next.</em>
@@ -319,6 +338,8 @@
             reverted. No tokens were minted.
           {:else if snapshot.transaction || snapshot.unknownSubmission === 'issuance'}Check
             the outcome before continuing.
+          {:else if !snapshot.deployment}A gold right becomes transferable
+            tokens after proof, issuer approval, and your signature.
           {:else if !request}Tokenize gold with proof and issuer authorization.
           {:else if !recipientConnected}Connect the wallet that will receive
             your tokens.
@@ -332,6 +353,7 @@
       </div>
 
       <EvidenceArtifact
+        configured={!!snapshot.deployment}
         amount={request ? formatGrams(request.amount) : undefined}
         verified={snapshot.sourceProof === 'accepted'}
         minted={!!snapshot.receipt}
@@ -341,12 +363,21 @@
             : undefined)}
       />
 
-      <ol class="flow-rail" aria-label="Issuance progress">
+      <ol
+        class="flow-rail"
+        aria-label={snapshot.deployment
+          ? 'Issuance progress'
+          : 'Issuance steps'}
+      >
         {#each flowSteps as step, index}
           <li
             class:done={step.done}
-            class:current={!snapshot.receipt && index === activeStep}
-            aria-current={!snapshot.receipt && index === activeStep
+            class:current={!!snapshot.deployment &&
+              !snapshot.receipt &&
+              index === activeStep}
+            aria-current={!!snapshot.deployment &&
+            !snapshot.receipt &&
+            index === activeStep
               ? 'step'
               : undefined}
           >
@@ -451,20 +482,34 @@
             </div>
           {:else if !snapshot.deployment}
             {#if networkStatus === 'loading'}
-              <p role="status">Connecting…</p>
+              <p role="status">Checking whether gold issuance is available…</p>
             {:else}
-              <button class="primary-button wide-button" onclick={loadNetwork}
-                >Check availability <Glyph name="arrow" size={15} /></button
+              <div class="action-copy" role="status">
+                <div>
+                  <h2>
+                    {networkStatus === 'missing'
+                      ? 'Gold issuance is not open yet'
+                      : 'Could not check issuance status'}
+                  </h2>
+                  <p>
+                    {networkStatus === 'missing'
+                      ? 'We are preparing the Hedera testnet deployment. There is nothing to configure or upload.'
+                      : 'The site could not load its trusted deployment. No wallet request or transaction was made.'}
+                  </p>
+                </div>
+              </div>
+              {#if networkStatus === 'failed'}
+                <button class="secondary-button" onclick={loadNetwork}
+                  >Try again</button
+                >
+              {/if}
+              <a class="text-link" href="/verify/"
+                >Verify a receipt <Glyph name="arrow" size={14} /></a
               >
-              <p class="field-hint" role="status">
-                {networkStatus === 'missing'
-                  ? 'Minting is not live yet.'
-                  : 'Unable to connect. Please try again.'}
-              </p>
             {/if}
           {:else if !request}
             <label class="upload-button"
-              >Add evidence package <Glyph name="plus" size={15} /><input
+              >Add proof package <Glyph name="plus" size={15} /><input
                 class="sr-only"
                 type="file"
                 accept=".json,application/json"
@@ -476,9 +521,9 @@
             <details class="upload-help">
               <summary>What can I upload?</summary>
               <p>
-                A public proof package with the issuer permit and exact
-                quantity. JSON, up to {MAX_BUNDLE_BYTES / 1024} KB. PDF and email
-                imports are not available in this browser.
+                A prepared public package with the proof, exact quantity, and
+                issuer approval. JSON, up to {MAX_BUNDLE_BYTES / 1024} KB. Source
+                PDFs and emails cannot be uploaded here.
               </p>
             </details>
           {:else if !recipientConnected}
@@ -623,272 +668,290 @@
         <h1 id="token-title" tabindex="-1">Move your gold.</h1>
         <p>Send any amount in 0.001 g units.</p>
       </div>
-      <div class="transfer-card">
-        <div class="token-balance">
-          <span>Wallet balance</span><strong
-            >{snapshot.balanceMg === undefined
-              ? '—'
-              : `${formatGrams(snapshot.balanceMg)} g`}</strong
-          ><button
-            class="text-link"
-            disabled={!connected || busy || !!snapshot.pendingOperation}
-            onclick={() => session.refreshBalance()}>Refresh</button
-          >
-        </div>
-        {#if tokenNeedsRecovery && snapshot.tokenIntent}
-          <div
-            class="transaction-card"
-            role="region"
-            aria-label="Unknown wallet outcome"
-          >
-            <h2>Check your wallet</h2>
-            <p>
-              This exact token action may have been sent. New wallet actions are
-              paused until it is reconciled.
-            </p>
-            <div class="intent-summary" aria-label="Frozen token intent">
-              <strong
-                >{snapshot.tokenIntent.kind === 'transfer'
-                  ? `${formatGrams(BigInt(snapshot.tokenIntent.milligrams))} g transfer`
-                  : 'Token association'}</strong
-              >
-              <span>From · {snapshot.tokenIntent.account}</span>
-              {#if snapshot.tokenIntent.kind === 'transfer'}
-                <span>To · {snapshot.tokenIntent.recipient}</span>
-              {/if}
-            </div>
-            <label class="text-field"
-              >Transaction hash<input
-                type="text"
-                placeholder="0x…"
-                bind:value={recoveryHash}
-                disabled={busy}
-                spellcheck="false"
-              /></label
-            >
-            <div class="button-row">
-              <button
-                class="primary-button"
-                disabled={busy || !recoveryHash}
-                onclick={recoverWalletTransaction}>Reconcile hash</button
-              >
-              <button
-                class="secondary-button"
-                disabled={busy || !!snapshot.pendingOperation}
-                onclick={() => session.acknowledgeNotSent()}
-                >Nothing was sent</button
-              >
+      {#if !snapshot.deployment}
+        <div class="stage-action" role="status">
+          <div class="action-copy">
+            <div>
+              <h2>Transfers are not available here yet</h2>
+              <p>
+                We are preparing the Hedera testnet deployment. You can connect
+                a wallet now; transfers open when the deployment is ready.
+              </p>
             </div>
           </div>
-        {/if}
-        {#if tokenBackend === 'hts'}
-          <button
-            class="secondary-button"
-            disabled={!connected || busy || unresolved}
-            onclick={() => session.associate()}>Associate this token</button
-          >
-          <p class="field-hint">
-            The chain checks whether association is needed.
-          </p>
-        {:else if tokenBackend === 'ats'}
-          <p class="field-hint">Transfers use the connected wallet.</p>
-        {/if}
-        <label class="text-field"
-          >Recipient<input
-            type="text"
-            aria-label="Transfer recipient"
-            placeholder="0x… or name.eth"
-            value={transferRecipient}
-            disabled={busy}
-            oninput={(event) => {
-              transferRecipient = event.currentTarget.value;
-              clearEns();
-            }}
-            autocomplete="off"
-            spellcheck="false"
-          /></label
-        >
-        {#if transferRecipient && !transferRecipient.startsWith('0x')}
+        </div>
+      {:else}
+        <div class="transfer-card">
+          <div class="token-balance">
+            <span>Wallet balance</span><strong
+              >{snapshot.balanceMg === undefined
+                ? '—'
+                : `${formatGrams(snapshot.balanceMg)} g`}</strong
+            ><button
+              class="text-link"
+              disabled={!connected || busy || !!snapshot.pendingOperation}
+              onclick={() => session.refreshBalance()}>Refresh</button
+            >
+          </div>
+          {#if tokenNeedsRecovery && snapshot.tokenIntent}
+            <div
+              class="transaction-card"
+              role="region"
+              aria-label="Unknown wallet outcome"
+            >
+              <h2>Check your wallet</h2>
+              <p>
+                This exact token action may have been sent. New wallet actions
+                are paused until it is reconciled.
+              </p>
+              <div class="intent-summary" aria-label="Frozen token intent">
+                <strong
+                  >{snapshot.tokenIntent.kind === 'transfer'
+                    ? `${formatGrams(BigInt(snapshot.tokenIntent.milligrams))} g transfer`
+                    : 'Token association'}</strong
+                >
+                <span>From · {snapshot.tokenIntent.account}</span>
+                {#if snapshot.tokenIntent.kind === 'transfer'}
+                  <span>To · {snapshot.tokenIntent.recipient}</span>
+                {/if}
+              </div>
+              <label class="text-field"
+                >Transaction hash<input
+                  type="text"
+                  placeholder="0x…"
+                  bind:value={recoveryHash}
+                  disabled={busy}
+                  spellcheck="false"
+                /></label
+              >
+              <div class="button-row">
+                <button
+                  class="primary-button"
+                  disabled={busy || !recoveryHash}
+                  onclick={recoverWalletTransaction}>Reconcile hash</button
+                >
+                <button
+                  class="secondary-button"
+                  disabled={busy || !!snapshot.pendingOperation}
+                  onclick={() => session.acknowledgeNotSent()}
+                  >Nothing was sent</button
+                >
+              </div>
+            </div>
+          {/if}
+          {#if tokenBackend === 'hts'}
+            <button
+              class="secondary-button"
+              disabled={!connected || busy || unresolved}
+              onclick={() => session.associate()}>Associate this token</button
+            >
+            <p class="field-hint">
+              The chain checks whether association is needed.
+            </p>
+          {:else if tokenBackend === 'ats'}
+            <p class="field-hint">Transfers use the connected wallet.</p>
+          {/if}
           <label class="text-field"
-            >Ethereum RPC for ENS<input
-              type="url"
-              placeholder="https://…"
-              value={ethereumRpc}
+            >Recipient<input
+              type="text"
+              aria-label="Transfer recipient"
+              placeholder="0x… or name.eth"
+              value={transferRecipient}
               disabled={busy}
               oninput={(event) => {
-                ethereumRpc = event.currentTarget.value;
+                transferRecipient = event.currentTarget.value;
                 clearEns();
               }}
+              autocomplete="off"
+              spellcheck="false"
+            /></label
+          >
+          {#if transferRecipient && !transferRecipient.startsWith('0x')}
+            <label class="text-field"
+              >Ethereum RPC for ENS<input
+                type="url"
+                placeholder="https://…"
+                value={ethereumRpc}
+                disabled={busy}
+                oninput={(event) => {
+                  ethereumRpc = event.currentTarget.value;
+                  clearEns();
+                }}
+              /></label
+            >
+            <button
+              class="secondary-button"
+              disabled={!snapshot.deployment || !ethereumRpc || busy}
+              onclick={resolveRecipient}>Resolve ENS recipient</button
+            >
+            <p class="field-hint">
+              This sends the name to your Ethereum RPC. Check the resolved
+              address before transferring.
+            </p>
+          {/if}
+          {#if ens}<div class="resolved-address">
+              <strong>{ens.normalizedName} → Chain {ens.chainId}</strong><code
+                >{ens.address}</code
+              ><small
+                >Locked for this transfer · Ethereum block {ens.blockNumber.toString()}.</small
+              >
+            </div>{/if}
+          <label class="text-field"
+            >Transfer amount (g)<input
+              type="text"
+              inputmode="decimal"
+              placeholder="For example, 0.125"
+              bind:value={transferAmount}
+              disabled={busy}
             /></label
           >
           <button
-            class="secondary-button"
-            disabled={!snapshot.deployment || !ethereumRpc || busy}
-            onclick={resolveRecipient}>Resolve ENS recipient</button
+            class="primary-button wide-button"
+            disabled={!connected ||
+              !transferRecipient ||
+              !transferAmount ||
+              (!transferRecipient.startsWith('0x') && !ens) ||
+              busy ||
+              unresolved}
+            onclick={transfer}
+            >Review transfer in wallet <Glyph name="arrow" size={15} /></button
           >
-          <p class="field-hint">
-            This sends the name to your Ethereum RPC. Check the resolved address
-            before transferring.
-          </p>
-        {/if}
-        {#if ens}<div class="resolved-address">
-            <strong>{ens.normalizedName} → Chain {ens.chainId}</strong><code
-              >{ens.address}</code
-            ><small
-              >Locked for this transfer · Ethereum block {ens.blockNumber.toString()}.</small
+          {#if transferError || snapshot.error}<p
+              class="inline-error"
+              role={transferError ? 'alert' : undefined}
             >
-          </div>{/if}
-        <label class="text-field"
-          >Transfer amount (g)<input
-            type="text"
-            inputmode="decimal"
-            placeholder="For example, 0.125"
-            bind:value={transferAmount}
-            disabled={busy}
-          /></label
-        >
-        <button
-          class="primary-button wide-button"
-          disabled={!connected ||
-            !transferRecipient ||
-            !transferAmount ||
-            (!transferRecipient.startsWith('0x') && !ens) ||
-            busy ||
-            unresolved}
-          onclick={transfer}
-          >Review transfer in wallet <Glyph name="arrow" size={15} /></button
-        >
-        {#if transferError || snapshot.error}<p
-            class="inline-error"
-            role={transferError ? 'alert' : undefined}
-          >
-            {transferError || snapshot.error}
-          </p>{/if}
-      </div>
+              {transferError || snapshot.error}
+            </p>{/if}
+        </div>
+      {/if}
     </section>
 
-    <aside class="activity-rail" aria-label="Session and transaction status">
-      <section>
-        <div class="rail-heading">
-          <span>This session</span><span class="rail-dot"></span>
-        </div>
-        <dl class="session-list">
-          <div>
-            <dt>Network</dt>
-            <dd>
-              {networkLabel}
-              <button
-                class="network-link"
-                disabled={busy || unresolved}
-                onclick={openSetup}>Settings</button
-              >
-            </dd>
+    {#if snapshot.deployment}
+      <aside class="activity-rail" aria-label="Session and transaction status">
+        <section>
+          <div class="rail-heading">
+            <span>This session</span><span class="rail-dot"></span>
           </div>
-          <div>
-            <dt>Wallet</dt>
-            <dd>
-              {snapshot.wallet ? snapshot.wallet.address : 'Not connected'}
-            </dd>
-          </div>
-          <div>
-            <dt>Amount</dt>
-            <dd>
-              {request ? `${formatGrams(request.amount)} g XAU` : 'Not loaded'}
-            </dd>
-          </div>
-        </dl>
-        {#if workspaceView === 'transfer' && !setupOpen && fileError}<p
-            class="inline-error"
-            role="alert"
-          >
-            {fileError}
-          </p>{/if}
-      </section>
-      <section>
-        <div class="rail-heading"><span>Session activity</span></div>
-        {#if !snapshot.transaction && !snapshot.tokenTransaction}
-          <div class="empty-activity">
-            <Glyph name="receipt" size={23} />
-            <p>No transactions yet.</p>
-            <small>Your latest transaction status appears here.</small>
-          </div>
-        {:else}
-          {#if snapshot.transaction}<div class="activity-item">
-              <span>Issuance</span><strong
-                >{snapshot.transaction.outcome}</strong
-              ><code>{snapshot.transaction.hash}</code>
-            </div>{/if}
-          {#if snapshot.tokenTransaction}<div class="activity-item">
-              <span
-                >{snapshot.tokenTransaction.kind === 'transfer'
-                  ? 'Transfer'
-                  : 'Association'}</span
-              ><strong>{snapshot.tokenTransaction.outcome}</strong><code
-                >{snapshot.tokenTransaction.hash}</code
-              >{#if ['pending', 'unresolved'].includes(snapshot.tokenTransaction.outcome)}<button
-                  class="text-link"
-                  disabled={busy}
-                  onclick={() => session.confirmToken()}
-                  >Check transaction</button
-                >{/if}
-            </div>{/if}
-        {/if}
-      </section>
-      {#if snapshot.deployment}
-        <details class="technical-details">
-          <summary>Deployment details</summary>
-          <div class="compact-files">
-            <button disabled={busy || unresolved} onclick={openSetup}
-              >Advanced network setup</button
-            >
-            {#if request}<label
-                >Change package<input
-                  class="sr-only"
-                  type="file"
-                  accept=".json,application/json"
-                  aria-label="Import issuance bundle"
-                  disabled={busy || unresolved}
-                  onchange={(event) => importFile(event, 'bundle')}
-                /></label
-              >{/if}
-          </div>
-          <dl class="data-list">
+          <dl class="session-list">
             <div>
-              <dt>Configuration</dt>
-              <dd>{deploymentName || 'Loaded JSON'}</dd>
-            </div>
-            {#if request}<div>
-                <dt>Package</dt>
-                <dd>{bundleName || 'Loaded JSON'}</dd>
-              </div>{/if}
-            <div>
-              <dt>RPC</dt>
-              <dd>{snapshot.deployment.rpcUrl}</dd>
-            </div>
-            <div>
-              <dt>Gate</dt>
-              <dd>{snapshot.deployment.auditPolicy.gate}</dd>
-            </div>
-            <div>
-              <dt>Token</dt>
-              <dd>{snapshot.deployment.auditPolicy.token}</dd>
-            </div>
-            <div>
-              <dt>Backend</dt>
+              <dt>Network</dt>
               <dd>
-                {tokenBackend === 'ats'
-                  ? 'ATS · EVM token'
-                  : 'HTS · native token'}
+                {networkLabel}
+                <button
+                  class="network-link"
+                  disabled={busy || unresolved}
+                  onclick={openSetup}>Settings</button
+                >
               </dd>
             </div>
             <div>
-              <dt>Verifier</dt>
-              <dd>{snapshot.deployment.auditPolicy.verifierAddress}</dd>
+              <dt>Wallet</dt>
+              <dd>
+                {snapshot.wallet ? snapshot.wallet.address : 'Not connected'}
+              </dd>
+            </div>
+            <div>
+              <dt>Amount</dt>
+              <dd>
+                {request
+                  ? `${formatGrams(request.amount)} g XAU`
+                  : 'Not loaded'}
+              </dd>
             </div>
           </dl>
-        </details>
-      {/if}
-    </aside>
+          {#if workspaceView === 'transfer' && !setupOpen && fileError}<p
+              class="inline-error"
+              role="alert"
+            >
+              {fileError}
+            </p>{/if}
+        </section>
+        <section>
+          <div class="rail-heading"><span>Session activity</span></div>
+          {#if !snapshot.transaction && !snapshot.tokenTransaction}
+            <div class="empty-activity">
+              <Glyph name="receipt" size={23} />
+              <p>No transactions yet.</p>
+              <small>Your latest transaction status appears here.</small>
+            </div>
+          {:else}
+            {#if snapshot.transaction}<div class="activity-item">
+                <span>Issuance</span><strong
+                  >{snapshot.transaction.outcome}</strong
+                ><code>{snapshot.transaction.hash}</code>
+              </div>{/if}
+            {#if snapshot.tokenTransaction}<div class="activity-item">
+                <span
+                  >{snapshot.tokenTransaction.kind === 'transfer'
+                    ? 'Transfer'
+                    : 'Association'}</span
+                ><strong>{snapshot.tokenTransaction.outcome}</strong><code
+                  >{snapshot.tokenTransaction.hash}</code
+                >{#if ['pending', 'unresolved'].includes(snapshot.tokenTransaction.outcome)}<button
+                    class="text-link"
+                    disabled={busy}
+                    onclick={() => session.confirmToken()}
+                    >Check transaction</button
+                  >{/if}
+              </div>{/if}
+          {/if}
+        </section>
+        {#if snapshot.deployment}
+          <details class="technical-details">
+            <summary>Deployment details</summary>
+            <div class="compact-files">
+              <button disabled={busy || unresolved} onclick={openSetup}
+                >Advanced network setup</button
+              >
+              {#if request}<label
+                  >Change package<input
+                    class="sr-only"
+                    type="file"
+                    accept=".json,application/json"
+                    aria-label="Import issuance bundle"
+                    disabled={busy || unresolved}
+                    onchange={(event) => importFile(event, 'bundle')}
+                  /></label
+                >{/if}
+            </div>
+            <dl class="data-list">
+              <div>
+                <dt>Configuration</dt>
+                <dd>{deploymentName || 'Loaded JSON'}</dd>
+              </div>
+              {#if request}<div>
+                  <dt>Package</dt>
+                  <dd>{bundleName || 'Loaded JSON'}</dd>
+                </div>{/if}
+              <div>
+                <dt>RPC</dt>
+                <dd>{snapshot.deployment.rpcUrl}</dd>
+              </div>
+              <div>
+                <dt>Gate</dt>
+                <dd>{snapshot.deployment.auditPolicy.gate}</dd>
+              </div>
+              <div>
+                <dt>Token</dt>
+                <dd>{snapshot.deployment.auditPolicy.token}</dd>
+              </div>
+              <div>
+                <dt>Backend</dt>
+                <dd>
+                  {tokenBackend === 'ats'
+                    ? 'ATS · EVM token'
+                    : 'HTS · native token'}
+                </dd>
+              </div>
+              <div>
+                <dt>Verifier</dt>
+                <dd>{snapshot.deployment.auditPolicy.verifierAddress}</dd>
+              </div>
+            </dl>
+          </details>
+        {/if}
+      </aside>
+    {/if}
   </main>
 
   <dialog
@@ -930,5 +993,8 @@
   <footer class="live-footer">
     <Glyph name="wallet" size={14} /> You sign in your wallet. Proofs and transaction
     details are public.
+    {#if !snapshot.deployment}
+      <button class="text-link" onclick={openSetup}>Operator setup</button>
+    {/if}
   </footer>
 </div>

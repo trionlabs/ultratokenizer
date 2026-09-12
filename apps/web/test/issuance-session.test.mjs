@@ -75,6 +75,49 @@ async function ready(session) {
   await session.simulate();
 }
 
+test('connecting before deployment requests only wallet access and keeps issuance closed', async () => {
+  const fixture = await createFixture();
+  const calls = [];
+  const session = createIssuanceSession(() => {
+    throw new Error('No deployment client may be created yet');
+  });
+  session.setProvider({
+    async request({ method }) {
+      calls.push(method);
+      if (method === 'eth_requestAccounts')
+        return [fixture.bundle.request.recipient];
+      if (method === 'eth_chainId') return '0x128';
+      throw new Error(`Unexpected wallet method: ${method}`);
+    },
+  });
+  await session.connect();
+  assert.deepEqual(calls, ['eth_requestAccounts', 'eth_chainId']);
+  assert.deepEqual(session.read().wallet, {
+    address: fixture.bundle.request.recipient,
+    chainId: '296',
+  });
+  assert.equal(session.read().transaction, undefined);
+  assert.equal(session.read().deployment, undefined);
+  session.loadDeployment(JSON.stringify(fixture.deployment));
+  assert.equal(session.read().wallet.address, fixture.bundle.request.recipient);
+  session.dispose();
+
+  const wrongChain = createIssuanceSession(() => {
+    throw new Error('No deployment client may be created yet');
+  });
+  wrongChain.setProvider({
+    async request({ method }) {
+      return method === 'eth_requestAccounts'
+        ? [fixture.bundle.request.recipient]
+        : '0x1';
+    },
+  });
+  await wrongChain.connect();
+  wrongChain.loadDeployment(JSON.stringify(fixture.deployment));
+  assert.equal(wrongChain.read().wallet, undefined);
+  wrongChain.dispose();
+});
+
 test('browser deployment rejects HTTP IPv6 before replacing the imported session', async () => {
   const fixture = await createFixture();
   const { session, calls } = harness(fixture);
