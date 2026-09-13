@@ -124,63 +124,74 @@
     </aside>
   </section>
 
+  <section class="path" aria-labelledby="path-title">
+    <h2 id="path-title" class="sr-only">What to do</h2>
+    <ol>
+      <li>
+        <span aria-hidden="true">1</span>
+        <div>
+          <strong>Take a signed document</strong>
+          <p>
+            Fifty CMS-signed 1.000 g rights. Demo 08 is the one the engine
+            admits.
+          </p>
+          <p class="path-links">
+            <a class="primary" href="/jury/08-gold.pdf" download
+              >Download Demo 08</a
+            >
+            <a href="/jury/ultratokenizer-jury-documents.zip" download>All 50</a
+            >
+          </p>
+          <details>
+            <summary>Pick another</summary>
+            <div class="document-grid">
+              {#each documentNumbers as number (number)}
+                <a href={`/jury/documents/${number}-gold.pdf`} download
+                  >{number}</a
+                >
+              {/each}
+            </div>
+          </details>
+        </div>
+      </li>
+      <li>
+        <span aria-hidden="true">2</span>
+        <div>
+          <strong>Upload it, unchanged</strong>
+          <p>
+            The engine reads back its fixed amount, its issuer and the one
+            wallet it is bound to. Uploading spends nothing.
+          </p>
+          <p class="path-links">
+            <a class="primary" href="/#engine">Open the engine</a>
+          </p>
+        </div>
+      </li>
+      <li>
+        <span aria-hidden="true">3</span>
+        <div>
+          <strong>Check it on chain</strong>
+          <p>
+            Gate, verifier and ATS token, each read live and pinned by runtime
+            code hash.
+          </p>
+          <p class="path-links">
+            <a class="primary" href="/trust/">Read chain state</a>
+          </p>
+        </div>
+      </li>
+    </ol>
+    <p class="path-note">
+      The proof and the mint are presenter-led: one designated wallet signs the
+      exact request. Want your own wallet in a run?
+      <a href="https://t.me/yamanc" target="_blank" rel="noreferrer"
+        >Ask for a budget</a
+      >.
+    </p>
+  </section>
+
   <section class="overview-section" aria-label="How issuance is gated">
     <JudgeOverview />
-  </section>
-
-  <section class="choice" aria-label="Choose a review path">
-    <article>
-      <p class="step">On your own</p>
-      <h2>Inspect without a wallet</h2>
-      <p>
-        Download the signed allocation, upload it unchanged, and read back its
-        fixed amount and issuer. Uploading spends nothing.
-      </p>
-      <div class="actions">
-        <a class="primary" href="/jury/08-gold.pdf" download
-          >Download Demo 08 PDF</a
-        >
-        <a href="/#engine">Open token engine</a>
-      </div>
-    </article>
-    <article>
-      <p class="step">With the presenter</p>
-      <h2>Run proof and mint</h2>
-      <p>
-        The designated wallet signs the exact request, waits for SP1 proof
-        verification, then confirms a separate Hedera mint.
-      </p>
-      <div class="actions">
-        <a class="primary" href="/#engine">Start the live run</a>
-        <a href="https://t.me/yamanc" target="_blank" rel="noreferrer"
-          >Use your own wallet · @yamanc</a
-        >
-      </div>
-    </article>
-  </section>
-
-  <section class="document-library" aria-labelledby="documents-title">
-    <div>
-      <p class="eyebrow">Signed test set</p>
-      <h2 id="documents-title">Inspect 50 separate signed rights</h2>
-      <p>
-        Each is a distinct CMS-signed 1.000 g right. The engine admits Demo 08;
-        the rest are for offline inspection.
-      </p>
-    </div>
-    <div class="library-actions">
-      <a href="/jury/ultratokenizer-jury-documents.zip" download
-        >Download all 50 PDFs</a
-      >
-      <details>
-        <summary>Choose one document</summary>
-        <div class="document-grid">
-          {#each documentNumbers as number (number)}
-            <a href={`/jury/documents/${number}-gold.pdf`} download>{number}</a>
-          {/each}
-        </div>
-      </details>
-    </div>
   </section>
 
   <section class="track" aria-labelledby="track-title">
@@ -239,40 +250,6 @@
     padding: 30px 0;
     border-top: 1px solid var(--p-line);
   }
-  .document-library {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.8fr);
-    gap: 22px 44px;
-    padding: 30px 0;
-    border-top: 1px solid var(--p-line);
-  }
-  .document-library h2 {
-    margin-top: 6px;
-    font-size: 1.7rem;
-  }
-  .document-library p {
-    max-width: 42rem;
-    margin-top: 10px;
-    color: var(--p-muted);
-    font-size: 0.8rem;
-  }
-  .library-actions {
-    display: grid;
-    align-content: start;
-    gap: 12px;
-  }
-  .library-actions details {
-    padding: 12px 16px;
-    border: 1px solid var(--p-line);
-    border-radius: 16px;
-    background: var(--p-paper);
-  }
-  .library-actions summary {
-    cursor: pointer;
-    color: var(--p-accent);
-    font-size: 0.78rem;
-    font-weight: 650;
-  }
   .document-grid {
     display: grid;
     grid-template-columns: repeat(10, minmax(0, 1fr));
@@ -284,7 +261,7 @@
     border: 1px solid var(--p-line);
     border-radius: 7px;
     color: var(--p-muted);
-    font-size: 0.66rem;
+    font-size: 0.7rem;
     text-align: center;
     text-decoration: none;
   }
@@ -315,7 +292,7 @@
   }
   .track-head h3 {
     margin: 0;
-    font-size: 0.94rem;
+    font-size: 0.88rem;
     line-height: 1.4;
   }
   .pill {
@@ -324,7 +301,7 @@
     border-radius: 999px;
     background: var(--p-accent-soft);
     color: var(--p-accent);
-    font-size: 0.68rem;
+    font-size: 0.7rem;
     white-space: nowrap;
   }
   .pill::before {
@@ -342,13 +319,73 @@
     content: '\25cb\00a0';
     font-weight: 400;
   }
+  .path ol {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 30px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .path li {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+  }
+  .path li > span {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--p-accent);
+    color: white;
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+  .path strong {
+    display: block;
+    font-size: 1rem;
+    letter-spacing: -0.01em;
+  }
+  .path li p {
+    margin: 6px 0 0;
+    color: var(--p-muted);
+    font-size: 0.88rem;
+  }
+  .path-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+    margin-top: 12px !important;
+  }
+  .path-note {
+    margin: 26px 0 0;
+    padding-top: 18px;
+    border-top: 1px solid var(--p-line);
+    color: var(--p-muted);
+    font-size: 0.78rem;
+    max-width: 68ch;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
   .overview-section {
     margin: 4px 0 30px;
   }
   .track-list p {
     margin: 10px 0 14px;
     color: var(--p-muted);
-    font-size: 0.8rem;
+    font-size: 0.78rem;
   }
   .track-list a {
     font-size: 0.78rem;
@@ -396,62 +433,18 @@
     animation: breathe 1.4s ease-in-out infinite;
   }
   .live strong {
-    font-size: 0.86rem;
+    font-size: 0.88rem;
   }
   .live p {
     color: var(--p-muted);
-    font-size: 0.76rem;
+    font-size: 0.78rem;
     margin-top: 4px;
   }
-  .choice {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px;
-    padding: 28px 0;
-  }
-  .choice article {
-    min-height: 238px;
-    padding: 28px;
-    border: 1px solid var(--p-line);
-    border-radius: 22px;
-    background: var(--p-paper);
-    display: flex;
-    flex-direction: column;
-  }
-  .step {
-    color: var(--p-iris);
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-  }
-  .choice h2 {
-    margin: 8px 0 10px;
-    font-size: 1.4rem;
-  }
-  .choice article > p:not(.step) {
-    color: var(--p-muted);
-    max-width: 32rem;
-  }
-  .actions {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px 18px;
-    margin-top: auto;
-    padding-top: 24px;
-  }
-  .actions a,
   .report {
     color: var(--p-accent);
     font-size: 0.78rem;
-    font-weight: 650;
+    font-weight: 600;
     text-decoration: none;
-  }
-  .actions .primary {
-    padding: 11px 17px;
-    color: white;
-    background: var(--p-accent);
-    border-radius: 999px;
   }
   .section-head {
     display: flex;
@@ -470,7 +463,7 @@
   }
   .truth h2 {
     margin-top: 6px;
-    font-size: 1.35rem;
+    font-size: 1.4rem;
   }
   .truth-grid {
     display: grid;
@@ -480,7 +473,7 @@
   }
   .truth-grid p {
     color: var(--p-muted);
-    font-size: 0.79rem;
+    font-size: 0.78rem;
   }
   .truth-grid strong {
     display: block;
@@ -493,12 +486,13 @@
     }
   }
   @media (max-width: 820px) {
-    .hero,
-    .choice {
-      grid-template-columns: 1fr;
-    }
     .hero {
+      grid-template-columns: 1fr;
       gap: 24px;
+    }
+    .path ol {
+      grid-template-columns: 1fr;
+      gap: 22px;
     }
     .live {
       max-width: 100%;
@@ -508,7 +502,6 @@
     }
   }
   @media (max-width: 480px) {
-    .choice article,
     .truth {
       padding: 20px;
     }
@@ -519,9 +512,6 @@
     }
   }
   @media (max-width: 720px) {
-    .document-library {
-      grid-template-columns: 1fr;
-    }
     .document-grid {
       grid-template-columns: repeat(5, minmax(0, 1fr));
     }

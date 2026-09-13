@@ -29,13 +29,11 @@ try {
       'No token mints without a proof of a signed document.',
     );
     await expect(
-      page.getByRole('link', { name: 'Download Demo 08 PDF' }),
+      page.getByRole('link', { name: 'Download Demo 08' }),
     ).toBeVisible();
+    await expect(page.getByRole('link', { name: 'All 50' })).toBeVisible();
     await expect(
-      page.getByRole('link', { name: 'Download all 50 PDFs' }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole('link', { name: /Use your own wallet/ }),
+      page.getByRole('link', { name: /Ask for a budget/ }),
     ).toHaveAttribute('href', 'https://t.me/yamanc');
     await expect(page.getByText('What the demo establishes')).toBeVisible();
     // An unscoped `li` rule once reached every list on the page and squeezed
