@@ -31,6 +31,8 @@ const messages = {
     'The proof service is not ready. Your document can be uploaded, but verification cannot start yet.',
   proof_budget_unavailable:
     'The approved proof budget is unavailable. New verification requests are paused.',
+  verification_in_progress:
+    'Another verification request is still open. Reupload its document to resume it; starting a new request is paused.',
   operations_disabled: 'The issuer has paused new verification requests.',
   source_not_admitted:
     'This document signer is not currently admitted by the issuer.',
@@ -45,6 +47,8 @@ const messages = {
     'The proof request outcome needs review. Do not start another request.',
   proof_observation_unavailable:
     'The submitted proof request could not be checked. The issuer will resume tracking this same request; do not start another.',
+  proof_request_rejected:
+    'The proof service rejected this request. Minting is unavailable; the issuer must review the failure.',
   proof_deadline_elapsed:
     'The proof request deadline passed. The issuer must review this request.',
   proof_unavailable: 'The proof service is unavailable. No mint was submitted.',

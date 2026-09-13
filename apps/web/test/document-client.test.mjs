@@ -273,6 +273,34 @@ test('a submitted proof observation failure remains readable without implying an
   );
 });
 
+test('network rejection and occupied service are readable as distinct outcomes', async () => {
+  const job = { jobId: 'job_123', documentId: 'doc_123', requestDigest: hash };
+  const status = await createDocumentClient(async () =>
+    json({
+      ...job,
+      phase: 'proof',
+      status: 'attention_required',
+      detailCode: 'proof_request_rejected',
+      bundleReady: false,
+      canRetry: false,
+    }),
+  ).status(job, signal());
+  assert.equal(status.canRetry, false);
+  assert.equal(status.bundleReady, false);
+  assert.match(documentBlocker(status.detailCode), /rejected/);
+  const configuration = await createDocumentClient(async () =>
+    json({
+      ...config(),
+      readiness: { canStart: false, blocker: 'verification_in_progress' },
+    }),
+  ).configuration(signal());
+  assert.equal(configuration.readiness.canStart, false);
+  assert.doesNotMatch(
+    documentBlocker(configuration.readiness.blocker),
+    /budget|invalid response/,
+  );
+});
+
 test('unknown service errors, HTML and duplicate JSON keys never become UI messages', async () => {
   for (const response of [
     json(
