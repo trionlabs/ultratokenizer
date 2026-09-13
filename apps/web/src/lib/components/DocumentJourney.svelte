@@ -716,7 +716,9 @@
     {#if snapshot.error}<p class="inline-error" role="alert">
         {snapshot.error}
         {#if flow.job && !flow.started}
-          The SP1 request has not been submitted.
+          {flow.document?.existingJobStatus
+            ? 'The existing SP1 request was not changed, and no new request was submitted.'
+            : 'The SP1 request has not been submitted.'}
         {/if}
       </p>{/if}
     {#if !issuer && !flow.pending}<button

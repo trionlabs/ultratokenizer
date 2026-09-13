@@ -4,7 +4,7 @@ Use this runbook for the current Hedera testnet demo. Keep the boundary clear: t
 
 ## Before the presentation
 
-1. Open [the judge page](https://ultratokenizer.trionlabs.dev/judge/) and confirm it says **Live service ready**.
+1. Open [the judge page](https://ultratokenizer.trionlabs.dev/judge/) and confirm the document service is reachable. **Live service ready** means a new request may start; **Proof request in progress** means the existing request must be resumed instead.
 2. Download **Demo 08 PDF** from that page. Do not edit or re-export it.
 3. Open three tabs: **Tokenize**, **How it works** and **Trust**.
 4. Select the designated recipient account in MetaMask and switch to Hedera testnet, chain ID `296`.
@@ -26,7 +26,7 @@ Open **Tokenize** and upload Demo 08. Show the fixed `1.000 g` amount, selected 
 
 ### 1:30 — Start verification
 
-Connect the designated wallet and approve the first signature.
+Connect the designated wallet. If no request exists, approve the exact request to start verification. If Demo 08 already reports an existing request, approve the same request only to resume its status; do not create another proof request.
 
 > This first prompt is off-chain consent for the exact request. The signature itself does not mint or spend HBAR from the holder wallet. It lets the issuer service reserve capacity on chain and start paid proof work. SP1 checks the signed structured allocation and produces 224 bytes of public values plus a Groth16 proof.
 
@@ -46,7 +46,7 @@ Open **Trust**, refresh chain state and follow the HashScan and Sourcify links.
 
 > The token uses Hedera Asset Tokenization Studio. Its issuance role belongs to the Gate adapter. ERC-8004 publishes attributable issuer, deployment and auditor declarations. Those records help a reviewer find the parties and pins; they do not grant a licence or bypass the Gate.
 
-Show the current cap, reserved amount, Gate, verifier, token contract and records `116`, `117`, `118`. The visible 1.000 g pending reservation belongs to an earlier attempt that produced no usable proof; it is not evidence that Demo 08 is proved or ready to mint.
+Show the current cap, reserved amount, Gate, verifier, token contract and records `116`, `117`, `118`. A visible pending reservation proves only that capacity is set aside. It is not evidence that SP1 returned a proof or that ATS supply increased.
 
 ### 4:20 — Complete or report the real state
 

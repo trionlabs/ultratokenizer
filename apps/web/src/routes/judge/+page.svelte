@@ -181,11 +181,11 @@
   <section class="document-library" aria-labelledby="documents-title">
     <div>
       <p class="eyebrow">Signed test set</p>
-      <h2 id="documents-title">Try any of 50 separate rights</h2>
+      <h2 id="documents-title">Inspect 50 separate signed rights</h2>
       <p>
         Every PDF is a distinct, CMS-signed synthetic 1.000 g right for the
-        presenter wallet. Uploading one authenticates and displays it without
-        starting paid proof work.
+        presenter wallet. Their hashes and signatures form an offline inspection
+        corpus. The live token engine admits the canonical Demo 08 file.
       </p>
     </div>
     <div class="library-actions">
@@ -202,7 +202,7 @@
       </details>
     </div>
     <p class="boundary">
-      Demo 08 is reserved for the presenter-led proof attempt. The set contains
+      The other 49 files are not admitted or funded proof jobs. The set contains
       no proofs, permits, mints, bank backing or wallet keys.
     </p>
   </section>

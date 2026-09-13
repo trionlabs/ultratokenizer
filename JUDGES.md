@@ -7,17 +7,18 @@ Start at [ultratokenizer.trionlabs.dev/judge](https://ultratokenizer.trionlabs.d
 ## Inspect without a wallet
 
 1. Download the synthetic Demo 08 PDF from the judge page. The same page also
-   offers 50 separately signed test rights; any of them can be uploaded and
-   inspected without starting a paid proof.
-2. Open **Tokenize**, upload the unchanged PDF and inspect the fixed amount and selected institution.
+   offers 50 separately signed rights as a signature-and-hash inspection set.
+   Only the canonical Demo 08 file is admitted by the live document service.
+2. Open **Tokenize**, upload the unchanged Demo 08 PDF and inspect the fixed amount and selected institution.
 3. Open **How it works** to follow document authentication, SP1, issuer reservation, the Gate and ATS.
 4. Open **Trust** to inspect the Hedera contracts and ERC-8004 Identity records.
 
 Uploading the document does not spend proof funds or mint a token. The PDF is bound to the presenter's test wallet, so another wallet cannot redirect the mint.
 
 The public 50-document archive contains distinct signed rights, their SHA-256
-catalog and no witness, private key, proof, permit or mint. Demo 08 remains the
-canonical presenter-led proof attempt.
+catalog and no witness, private key, proof, permit or mint. It is an offline
+inspection corpus, not 50 funded proof jobs. Demo 08 remains the canonical
+presenter-led proof attempt.
 
 ## Presenter-led live run
 
@@ -39,7 +40,7 @@ Never describe an SP1 execution, reservation or wallet signature as a completed 
 
 The Gate, verifier and ATS graph have exact runtime source matches in Sourcify. Start with the [Gate source](https://repo.sourcify.dev/296/0xE1e3a133335dC0FEeB20397163c16E69F74919e3), [verifier source](https://repo.sourcify.dev/296/0xC96613d470494347586839B275bFDc56E978c5Be) or the key contract links on the live **Trust** page. Source matching is not a security audit.
 
-The ATS graph, Gate and verifier are deployed. The source-matching records are published. A previous proof request exposed a program-identity encoding bug and produced no usable proof; the requester now distinguishes the Succinct network hash from the EVM verifier key. A corrected Demo 08 request still requires the presenter's wallet signature. Until a confirmed mint is shown, the honest status is **deployed and ready for a corrected proof attempt, with no completed issuance**.
+The ATS graph, Gate and verifier are deployed. The source-matching records are published. A previous proof request exposed a program-identity encoding bug and produced no usable proof; the requester now distinguishes the Succinct network hash from the EVM verifier key. As observed on September 13, 2026 at 19:09 UTC, the corrected Demo 08 request had been submitted and reported executed and assigned, but no proof URI had been returned. Direct Hedera reads showed ATS total supply `0` and designated-holder balance `0`. The honest status is **deployed, with a real proof request in progress and no completed issuance**.
 
 ## Prize criteria
 
