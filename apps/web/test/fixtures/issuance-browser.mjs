@@ -8,6 +8,7 @@ import {
   encodeFunctionData,
   encodeFunctionResult,
   keccak256,
+  toHex,
 } from 'viem';
 
 /** Synthetic RPC evidence exercises the production UI and client; no real proof or broadcast. */
@@ -21,6 +22,7 @@ export async function exerciseIssuanceRecovery({
   screenshots,
   start,
   outcome,
+  documentFlow = false,
 }) {
   const page = await browser.newPage({
     viewport: { width: 1280, height: 900 },
@@ -35,7 +37,9 @@ export async function exerciseIssuanceRecovery({
   const successHash = `0x${'ee'.repeat(32)}`;
   const foreignSender = '0x9999999999999999999999999999999999999999';
   const blockHash = `0x${'ab'.repeat(32)}`;
-  const terms = `0x${'99'.repeat(32)}`;
+  const terms = documentFlow
+    ? keccak256(toHex('Synthetic browser test terms.'))
+    : `0x${'99'.repeat(32)}`;
   const adapter = '0x5555555555555555555555555555555555555555';
   const adapterCode = '0x60026000';
   const digest = fixture.receipt.requestDigest;
@@ -70,7 +74,56 @@ export async function exerciseIssuanceRecovery({
       false,
     ],
     issue: digest,
+    usedRequests: false,
+    usedRequestIds: false,
+    usedClaims: false,
+    usedHolderNonces: false,
   };
+  const reserved = values.reservations;
+  if (documentFlow) {
+    values.reservations = [
+      '0x0000000000000000000000000000000000000000',
+      '0x0000000000000000000000000000000000000000',
+      0n,
+      0n,
+      0n,
+      false,
+      `0x${'00'.repeat(32)}`,
+      `0x${'00'.repeat(32)}`,
+      false,
+    ];
+    values.backingPools = [1000n, 0n, 0n];
+  }
+  const prepared = {
+    request,
+    sourceId: policy.sourceId,
+    signerFingerprint: policy.sourceSignerFingerprint,
+    policyTermsHash: terms,
+    rightsTermsHash: terms,
+  };
+  const demoConfig = {
+    issuer: {
+      label: 'Synthetic browser issuer',
+      agentId: '116',
+      identityRegistry: policy.gate,
+      issuerId: policy.issuerId,
+      wallet: policy.issuerAddress,
+      selected: true,
+    },
+    terms: {
+      policy: { text: 'Synthetic browser test terms.', hash: terms },
+      rights: { text: 'Synthetic browser test terms.', hash: terms },
+      checked: true,
+      blockNumber: '100',
+    },
+    readiness: { canStart: true },
+  };
+  const job = {
+    jobId: 'test_job',
+    documentId: 'test_document',
+    requestDigest: digest,
+  };
+  let proofStarts = 0;
   const event = gateAbi.find(
     (item) => item.type === 'event' && item.name === 'Issued',
   );
@@ -83,6 +136,74 @@ export async function exerciseIssuanceRecovery({
   await page.route('**/*', async (route) => {
     const rpcRequest = route.request();
     const url = new URL(rpcRequest.url());
+    if (
+      documentFlow &&
+      url.origin === base.origin &&
+      (url.pathname.startsWith('/api/') || url.pathname === '/deployment.json')
+    ) {
+      let value;
+      if (url.pathname === '/deployment.json') value = fixture.deployment;
+      else if (url.pathname === '/api/config') value = demoConfig;
+      else if (url.pathname === '/api/documents')
+        value = {
+          ...demoConfig,
+          documentId: job.documentId,
+          document: {
+            name: 'Synthetic signed gold.pdf',
+            amountMilligrams: request.amount,
+            recipient: request.recipient,
+            issuerId: policy.issuerId,
+            sourceId: policy.sourceId,
+            sourceSignerFingerprint: policy.sourceSignerFingerprint,
+            profile: 'ultratokenizer-synthetic-gold-v2',
+            sha256: `0x${'11'.repeat(32)}`,
+          },
+        };
+      else if (url.pathname === '/api/jobs/prepare') {
+        assert.deepEqual(rpcRequest.postDataJSON(), {
+          documentId: job.documentId,
+          recipient: request.recipient,
+        });
+        value = {
+          ...job,
+          request,
+          prepared,
+          status: 'awaiting_signature',
+          readiness: { canStart: true },
+        };
+      } else if (url.pathname === `/api/jobs/${job.jobId}/start`) {
+        assert.equal(
+          rpcRequest.postDataJSON().holderSignature,
+          holderSignature,
+        );
+        proofStarts++;
+        values.reservations = reserved;
+        values.backingPools = [1000n, 1000n, 0n];
+        value = {
+          ...job,
+          phase: 'proof',
+          status: 'proving',
+          detailCode: null,
+          bundleReady: false,
+          canRetry: false,
+        };
+      } else if (url.pathname === `/api/jobs/${job.jobId}`)
+        value = {
+          ...job,
+          phase: 'issuance',
+          status: 'ready_to_mint',
+          detailCode: null,
+          bundleReady: true,
+          canRetry: false,
+        };
+      else if (url.pathname === `/api/jobs/${job.jobId}/bundle`) value = bundle;
+      else throw new Error(`Unexpected document endpoint ${url.pathname}`);
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(value),
+      });
+    }
     if (
       url.href === fixture.deployment.rpcUrl &&
       rpcRequest.method() === 'POST'
@@ -301,64 +422,189 @@ export async function exerciseIssuanceRecovery({
     },
   );
   try {
-    await page.goto(operatorUrl(base), { waitUntil: 'networkidle' });
-    for (const [label, value] of [
-      ['Import deployment configuration', fixture.deployment],
-      ['Import issuance bundle', bundle],
-    ]) {
-      if (label === 'Import deployment configuration')
-        await openOperatorConfiguration(page);
-      await expect(page.getByLabel(label, { exact: true })).toBeEnabled();
-      await page.getByLabel(label, { exact: true }).setInputFiles({
-        name: 'synthetic-issuance-recovery.json',
-        mimeType: 'application/json',
-        buffer: Buffer.from(JSON.stringify(value)),
+    await page.goto(documentFlow ? base.href : operatorUrl(base), {
+      waitUntil: 'networkidle',
+    });
+    if (documentFlow) {
+      const checkViewport = async (loaded) => {
+        for (const [width, height] of [
+          [1440, 900],
+          [1280, 800],
+          [2048, 1080],
+        ]) {
+          await page.setViewportSize({ width, height });
+          await page.evaluate(() => window.scrollTo(0, 0));
+          const action = page.getByRole('button', {
+            name: loaded ? 'Verify & mint' : 'Upload signed PDF',
+            exact: true,
+          });
+          await expect(action).toBeVisible();
+          const fits = await page.evaluate((loaded) => {
+            const selectors = [
+              '.proof-object',
+              '.flow-rail',
+              '.issuer-card',
+              loaded
+                ? '.document-action > .primary-button'
+                : '.document-drop .primary-button',
+            ];
+            return (
+              selectors.every((selector) => {
+                const rect = document
+                  .querySelector(selector)
+                  ?.getBoundingClientRect();
+                return rect && rect.top >= 0 && rect.bottom <= innerHeight;
+              }) && document.documentElement.scrollWidth <= innerWidth
+            );
+          }, loaded);
+          assert.ok(
+            fits,
+            `${loaded ? 'loaded' : 'initial'} document flow fits ${width}x${height}`,
+          );
+          await page.screenshot({
+            path: `/private/tmp/document-journey-${loaded ? 'loaded' : 'initial'}-${width}.png`,
+          });
+        }
+        if (loaded) {
+          for (const width of [390, 320]) {
+            await page.setViewportSize({ width, height: 800 });
+            await page.evaluate(() => window.scrollTo(0, 0));
+            assert(
+              await page.evaluate(
+                () => document.documentElement.scrollWidth <= innerWidth,
+              ),
+              `loaded review panel has no horizontal overflow at ${width}px`,
+            );
+            await page.screenshot({
+              path: `/private/tmp/document-journey-loaded-${width}.png`,
+              fullPage: true,
+            });
+          }
+          const textZoom = await page.addStyleTag({
+            content: 'html { font-size: 200%; }',
+          });
+          assert(
+            await page.evaluate(
+              () => document.documentElement.scrollWidth <= innerWidth,
+            ),
+            'loaded review panel fits 320px with 200% text',
+          );
+          await textZoom.evaluate((element) => element.remove());
+        }
+        await page.setViewportSize({ width: 1280, height: 900 });
+      };
+      await expect(
+        page.getByRole('button', { name: 'Upload signed PDF', exact: true }),
+      ).toBeEnabled();
+      await expect(
+        page.getByLabel('Import issuance bundle', { exact: true }),
+      ).toHaveCount(0);
+      await expect(page.locator('.flow-rail li')).toHaveCount(3);
+      await checkViewport(false);
+      await page.getByLabel('Signed document', { exact: true }).setInputFiles({
+        name: 'signed.pdf',
+        mimeType: 'application/pdf',
+        buffer: Buffer.from('%PDF-1.7\nsynthetic fixture\n%%EOF'),
       });
-      await expect(page.getByLabel(label, { exact: true })).toBeEnabled();
-    }
-    if (start === 'unknown' && outcome === 'confirmed') {
-      await page.evaluate((address) => {
-        window.issuanceWallet.account = address;
-      }, foreignSender);
+      await expect(page.locator('.document-summary')).toContainText('1.000');
+      await expect(page.locator('.session-list')).toContainText(
+        'Document amount',
+      );
+      await expect(page.locator('.session-list')).toContainText('1.000 g XAU');
+      await page
+        .getByRole('button', { name: 'Connect recipient wallet', exact: true })
+        .click();
+      await page.getByRole('checkbox').check();
+      await checkViewport(true);
+      await page
+        .getByRole('button', { name: 'Verify & mint', exact: true })
+        .click();
+      await expect(page.locator('.document-phases')).toContainText(
+        'Generating the SP1 proof',
+        { timeout: 15000 },
+      );
+      await expect(page.locator('.artifact-caption')).toHaveText(
+        'SP1 proof in progress',
+      );
+      await expect(page.locator('.artifact-caption')).not.toContainText(
+        'Ready to verify',
+      );
+      await expect(page.locator('.proof-object')).toHaveAttribute(
+        'data-state',
+        'loaded',
+      );
+      await expect(page.locator('.artifact-body')).not.toHaveClass(/is-coin/);
+      await page
+        .getByRole('button', { name: 'Check verification status', exact: true })
+        .click();
+      await expect(page.locator('.proof-object')).toHaveAttribute(
+        'data-state',
+        'verified',
+        { timeout: 15000 },
+      );
+      await page
+        .getByRole('button', { name: 'Check before minting', exact: true })
+        .click();
+      assert.equal(proofStarts, 1);
+    } else {
+      for (const [label, value] of [
+        ['Import deployment configuration', fixture.deployment],
+        ['Import issuance bundle', bundle],
+      ]) {
+        if (label === 'Import deployment configuration')
+          await openOperatorConfiguration(page);
+        await expect(page.getByLabel(label, { exact: true })).toBeEnabled();
+        await page.getByLabel(label, { exact: true }).setInputFiles({
+          name: 'synthetic-issuance-recovery.json',
+          mimeType: 'application/json',
+          buffer: Buffer.from(JSON.stringify(value)),
+        });
+        await expect(page.getByLabel(label, { exact: true })).toBeEnabled();
+      }
+      if (start === 'unknown' && outcome === 'confirmed') {
+        await page.evaluate((address) => {
+          window.issuanceWallet.account = address;
+        }, foreignSender);
+        await page
+          .locator('.stage-action')
+          .getByRole('button', { name: 'Connect wallet', exact: true })
+          .click();
+        await expect(page.locator('.stage-action')).toContainText(
+          'The wallet network or address does not match.',
+        );
+        await expect(
+          page.locator('.flow-rail [aria-current="step"]'),
+        ).toContainText('Wallet');
+        await expect(
+          page.getByRole('button', { name: 'Verify evidence', exact: true }),
+        ).toHaveCount(0);
+        await page.evaluate((address) => {
+          window.issuanceWallet.account = address;
+        }, request.recipient);
+      }
       await page
         .locator('.stage-action')
         .getByRole('button', { name: 'Connect wallet', exact: true })
         .click();
-      await expect(page.locator('.stage-action')).toContainText(
-        'The wallet network or address does not match.',
+      await page
+        .getByRole('button', { name: 'Verify evidence', exact: true })
+        .click();
+      await expect(
+        page.getByRole('heading', { name: 'Sign mint request' }),
+      ).toBeVisible();
+      await expect(page.locator('.proof-object')).toHaveAttribute(
+        'data-state',
+        'verified',
       );
-      await expect(
-        page.locator('.flow-rail [aria-current="step"]'),
-      ).toContainText('Wallet');
-      await expect(
-        page.getByRole('button', { name: 'Verify evidence', exact: true }),
-      ).toHaveCount(0);
-      await page.evaluate((address) => {
-        window.issuanceWallet.account = address;
-      }, request.recipient);
+      await expect(page.locator('.artifact-body')).not.toHaveClass(/is-coin/);
+      await page.getByRole('checkbox').check();
+      await page
+        .getByRole('button', { name: 'Sign mint request', exact: true })
+        .click();
+      await page
+        .getByRole('button', { name: 'Check before sending', exact: true })
+        .click();
     }
-    await page
-      .locator('.stage-action')
-      .getByRole('button', { name: 'Connect wallet', exact: true })
-      .click();
-    await page
-      .getByRole('button', { name: 'Verify evidence', exact: true })
-      .click();
-    await expect(
-      page.getByRole('heading', { name: 'Sign mint request' }),
-    ).toBeVisible();
-    await expect(page.locator('.proof-object')).toHaveAttribute(
-      'data-state',
-      'verified',
-    );
-    await expect(page.locator('.artifact-body')).not.toHaveClass(/is-coin/);
-    await page.getByRole('checkbox').check();
-    await page
-      .getByRole('button', { name: 'Sign mint request', exact: true })
-      .click();
-    await page
-      .getByRole('button', { name: 'Check before sending', exact: true })
-      .click();
     const issue = page.getByRole('button', {
       name: 'Mint 1.000 g',
       exact: true,
@@ -385,7 +631,7 @@ export async function exerciseIssuanceRecovery({
     await expect(page.locator('.artifact-body')).not.toHaveClass(/is-coin/);
     await expect(
       page.locator('.flow-rail [aria-current="step"]'),
-    ).toContainText('Mint');
+    ).toContainText(documentFlow ? 'Verify & mint' : 'Mint');
     const transaction = page.getByRole('region', {
       name: 'Issuance transaction',
       exact: true,
@@ -492,12 +738,14 @@ export async function exerciseIssuanceRecovery({
     );
     if (finalOutcome === 'confirmed') {
       await expect(page.locator('.artifact-body')).toHaveClass(/is-coin/);
-      await expect(page.locator('.flow-rail li.done')).toHaveCount(6);
+      await expect(page.locator('.flow-rail li.done')).toHaveCount(
+        documentFlow ? 3 : 6,
+      );
     } else {
       await expect(page.locator('.artifact-body')).not.toHaveClass(/is-coin/);
       await expect(
         page.locator('.flow-rail [aria-current="step"]'),
-      ).toContainText('Mint');
+      ).toContainText(documentFlow ? 'Verify & mint' : 'Mint');
     }
     await expect(transaction).toContainText(finalHash);
     await expect(

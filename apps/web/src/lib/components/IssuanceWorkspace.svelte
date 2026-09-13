@@ -21,6 +21,7 @@
   import EvidenceArtifact from '../visuals/EvidenceArtifact.svelte';
   import AppHeader from './AppHeader.svelte';
   import JsonFileInput from './JsonFileInput.svelte';
+  import DocumentJourney from './DocumentJourney.svelte';
 
   const session = createIssuanceSession();
   let snapshot = $state(session.read());
@@ -31,6 +32,7 @@
   let reading = $state(false);
   let deploymentName = $state('');
   let bundleName = $state('');
+  let documentAmount = $state<string>();
   let transferRecipient = $state('');
   let transferAmount = $state('');
   let ethereumRpc = $state('');
@@ -353,12 +355,15 @@
 </script>
 
 <a class="skip-link" href="#engine">Skip to token engine</a>
-<div class="live-shell">
+<div
+  class="live-shell"
+  class:document-workspace={!operatorMode && workspaceView === 'issue'}
+>
   <AppHeader current={workspaceView}>
     {#snippet actions()}
       <button
         class="header-wallet"
-        disabled={busy || unresolved}
+        disabled={!!snapshot.busy || unresolved}
         onclick={connectWallet}
         title={snapshot.wallet?.address}
         ><Glyph name="wallet" size={15} />{walletNeedsTestnet
@@ -387,148 +392,98 @@
       aria-labelledby="issuance-title"
       hidden={workspaceView !== 'issue'}
     >
-      <div class="stage-copy">
-        <p class="scene-kicker">
-          {#if snapshot.deployment}Proof → token <span
-              >{activeStep + 1} / 6</span
-            >{:else}How issuance works{/if}
-        </p>
-        <h1 id="issuance-title" tabindex="-1">
-          Proof first. <em>Tokens next.</em>
-        </h1>
-        <p>
-          {#if snapshot.receipt}Your tokens are issued. Keep the receipt.
-          {:else if snapshot.transaction?.outcome === 'reverted'}The transaction
-            reverted. No tokens were minted.
-          {:else if snapshot.transaction || snapshot.unknownSubmission === 'issuance'}Check
-            the outcome before continuing.
-          {:else if !snapshot.deployment}A gold right becomes transferable
-            tokens after proof, issuer approval, and your signature.
-          {:else if !request}Tokenize gold with proof and issuer authorization.
-          {:else if !recipientConnected}Connect the wallet that will receive
-            your tokens.
-          {:else if snapshot.sourceProof !== 'accepted'}Check the evidence
-            before approving the mint.
-          {:else if !snapshot.signature}Approve exactly {formatGrams(
-              request.amount,
-            )} g.
-          {:else}One final check, then mint to your wallet.{/if}
-        </p>
-      </div>
+      {#if !operatorMode}
+        <DocumentJourney
+          {session}
+          {snapshot}
+          {unresolved}
+          {connectWallet}
+          {walletNeedsTestnet}
+          {networkStatus}
+          onamount={(value) => (documentAmount = value)}
+        />
+      {:else}
+        <div class="stage-copy">
+          <p class="scene-kicker">
+            {#if snapshot.deployment}Proof → token <span
+                >{activeStep + 1} / 6</span
+              >{:else}How issuance works{/if}
+          </p>
+          <h1 id="issuance-title" tabindex="-1">
+            Proof first. <em>Tokens next.</em>
+          </h1>
+          <p>
+            {#if snapshot.receipt}Your tokens are issued. Keep the receipt.
+            {:else if snapshot.transaction?.outcome === 'reverted'}The
+              transaction reverted. No tokens were minted.
+            {:else if snapshot.transaction || snapshot.unknownSubmission === 'issuance'}Check
+              the outcome before continuing.
+            {:else if !snapshot.deployment}A gold right becomes transferable
+              tokens after proof, issuer approval, and your signature.
+            {:else if !request}Tokenize gold with proof and issuer
+              authorization.
+            {:else if !recipientConnected}Connect the wallet that will receive
+              your tokens.
+            {:else if snapshot.sourceProof !== 'accepted'}Check the evidence
+              before approving the mint.
+            {:else if !snapshot.signature}Approve exactly {formatGrams(
+                request.amount,
+              )} g.
+            {:else}One final check, then mint to your wallet.{/if}
+          </p>
+        </div>
 
-      <EvidenceArtifact
-        configured={!!snapshot.deployment}
-        amount={request ? formatGrams(request.amount) : undefined}
-        verified={snapshot.sourceProof === 'accepted'}
-        minted={!!snapshot.receipt}
-        outcome={snapshot.transaction?.outcome ??
-          (snapshot.unknownSubmission === 'issuance'
-            ? 'unresolved'
-            : undefined)}
-      />
+        <EvidenceArtifact
+          configured={!!snapshot.deployment}
+          amount={request ? formatGrams(request.amount) : undefined}
+          verified={snapshot.sourceProof === 'accepted'}
+          minted={!!snapshot.receipt}
+          outcome={snapshot.transaction?.outcome ??
+            (snapshot.unknownSubmission === 'issuance'
+              ? 'unresolved'
+              : undefined)}
+        />
 
-      <ol
-        class="flow-rail"
-        aria-label={snapshot.deployment
-          ? 'Issuance progress'
-          : 'Issuance steps'}
-      >
-        {#each flowSteps as step, index}
-          <li
-            class:done={step.done}
-            class:current={!!snapshot.deployment &&
+        <ol
+          class="flow-rail"
+          aria-label={snapshot.deployment
+            ? 'Issuance progress'
+            : 'Issuance steps'}
+        >
+          {#each flowSteps as step, index}
+            <li
+              class:done={step.done}
+              class:current={!!snapshot.deployment &&
+                !snapshot.receipt &&
+                index === activeStep}
+              aria-current={!!snapshot.deployment &&
               !snapshot.receipt &&
-              index === activeStep}
-            aria-current={!!snapshot.deployment &&
-            !snapshot.receipt &&
-            index === activeStep
-              ? 'step'
-              : undefined}
-          >
-            <span>{step.done ? '✓' : index + 1}</span><small>{step.label}</small
+              index === activeStep
+                ? 'step'
+                : undefined}
             >
-          </li>
-        {/each}
-      </ol>
-
-      <section class="stage-action" aria-label="Current issuance step">
-        {#key activeStep}
-          {#if snapshot.unknownSubmission === 'issuance'}
-            <div
-              id="wallet-outcome"
-              class="transaction-card"
-              role="region"
-              aria-label="Unknown wallet outcome"
-            >
-              <h2>Check your wallet</h2>
-              <p>
-                A transaction may have been sent. New submissions are paused.
-              </p>
-              <label class="text-field"
-                >Transaction hash<input
-                  type="text"
-                  placeholder="0x…"
-                  bind:value={recoveryHash}
-                  disabled={busy}
-                  spellcheck="false"
-                /></label
+              <span>{step.done ? '✓' : index + 1}</span><small
+                >{step.label}</small
               >
-              <div class="button-row">
-                <button
-                  class="primary-button"
-                  disabled={busy || !recoveryHash}
-                  onclick={recoverWalletTransaction}>Reconcile hash</button
-                >
-                <button
-                  class="secondary-button"
-                  disabled={busy || !!snapshot.pendingOperation}
-                  onclick={() => session.acknowledgeNotSent()}
-                  >Nothing was sent</button
-                >
-              </div>
-            </div>
-          {:else if snapshot.transaction}
-            <div
-              class="transaction-card"
-              role="region"
-              aria-label="Issuance transaction"
-            >
-              <div class="transaction-heading">
-                <h2>
-                  {snapshot.transaction.outcome === 'confirmed'
-                    ? 'Issuance confirmed'
-                    : snapshot.transaction.outcome === 'reverted'
-                      ? 'Transaction reverted'
-                      : snapshot.transaction.outcome === 'unresolved'
-                        ? 'Outcome unresolved'
-                        : 'Transaction submitted'}
-                </h2>
-                <span class="status-pill">{snapshot.transaction.outcome}</span>
-              </div>
-              <code>{snapshot.transaction.hash}</code>
-              {#if snapshot.receipt}
-                <p>{formatGrams(snapshot.receipt.request.amount)} g minted.</p>
-                <button
-                  class="primary-button"
-                  onclick={() =>
-                    saveJson(
-                      snapshot.receipt,
-                      'ultratokenizer-issuance-receipt.json',
-                    )}>Save receipt</button
-                >
-              {:else if snapshot.transaction.outcome === 'reverted'}
-                <p>No tokens were minted. Load a fresh package to retry.</p>
-              {:else}
-                <button
-                  class="primary-button"
-                  disabled={busy}
-                  onclick={() => session.confirm()}
-                  >Check transaction outcome</button
-                >
-              {/if}
-              {#if snapshot.transaction.outcome === 'unresolved'}
+            </li>
+          {/each}
+        </ol>
+
+        <section class="stage-action" aria-label="Current issuance step">
+          {#key activeStep}
+            {#if snapshot.unknownSubmission === 'issuance'}
+              <div
+                id="wallet-outcome"
+                class="transaction-card"
+                role="region"
+                aria-label="Unknown wallet outcome"
+              >
+                <h2>Check your wallet</h2>
+                <p>
+                  A transaction may have been sent. New submissions are paused.
+                </p>
                 <label class="text-field"
-                  >Recovered transaction hash<input
+                  >Transaction hash<input
                     type="text"
                     placeholder="0x…"
                     bind:value={recoveryHash}
@@ -536,205 +491,279 @@
                     spellcheck="false"
                   /></label
                 >
-                <button
-                  class="secondary-button"
-                  disabled={busy || !recoveryHash}
-                  onclick={recoverWalletTransaction}
-                  >Reconcile recovered hash</button
+                <div class="button-row">
+                  <button
+                    class="primary-button"
+                    disabled={busy || !recoveryHash}
+                    onclick={recoverWalletTransaction}>Reconcile hash</button
+                  >
+                  <button
+                    class="secondary-button"
+                    disabled={busy || !!snapshot.pendingOperation}
+                    onclick={() => session.acknowledgeNotSent()}
+                    >Nothing was sent</button
+                  >
+                </div>
+              </div>
+            {:else if snapshot.transaction}
+              <div
+                class="transaction-card"
+                role="region"
+                aria-label="Issuance transaction"
+              >
+                <div class="transaction-heading">
+                  <h2>
+                    {snapshot.transaction.outcome === 'confirmed'
+                      ? 'Issuance confirmed'
+                      : snapshot.transaction.outcome === 'reverted'
+                        ? 'Transaction reverted'
+                        : snapshot.transaction.outcome === 'unresolved'
+                          ? 'Outcome unresolved'
+                          : 'Transaction submitted'}
+                  </h2>
+                  <span class="status-pill">{snapshot.transaction.outcome}</span
+                  >
+                </div>
+                <code>{snapshot.transaction.hash}</code>
+                {#if snapshot.receipt}
+                  <p>
+                    {formatGrams(snapshot.receipt.request.amount)} g minted.
+                  </p>
+                  <button
+                    class="primary-button"
+                    onclick={() =>
+                      saveJson(
+                        snapshot.receipt,
+                        'ultratokenizer-issuance-receipt.json',
+                      )}>Save receipt</button
+                  >
+                {:else if snapshot.transaction.outcome === 'reverted'}
+                  <p>No tokens were minted. Load a fresh package to retry.</p>
+                {:else}
+                  <button
+                    class="primary-button"
+                    disabled={busy}
+                    onclick={() => session.confirm()}
+                    >Check transaction outcome</button
+                  >
+                {/if}
+                {#if snapshot.transaction.outcome === 'unresolved'}
+                  <label class="text-field"
+                    >Recovered transaction hash<input
+                      type="text"
+                      placeholder="0x…"
+                      bind:value={recoveryHash}
+                      disabled={busy}
+                      spellcheck="false"
+                    /></label
+                  >
+                  <button
+                    class="secondary-button"
+                    disabled={busy || !recoveryHash}
+                    onclick={recoverWalletTransaction}
+                    >Reconcile recovered hash</button
+                  >
+                {/if}
+              </div>
+            {:else if !snapshot.deployment}
+              {#if networkStatus === 'loading'}
+                <p role="status">
+                  Checking whether gold issuance is available…
+                </p>
+              {:else}
+                <div class="action-copy" role="status">
+                  <div>
+                    <h2>
+                      {networkStatus === 'missing'
+                        ? 'Gold issuance is unavailable'
+                        : 'Could not check issuance status'}
+                    </h2>
+                    <p>
+                      {networkStatus === 'missing'
+                        ? operatorMode
+                          ? 'Publish the approved deployment before accepting proof packages.'
+                          : 'Issuance will open when the testnet setup is ready. You can connect your wallet now.'
+                        : 'The app could not load its network settings. Try again.'}
+                    </p>
+                  </div>
+                </div>
+                {#if networkStatus === 'failed'}
+                  <button class="secondary-button" onclick={loadNetwork}
+                    >Try again</button
+                  >
+                {/if}
+                <a class="text-link" href="/verify/"
+                  >Verify a receipt <Glyph name="arrow" size={14} /></a
                 >
               {/if}
-            </div>
-          {:else if !snapshot.deployment}
-            {#if networkStatus === 'loading'}
-              <p role="status">Checking whether gold issuance is available…</p>
-            {:else}
-              <div class="action-copy" role="status">
+            {:else if !request}
+              <JsonFileInput
+                class="upload-button"
+                label="Import issuance bundle"
+                compact
+                disabled={busy || unresolved}
+                onfile={(file) => importFile(file, 'bundle')}
+                onerror={(message) => (fileError = message)}
+                >Add proof package <Glyph
+                  name="plus"
+                  size={15}
+                /></JsonFileInput
+              >
+              <p class="field-hint">
+                Drop one JSON package here, or choose a file.
+              </p>
+              <details class="upload-help">
+                <summary>What can I upload?</summary>
+                <p>
+                  Get the public proof-and-permit package from your issuer. Its
+                  permit lasts at most ten minutes; ask for a fresh permit if it
+                  expires. JSON, up to {MAX_BUNDLE_BYTES / 1024} KB. Source PDFs and
+                  emails cannot be uploaded here.
+                </p>
+              </details>
+            {:else if !recipientConnected}
+              <div class="action-copy">
+                <span>02</span>
                 <div>
                   <h2>
-                    {networkStatus === 'missing'
-                      ? 'Gold issuance is unavailable'
-                      : 'Could not check issuance status'}
+                    {walletNeedsTestnet
+                      ? 'Switch to Hedera testnet'
+                      : 'Connect the recipient wallet'}
                   </h2>
                   <p>
-                    {networkStatus === 'missing'
-                      ? operatorMode
-                        ? 'Publish the approved deployment before accepting proof packages.'
-                        : 'Issuance will open when the testnet setup is ready. You can connect your wallet now.'
-                      : 'The app could not load its network settings. Try again.'}
+                    {walletNeedsTestnet
+                      ? 'Your wallet is connected on another network.'
+                      : 'The connected address must match the approved recipient.'}
                   </p>
                 </div>
               </div>
-              {#if networkStatus === 'failed'}
-                <button class="secondary-button" onclick={loadNetwork}
-                  >Try again</button
-                >
-              {/if}
-              <a class="text-link" href="/verify/"
-                >Verify a receipt <Glyph name="arrow" size={14} /></a
-              >
-            {/if}
-          {:else if !request}
-            <JsonFileInput
-              class="upload-button"
-              label="Import issuance bundle"
-              compact
-              disabled={busy || unresolved}
-              onfile={(file) => importFile(file, 'bundle')}
-              onerror={(message) => (fileError = message)}
-              >Add proof package <Glyph name="plus" size={15} /></JsonFileInput
-            >
-            <p class="field-hint">
-              Drop one JSON package here, or choose a file.
-            </p>
-            <details class="upload-help">
-              <summary>What can I upload?</summary>
-              <p>
-                Get the public proof-and-permit package from your issuer. Its
-                permit lasts at most ten minutes; ask for a fresh permit if it
-                expires. JSON, up to {MAX_BUNDLE_BYTES / 1024} KB. Source PDFs and
-                emails cannot be uploaded here.
-              </p>
-            </details>
-          {:else if !recipientConnected}
-            <div class="action-copy">
-              <span>02</span>
-              <div>
-                <h2>
-                  {walletNeedsTestnet
-                    ? 'Switch to Hedera testnet'
-                    : 'Connect the recipient wallet'}
-                </h2>
-                <p>
-                  {walletNeedsTestnet
-                    ? 'Your wallet is connected on another network.'
-                    : 'The connected address must match the approved recipient.'}
-                </p>
-              </div>
-            </div>
-            <button
-              class="primary-button wide-button"
-              disabled={busy || unresolved}
-              onclick={connectWallet}
-              ><Glyph name="wallet" size={16} />
-              {walletNeedsTestnet
-                ? 'Switch to Hedera testnet'
-                : 'Connect wallet'}</button
-            >
-            {#if !snapshot.providerAvailable}
-              <p class="field-hint">No browser wallet detected.</p>
-            {:else if connected && !walletNeedsTestnet}
-              <p class="field-hint">
-                The wallet network or address does not match. Select the
-                recipient account and configured network, then connect again.
-              </p>
-            {/if}
-            <small class="bound-recipient"
-              >Recipient · {request.recipient}</small
-            >
-          {:else if snapshot.sourceProof !== 'accepted'}
-            <div class="action-copy">
-              <span>03</span>
-              <div>
-                <h2>Verify evidence</h2>
-                <p>
-                  Check the proof, issuer authorization, and current issuance
-                  conditions.
-                </p>
-              </div>
-            </div>
-            <div class="claim-review">
-              <span>Exact quantity</span>
-              <strong class="claim-quantity"
-                >{formatGrams(request.amount)} <small>g</small></strong
-              >
-              <button
-                class="primary-button"
-                disabled={busy || unresolved}
-                onclick={() => session.check()}>Verify evidence</button
-              >
-            </div>
-          {:else if !snapshot.signature}
-            <div class="action-copy">
-              <span>04</span>
-              <div>
-                <h2>Sign mint request</h2>
-                <p>
-                  Approve the exact amount. This signature sends no transaction.
-                </p>
-              </div>
-            </div>
-            <label class="disclosure-control"
-              ><input
-                type="checkbox"
-                checked={snapshot.disclosed}
-                disabled={busy || unresolved}
-                onchange={(event) =>
-                  session.disclose(event.currentTarget.checked)}
-              /><span
-                >This test package proves no bank authorization, backing, or
-                redemption. Its public request data may be written onchain.</span
-              ></label
-            >
-            <button
-              class="primary-button wide-button"
-              disabled={!snapshot.disclosed || busy || unresolved}
-              onclick={() => session.sign()}
-              >Sign mint request <Glyph name="arrow" size={15} /></button
-            >
-          {:else}
-            <div class="action-copy">
-              <span>05</span>
-              <div>
-                <h2>Mint {formatGrams(request.amount)} g</h2>
-                <p>
-                  {snapshot.simulation === 'passed'
-                    ? 'Check passed. Confirm the mint in your wallet.'
-                    : 'Check current conditions before sending the transaction.'}
-                </p>
-              </div>
-            </div>
-            {#if snapshot.simulation !== 'passed'}
               <button
                 class="primary-button wide-button"
-                disabled={!snapshot.signature || busy || unresolved}
-                onclick={() => session.simulate()}>Check before sending</button
+                disabled={busy || unresolved}
+                onclick={connectWallet}
+                ><Glyph name="wallet" size={16} />
+                {walletNeedsTestnet
+                  ? 'Switch to Hedera testnet'
+                  : 'Connect wallet'}</button
+              >
+              {#if !snapshot.providerAvailable}
+                <p class="field-hint">No browser wallet detected.</p>
+              {:else if connected && !walletNeedsTestnet}
+                <p class="field-hint">
+                  The wallet network or address does not match. Select the
+                  recipient account and configured network, then connect again.
+                </p>
+              {/if}
+              <small class="bound-recipient"
+                >Recipient · {request.recipient}</small
+              >
+            {:else if snapshot.sourceProof !== 'accepted'}
+              <div class="action-copy">
+                <span>03</span>
+                <div>
+                  <h2>Verify evidence</h2>
+                  <p>
+                    Check the proof, issuer authorization, and current issuance
+                    conditions.
+                  </p>
+                </div>
+              </div>
+              <div class="claim-review">
+                <span>Exact quantity</span>
+                <strong class="claim-quantity"
+                  >{formatGrams(request.amount)} <small>g</small></strong
+                >
+                <button
+                  class="primary-button"
+                  disabled={busy || unresolved}
+                  onclick={() => session.check()}>Verify evidence</button
+                >
+              </div>
+            {:else if !snapshot.signature}
+              <div class="action-copy">
+                <span>04</span>
+                <div>
+                  <h2>Sign mint request</h2>
+                  <p>
+                    Approve the exact amount. This signature sends no
+                    transaction.
+                  </p>
+                </div>
+              </div>
+              <label class="disclosure-control"
+                ><input
+                  type="checkbox"
+                  checked={snapshot.disclosed}
+                  disabled={busy || unresolved}
+                  onchange={(event) =>
+                    session.disclose(event.currentTarget.checked)}
+                /><span
+                  >This test package proves no bank authorization, backing, or
+                  redemption. Its public request data may be written onchain.</span
+                ></label
+              >
+              <button
+                class="primary-button wide-button"
+                disabled={!snapshot.disclosed || busy || unresolved}
+                onclick={() => session.sign()}
+                >Sign mint request <Glyph name="arrow" size={15} /></button
               >
             {:else}
-              <button
-                class="primary-button wide-button"
-                disabled={!snapshot.signature ||
-                  snapshot.simulation !== 'passed' ||
-                  !snapshot.disclosed ||
-                  busy ||
-                  unresolved}
-                onclick={() => session.submit()}
-                >Mint {formatGrams(request.amount)} g <Glyph
-                  name="arrow"
-                  size={15}
-                /></button
-              >
+              <div class="action-copy">
+                <span>05</span>
+                <div>
+                  <h2>Mint {formatGrams(request.amount)} g</h2>
+                  <p>
+                    {snapshot.simulation === 'passed'
+                      ? 'Check passed. Confirm the mint in your wallet.'
+                      : 'Check current conditions before sending the transaction.'}
+                  </p>
+                </div>
+              </div>
+              {#if snapshot.simulation !== 'passed'}
+                <button
+                  class="primary-button wide-button"
+                  disabled={!snapshot.signature || busy || unresolved}
+                  onclick={() => session.simulate()}
+                  >Check before sending</button
+                >
+              {:else}
+                <button
+                  class="primary-button wide-button"
+                  disabled={!snapshot.signature ||
+                    snapshot.simulation !== 'passed' ||
+                    !snapshot.disclosed ||
+                    busy ||
+                    unresolved}
+                  onclick={() => session.submit()}
+                  >Mint {formatGrams(request.amount)} g <Glyph
+                    name="arrow"
+                    size={15}
+                  /></button
+                >
+              {/if}
             {/if}
-          {/if}
-        {/key}
-        {#if reading && !setupOpen}<p class="status-line" role="status">
-            Reading JSON locally…
-          </p>{/if}
-        {#if fileError}<p class="inline-error" role="alert">
-            {fileError}
-          </p>{/if}
-        {#if snapshot.busy}<p class="status-line" role="status">
-            {snapshot.busy === 'confirming'
-              ? 'Checking the transaction outcome…'
-              : `${snapshot.busy.charAt(0).toUpperCase()}${snapshot.busy.slice(1)}…`}
-          </p>{/if}
-        {#if snapshot.error}<p class="inline-error" role="alert">
-            {snapshot.error}
-          </p>{/if}
-        {#if snapshot.pendingOperation}<p class="status-line" role="status">
-            Finish or close the open wallet prompt. New wallet actions are
-            paused.
-          </p>{/if}
-      </section>
+          {/key}
+          {#if reading && !setupOpen}<p class="status-line" role="status">
+              Reading JSON locally…
+            </p>{/if}
+          {#if fileError}<p class="inline-error" role="alert">
+              {fileError}
+            </p>{/if}
+          {#if snapshot.busy}<p class="status-line" role="status">
+              {snapshot.busy === 'confirming'
+                ? 'Checking the transaction outcome…'
+                : `${snapshot.busy.charAt(0).toUpperCase()}${snapshot.busy.slice(1)}…`}
+            </p>{/if}
+          {#if snapshot.error}<p class="inline-error" role="alert">
+              {snapshot.error}
+            </p>{/if}
+          {#if snapshot.pendingOperation}<p class="status-line" role="status">
+              Finish or close the open wallet prompt. New wallet actions are
+              paused.
+            </p>{/if}
+        </section>
+      {/if}
     </section>
 
     <section
@@ -934,11 +963,17 @@
               </dd>
             </div>
             <div>
-              <dt>Amount</dt>
+              <dt>
+                {!operatorMode && !request && documentAmount
+                  ? 'Document amount'
+                  : 'Amount'}
+              </dt>
               <dd>
                 {request
                   ? `${formatGrams(request.amount)} g XAU`
-                  : 'Not loaded'}
+                  : documentAmount && !operatorMode
+                    ? `${formatGrams(documentAmount)} g XAU`
+                    : 'Not loaded'}
               </dd>
             </div>
           </dl>
@@ -991,7 +1026,7 @@
           <details class="technical-details">
             <summary>Deployment details</summary>
             <div class="compact-files">
-              {#if request}<JsonFileInput
+              {#if request && operatorMode}<JsonFileInput
                   label="Import issuance bundle"
                   compact
                   disabled={busy || unresolved}
@@ -1005,7 +1040,7 @@
                 <dt>Configuration</dt>
                 <dd>{deploymentName || 'Loaded JSON'}</dd>
               </div>
-              {#if request}<div>
+              {#if request && operatorMode}<div>
                   <dt>Package</dt>
                   <dd>{bundleName || 'Loaded JSON'}</dd>
                 </div>{/if}

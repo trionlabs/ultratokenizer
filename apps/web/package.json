@@ -13,7 +13,7 @@
     "preview:demo": "node scripts/preview-demo.mjs",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "node --experimental-strip-types --test test/*.test.mjs",
-    "test:browser": "node test/header-browser.mjs && node test/demo-browser.mjs && node test/hosted-deployment-browser.mjs && node test/worker-browser.mjs && node test/security-browser.mjs",
+    "test:browser": "node test/header-browser.mjs && node test/demo-browser.mjs && node test/hosted-deployment-browser.mjs && node test/document-browser.mjs && node test/worker-browser.mjs && node test/security-browser.mjs",
     "test:browser:backends": "node test/backend-browser.mjs",
     "test:browser:institution": "node test/institution-browser.mjs",
     "format": "prettier --write .",

@@ -142,6 +142,10 @@
       outcome={snapshot.transaction?.outcome ??
         (snapshot.unknownSubmission === 'issuance' ? 'unresolved' : undefined)}
       emptyCaption="Waiting for your document"
+      proofStage={flow.status?.status === 'queued' ||
+      flow.status?.status === 'proving'
+        ? flow.status.status
+        : undefined}
       compact
     />
 
@@ -343,7 +347,7 @@
 
       {#if issuer}
         <div class="issuer-card" aria-label="Selected issuer">
-          <span class="issuer-mark"><Glyph name="check" size={17} /></span>
+          <span class="issuer-mark"><Glyph name="wallet" size={17} /></span>
           <div>
             <small>Selected issuer</small><strong>{issuer.label}</strong><span
               class="issuer-context"
@@ -404,7 +408,7 @@
           <div class:phase-done={proofAccepted}>
             <span>2a</span>
             <div>
-              <strong>Verify document</strong>
+              <strong>Verify with SP1</strong>
               <p>
                 {proofAccepted
                   ? 'Proof and issuer approval verified.'
@@ -419,14 +423,14 @@
             <div>
               <strong>Mint to wallet</strong>
               <p>
-                {proofAccepted
-                  ? 'Check current conditions, then confirm the mint in your wallet.'
-                  : 'Begins after proof verification and issuer approval.'}
+                The Gate checks the proof and mints directly to your wallet.
               </p>
             </div>
           </div>
         </div>
-        <p class="bound-recipient">Recipient · {document.recipient}</p>
+        <div class="bound-recipient">
+          <span>Recipient wallet</span><code>{document.recipient}</code>
+        </div>
         {#if !walletMatches}
           <button
             class="primary-button"
@@ -492,8 +496,8 @@
             >Verify & mint <Glyph name="arrow" size={15} /></button
           >
           <p class="field-hint">
-            First, sign the exact request in your wallet. A separate wallet
-            confirmation sends the mint after verification.
+            First sign the exact request. After proof verification, confirm a
+            separate mint transaction.
           </p>
         {/if}
         {#if snapshot.preparedGatePaused}<p class="field-hint">
@@ -774,6 +778,18 @@
     font-size: 10px;
     width: 100%;
     overflow-wrap: anywhere;
+    display: grid;
+    gap: 5px;
+  }
+  .bound-recipient > span {
+    color: var(--p-muted);
+  }
+  .bound-recipient code {
+    color: var(--p-ink);
+    font-size: 11px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
   .document-privacy {
     max-width: 350px;
@@ -783,42 +799,125 @@
     color: var(--p-muted);
     line-height: 1.6;
   }
+  .loaded .document-action {
+    width: 100%;
+    margin-top: 18px;
+    padding: 20px;
+    gap: 12px;
+    justify-items: stretch;
+    text-align: left;
+    border: 1px solid var(--p-line);
+    border-radius: 20px;
+    background: var(--p-paper);
+  }
+  .loaded .document-summary {
+    align-items: flex-start;
+    padding: 0 0 14px;
+    border-top: 0;
+  }
+  .loaded .document-summary strong {
+    font-size: 14px;
+    line-height: 1.4;
+    font-weight: 650;
+  }
+  .loaded .fixed-amount strong {
+    font-size: 28px;
+    line-height: 1.15;
+    font-weight: 550;
+  }
+  .loaded .issuer-card {
+    padding: 0 0 14px;
+    border: 0;
+    border-bottom: 1px solid var(--p-line);
+    border-radius: 0;
+    background: transparent;
+  }
+  .loaded .issuer-mark {
+    display: none;
+  }
+  .loaded .issuer-card strong {
+    line-height: 1.4;
+  }
+  .loaded .issuer-details {
+    padding: 0 0 12px;
+    border-bottom: 1px solid var(--p-line);
+  }
+  .loaded .document-phases {
+    gap: 0;
+    padding: 0 0 12px;
+    border-bottom: 1px solid var(--p-line);
+  }
+  .loaded .document-phases > div {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 0;
+    padding-bottom: 12px;
+  }
+  .loaded .document-phases > div:last-child {
+    padding-bottom: 0;
+  }
+  .loaded .document-phases > div::after {
+    display: none;
+  }
+  .loaded .document-phases > div > span {
+    width: 36px;
+    height: auto;
+    display: block;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    line-height: 20px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .loaded .document-phases strong {
+    font-size: 13px;
+    line-height: 20px;
+  }
+  .loaded .document-phases p {
+    margin-top: 3px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .loaded .document-action > .primary-button,
+  .loaded .document-action > .secondary-button {
+    width: 100%;
+  }
+  .loaded .field-hint,
+  .loaded .status-line,
+  .loaded .inline-error {
+    margin: 0;
+    text-align: left;
+  }
+  .loaded .disclosure-control {
+    width: 100%;
+    margin: 0;
+    font-size: 10px;
+    line-height: 1.5;
+  }
+  .loaded .change-document {
+    padding-top: 3px;
+  }
   @media (min-width: 981px) {
     .document-journey.loaded {
       display: grid;
-      grid-template-columns: minmax(220px, 0.85fr) minmax(0, 1.15fr);
-      column-gap: 24px;
+      grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+      column-gap: 28px;
       align-items: start;
     }
     .loaded .document-heading {
       grid-column: 1 / -1;
     }
     .loaded .journey-evidence {
-      margin-top: 24px;
+      width: 100%;
+      max-width: 310px;
+      margin: 46px auto 0;
     }
     .loaded .document-action {
       width: 100%;
-      margin-top: 16px;
-      gap: 9px;
-    }
-    .loaded .document-summary {
-      padding: 10px 0;
-    }
-    .loaded .issuer-card {
-      padding: 11px 12px;
-    }
-    .loaded .document-phases {
-      gap: 10px;
-    }
-    .loaded .field-hint {
-      margin: 0;
+      margin-top: 18px;
     }
     .loaded .stage-notice {
       padding: 9px 11px;
-    }
-    .loaded .disclosure-control {
-      font-size: 10px;
-      line-height: 1.5;
     }
   }
   .stage-notice {

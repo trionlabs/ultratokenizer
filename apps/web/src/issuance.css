@@ -77,6 +77,24 @@
   justify-self: center;
 }
 
+/* Keep the holder's document action in the first desktop viewport. Expanded
+   evidence and smaller screens retain ordinary document scrolling. */
+@media (min-width: 981px) {
+  .document-workspace .app-header {
+    min-height: 72px;
+    padding-block: 8px;
+  }
+  .document-workspace .engine-layout {
+    min-height: calc(100svh - 126px);
+    padding-top: clamp(16px, 2.2vh, 24px);
+    padding-bottom: 20px;
+    gap: 36px;
+  }
+  .document-workspace .activity-rail {
+    margin-top: 24px;
+  }
+}
+
 .stage-copy {
   display: grid;
   justify-items: center;

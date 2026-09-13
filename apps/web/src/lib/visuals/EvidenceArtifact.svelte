@@ -8,12 +8,18 @@
     verified,
     minted,
     outcome,
+    emptyCaption,
+    proofStage,
+    compact = false,
   }: {
     configured: boolean;
     amount?: string;
     verified: boolean;
     minted: boolean;
     outcome?: string;
+    emptyCaption?: string;
+    proofStage?: 'queued' | 'proving';
+    compact?: boolean;
   } = $props();
   const tilt = new Spring({ x: 0, y: 0 }, { stiffness: 0.1, damping: 0.75 });
   let state = $derived(
@@ -38,11 +44,15 @@
             ? 'Awaiting confirmation'
             : verified
               ? 'Proof verified'
-              : amount
-                ? 'Ready to verify'
-                : configured
-                  ? 'Waiting for proof package'
-                  : 'Proof becomes token',
+              : proofStage === 'queued'
+                ? 'Waiting for SP1'
+                : proofStage === 'proving'
+                  ? 'SP1 proof in progress'
+                  : amount
+                    ? 'Ready to verify'
+                    : configured
+                      ? (emptyCaption ?? 'Waiting for proof package')
+                      : 'Proof becomes token',
   );
   function move(event: PointerEvent) {
     if (prefersReducedMotion.current || event.pointerType !== 'mouse') return;
@@ -57,6 +67,7 @@
 <!-- The paper represents a public proof package. Only a reconciled receipt produces a coin. -->
 <div
   class="proof-object"
+  class:compact
   data-state={state}
   aria-hidden="true"
   role="presentation"
@@ -327,6 +338,12 @@
     height: 4px;
     border: 1px solid currentColor;
     border-radius: 50%;
+  }
+  .proof-object.compact {
+    height: clamp(180px, 24vh, 240px);
+  }
+  .compact .artifact-lift {
+    scale: 0.64;
   }
   [data-state='verified'] .artifact-caption i,
   [data-state='minted'] .artifact-caption i {
