@@ -45,7 +45,7 @@
   let walletHelp = $state(false);
   let wallets = $state<readonly WalletChoice[]>([]);
   let selectedWallet = $state<WalletChoice>();
-  let walletSelector = $state<HTMLSelectElement>();
+  let walletDialog = $state<HTMLDialogElement>();
   let providerPinned = false;
   let detachProvider = () => {};
   let workspaceView = $derived<'issue' | 'transfer'>(
@@ -66,8 +66,9 @@
   }
 
   function connectWallet() {
-    if (wallets.length > 1 && !selectedWallet) {
-      walletSelector?.focus();
+    if (snapshot.busy || unresolved) return;
+    if (wallets.length > 1 && !walletNeedsTestnet) {
+      walletDialog?.showModal();
       return;
     }
     if (!snapshot.providerAvailable) {
@@ -116,6 +117,8 @@
     providerPinned = true;
     useWallet(choice);
     walletHelp = false;
+    walletDialog?.close();
+    void session.connect();
   }
 
   let connected = $derived(!!snapshot.wallet);
@@ -411,30 +414,9 @@
 <div
   class="live-shell"
   class:document-workspace={!operatorMode && workspaceView === 'issue'}
-  class:multiple-wallets={wallets.length > 1}
 >
   <AppHeader current={workspaceView}>
     {#snippet actions()}
-      {#if wallets.length > 1}
-        <select
-          class="wallet-selector"
-          aria-label="Wallet extension"
-          title="Wallet names are supplied by extensions, not verified by this app."
-          bind:this={walletSelector}
-          value={selectedWallet?.id ?? ''}
-          disabled={!!snapshot.busy ||
-            !!snapshot.pendingOperation ||
-            unresolved}
-          onchange={(event) => selectWallet(event.currentTarget.value)}
-        >
-          <option value="" disabled>Select wallet</option>
-          {#each wallets as wallet (wallet.id)}
-            <option value={wallet.id}
-              >{wallet.name}{wallet.rdns ? ` · ${wallet.rdns}` : ''}</option
-            >
-          {/each}
-        </select>
-      {/if}
       <button
         class="header-wallet"
         disabled={!!snapshot.busy || unresolved}
@@ -1159,6 +1141,42 @@
     {/if}
   </main>
 
+  <dialog
+    class="wallet-dialog"
+    bind:this={walletDialog}
+    aria-labelledby="wallet-title"
+    aria-describedby="wallet-description"
+  >
+    <div class="setup-heading">
+      <h2 id="wallet-title">Connect a wallet</h2>
+      <button
+        class="dialog-close"
+        aria-label="Close wallet selection"
+        onclick={() => walletDialog?.close()}>×</button
+      >
+    </div>
+    <p id="wallet-description">Choose a wallet installed in this browser.</p>
+    <div class="wallet-options">
+      {#each wallets as wallet (wallet.id)}
+        <button
+          class="wallet-option"
+          disabled={!!snapshot.busy || unresolved}
+          onclick={() => selectWallet(wallet.id)}
+        >
+          <span class="wallet-option-icon"
+            ><Glyph name="wallet" size={20} /></span
+          >
+          <span class="wallet-option-name"
+            >{wallet.name}<small>{wallet.rdns ?? 'Browser extension'}</small
+            ></span
+          >
+          <Glyph name="arrow" size={16} />
+        </button>
+      {/each}
+    </div>
+    <p class="wallet-note">Connecting does not sign or send a transaction.</p>
+  </dialog>
+
   {#if operatorMode}
     <dialog
       class="setup-dialog"
@@ -1228,23 +1246,72 @@
 </div>
 
 <style>
-  .multiple-wallets :global(.header-actions) {
-    flex-basis: auto;
-    flex-wrap: wrap;
-    max-width: 100%;
-    gap: 8px;
-  }
-  .wallet-selector {
-    max-width: min(210px, 100%);
-    min-width: 0;
-    min-height: 36px;
+  .wallet-dialog {
+    width: min(400px, calc(100vw - 32px));
+    max-height: calc(100svh - 32px);
+    padding: 28px;
+    margin: auto;
     border: 1px solid var(--p-line);
-    border-radius: 8px;
-    padding: 6px 8px;
+    border-radius: 20px;
+    background: var(--p-paper);
+    color: var(--p-ink);
+    box-shadow: 0 28px 90px #302b3822;
+  }
+  .wallet-dialog::backdrop {
+    background: #302b3833;
+    backdrop-filter: blur(4px);
+  }
+  .wallet-dialog h2 {
+    margin: 0;
+    font-size: 24px;
+  }
+  .wallet-dialog p {
+    font-size: 14px;
+  }
+  .wallet-options {
+    display: grid;
+    gap: 10px;
+    margin-block: 24px;
+  }
+  .wallet-option {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    border: 1px solid var(--p-line);
+    border-radius: 14px;
+    padding: 14px;
     background: var(--p-paper);
     color: var(--p-ink);
     font: inherit;
-    font-size: 12px;
+    text-align: left;
+  }
+  .wallet-option:hover {
+    border-color: var(--p-accent);
+  }
+  .wallet-option-icon {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    background: var(--p-accent-soft);
+    border-radius: 10px;
+  }
+  .wallet-option-name {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .wallet-option small {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px;
+    color: var(--p-muted);
+  }
+  .wallet-note {
+    margin-bottom: 0;
+    text-align: center;
+    color: var(--p-muted);
   }
   .live-footer {
     flex-wrap: wrap;

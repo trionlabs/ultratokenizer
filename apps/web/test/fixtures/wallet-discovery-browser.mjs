@@ -76,38 +76,78 @@ export async function exerciseWalletDiscovery(browser, base) {
   });
   try {
     await page.goto(base.href ?? base, { waitUntil: 'networkidle' });
-    const selector = page.getByRole('combobox', { name: 'Wallet extension' });
-    await expect(selector).toBeVisible();
-    await expect(selector).toHaveValue('');
+    const connect = page.getByRole('button', {
+      name: 'Connect wallet',
+      exact: true,
+    });
+    const dialog = page.getByRole('dialog', { name: 'Connect a wallet' });
+    await expect(page.getByRole('combobox')).toHaveCount(0);
+    await expect(dialog).toBeHidden();
+    assert.deepEqual(await page.evaluate(() => window.walletCalls), []);
     for (const width of [1280, 320]) {
       await page.setViewportSize({ width, height: 900 });
+      await connect.click();
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole('button', { name: /Alpha/ })).toBeVisible();
+      await expect(dialog.getByRole('button', { name: /Beta/ })).toBeVisible();
+      assert.deepEqual(await page.evaluate(() => window.walletCalls), []);
       assert(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth,
         ),
-        `wallet selector fits ${width}px`,
+        `wallet dialog fits ${width}px`,
       );
+      const box = await dialog.boundingBox();
+      assert(box.x >= 0 && box.x + box.width <= width);
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
+      await expect(connect).toBeFocused();
     }
-    await page
-      .getByRole('button', { name: 'Connect wallet', exact: true })
-      .click();
+    await connect.click();
     assert.deepEqual(await page.evaluate(() => window.walletCalls), []);
-    await selector.selectOption('22222222-2222-4222-8222-222222222222');
-    await page
-      .getByRole('button', { name: 'Connect wallet', exact: true })
-      .click();
-    await expect(selector).toBeDisabled();
+    await dialog.getByRole('button', { name: /Beta/ }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('.header-wallet')).toBeDisabled();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            window.walletCalls.filter(
+              ([, method]) => method === 'eth_requestAccounts',
+            ).length,
+        ),
+      )
+      .toBe(1);
     await page.evaluate(() => {
       window.announceConflictingWallet();
       window.announceLateWallet();
     });
-    await expect(selector).toHaveValue('22222222-2222-4222-8222-222222222222');
     await page.evaluate(() => window.finishWalletConnection());
     await expect(page.locator('.header-wallet')).toHaveText(/0x2222.*2222/);
     assert(
       (await page.evaluate(() => window.walletCalls)).every(
         ([name]) => name === 'Beta',
       ),
+    );
+    assert.equal(
+      await page.evaluate(
+        () =>
+          window.walletCalls.filter(
+            ([, method]) => method === 'eth_requestAccounts',
+          ).length,
+      ),
+      1,
+    );
+    const beforeReopen = await page.evaluate(() => window.walletCalls.length);
+    await page.locator('.header-wallet').click();
+    await expect(dialog).toBeVisible();
+    await dialog
+      .getByRole('button', { name: 'Close wallet selection' })
+      .click();
+    await expect(dialog).toBeHidden();
+    assert.equal(
+      await page.evaluate(() => window.walletCalls.length),
+      beforeReopen,
     );
     assert.deepEqual(unexpected, []);
     assert.deepEqual(errors, []);
