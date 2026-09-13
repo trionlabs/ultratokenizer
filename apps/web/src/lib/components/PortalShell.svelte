@@ -25,12 +25,14 @@
   main {
     width: min(100% - 40px, 1120px);
     margin: auto;
-    padding: 48px 0;
+    /* 48px above and below cost 96px of every page before a word of content,
+       which was more than the gap keeping the walkthrough off one screen. */
+    padding: 24px 0;
   }
   footer {
     width: min(100% - 40px, 1120px);
     margin: auto;
-    padding: 24px 0;
+    padding: 12px 0;
     color: var(--p-muted);
     font-size: 0.75rem;
     border-top: 1px solid var(--p-line);

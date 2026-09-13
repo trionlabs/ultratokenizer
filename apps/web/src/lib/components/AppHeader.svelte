@@ -89,7 +89,10 @@
     color: var(--p-paper);
     background: var(--p-accent);
     border-radius: 8px 8px 13px 13px;
-    font-size: 1.45rem;
+    /* The tile is a fixed-size brand mark, so its letterform is fixed with it.
+       A rem here let the glyph grow past the tile at 200% text while the tile
+       stayed put. The wordmark beside it is real text and still scales. */
+    font-size: 23px;
     font-weight: 650;
     flex-shrink: 0;
   }

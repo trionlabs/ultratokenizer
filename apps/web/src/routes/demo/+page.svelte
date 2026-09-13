@@ -440,10 +440,6 @@
         </p>
       {/if}
     </section>
-
-    <p class="tail">
-      <a href="/trust/">Live chain state <Glyph name="arrow" size={12} /></a>
-    </p>
   </div>
 </PortalShell>
 
@@ -466,8 +462,7 @@
     grid-template-columns: 172px minmax(0, 1fr);
     grid-template-areas:
       'rail stage'
-      'panel panel'
-      'tail tail';
+      'panel panel';
     column-gap: 32px;
     align-items: start;
     border-top: 1px solid var(--p-line);
@@ -626,8 +621,11 @@
   }
   .thesis li {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 2px 10px;
     min-width: 0;
     padding: 7px 12px;
     border-radius: 10px;
@@ -846,19 +844,6 @@
     gap: 6px;
     flex: none;
   }
-  .tail {
-    grid-area: tail;
-    margin: 10px 0 0;
-    padding-top: 9px;
-    border-top: 1px solid var(--p-line);
-    font-size: 0.76rem;
-  }
-  .tail a {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    color: var(--p-accent);
-  }
   button.move,
   .nav :global(a.move) {
     display: inline-flex;
@@ -895,8 +880,7 @@
       grid-template-areas:
         'rail'
         'stage'
-        'panel'
-        'tail';
+        'panel';
       row-gap: 14px;
     }
     .rail {
