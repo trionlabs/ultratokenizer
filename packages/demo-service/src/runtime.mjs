@@ -1,5 +1,4 @@
 import { join, dirname } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import {
   createPublicClient,
   http,
@@ -37,7 +36,11 @@ import {
 } from './io.mjs';
 import { credential, issuerProvider } from './issuer-provider.mjs';
 import { checkBudgetReview } from './budget.mjs';
-import { checkPreparedRecovery } from './prepared-recovery.mjs';
+import {
+  checkPreparedRecovery,
+  checkSubmittedRecovery,
+} from './prepared-recovery.mjs';
+import { observeSubmittedRequest } from './proof-observation.mjs';
 
 /** Concrete local adapter. Configuration is operator-owned; request bodies never choose tools or pins. */
 /**
@@ -725,18 +728,49 @@ export class RuntimeAdapter {
     } catch {
       throw new ServiceError('proof_request_uncertain');
     }
-    let observed;
-    while (true) {
-      observed = await command(['recover-request', requestJournal]);
-      if (observed.proofAvailable === true) break;
-      if (
-        observed.deadlinePassed === true ||
-        Math.floor(Date.now() / 1000) >= settings.deadlineUnix
-      )
-        throw new ServiceError('proof_deadline_elapsed');
-      await update(observed.executionStatus === 2 ? 'proving' : 'queued');
-      await delay(15000);
-    }
+    return this.observeSubmittedProof(job, folder, update);
+  }
+  async checkSubmittedProofRecovery(job, folder) {
+    const source = this.sources.get(job.documentId);
+    check(source, 'source_not_admitted');
+    return checkSubmittedRecovery(
+      folder,
+      job,
+      this.proofReview(
+        job,
+        source,
+        await readOwned(join(folder, 'request.json'), 16 * 1024),
+      ),
+      this.program,
+      confined(this.root, this.config.network.budgetPath),
+      this.config.network.requesterAddress,
+    );
+  }
+  /** Continue observing one paid request. No credential loading or dispatch here. */
+  async observeSubmittedProof(job, folder, update) {
+    const binding = await this.checkSubmittedProofRecovery(job, folder);
+    const prefix = join(folder, 'job');
+    const requestJournal = `${prefix}.sp1-network-request.jsonl`;
+    const requestPath = join(folder, 'request.json');
+    const preparationPath = `${prefix}.sp1-network-preparation.json`;
+    const command = (args, options = {}) =>
+      runJson(this.path('networkRequesterPath'), args, options);
+    const observed = await observeSubmittedRequest({
+      observe: () =>
+        command(['recover-request', requestJournal], {
+          observation: true,
+          timeout: 135000,
+        }),
+      deadline: binding.deadline,
+      requestId: binding.requestId,
+      transactionHash: binding.transactionHash,
+      update,
+    });
+    check(
+      observed.requestId === binding.requestId &&
+        observed.transactionHash === binding.transactionHash,
+      'proof_request_uncertain',
+    );
     await update('proof_ready');
     const raw = `${prefix}-raw.sp1-network-proof`,
       normalized = `${prefix}-normalized.sp1-network-proof`,

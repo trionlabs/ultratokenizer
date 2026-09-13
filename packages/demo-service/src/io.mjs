@@ -120,7 +120,7 @@ export async function optionalJson(path, maximum) {
 export async function runJson(
   binary,
   args,
-  { env = {}, timeout = 120000 } = {},
+  { env = {}, timeout = 120000, observation = false } = {},
 ) {
   let child;
   try {
@@ -138,10 +138,28 @@ export async function runJson(
     children.add(child);
     const result = await pending;
     return parseDuplicateFreeJson(result.stdout.trim(), 1024 * 1024);
-  } catch {
+  } catch (error) {
+    if (
+      observation &&
+      args[0] === 'recover-request' &&
+      (error.killed === true || OBSERVATION_ERRORS.has(error.stderr?.trim()))
+    )
+      throw new ServiceError('proof_observation_unavailable');
     // Process errors may contain signed payloads, artifact URIs or credentials.
     throw new ServiceError('preparation_failed');
   } finally {
     if (child) children.delete(child);
   }
 }
+
+// Exact static errors from the pinned unsigned requester command. Never expose
+// child stderr, or classify commitment mismatches and corrupt journals as transient.
+const OBSERVATION_ERRORS = new Set([
+  'Unable to connect to Succinct; no request was sent.',
+  'Known request details are unavailable; do not resubmit.',
+  'Exact nonce and signature recovery evidence is unavailable.',
+  'Recovered request status is unavailable; do not resubmit.',
+  'Request recovery lookup is unavailable; the paid budget remains encumbered.',
+  'Bounded recovery timed out; no absence is inferred and the budget remains encumbered.',
+  'Paid journal is locked by another operation.',
+]);

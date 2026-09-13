@@ -120,6 +120,27 @@ against the sealed preparation before upload. Any later or ambiguous job require
 reconciliation instead. Both issuer and requester credentials are validated before a new start can
 persist its dispatch signature or reserve backing.
 
+For an already acknowledged or exactly recovered paid request whose observation stopped, use a
+different explicit startup option:
+
+```sh
+node scripts/start-document-demo.mjs --resume-submitted-proof <existing-64-hex-job-id>
+```
+
+This validates the retained preparation, signed request identity and matching reserved budget
+entry, then invokes only unsigned observation, retrieval and proof verification. It cannot stage,
+quote, prepare, sign or submit another paid request, and does not require unused proof budget.
+Expired authorization for new spending does not stop read-only observation; producing a fresh issuer
+permit still requires current operation approval. Only one observer runs per process. After a later
+observation failure the operator can explicitly resume that same request again. Malformed journals,
+conflicting identities, unacknowledged requests and partial retrieval artifacts fail closed.
+
+The observer retries at most three consecutive recognized transport failures with fifteen-second
+spacing, within the existing signed proof deadline. The UI reports temporary observation failure
+without claiming another proof was submitted. Commitment mismatches and corrupt data are never
+classified as transient transport errors. No timed wait, deadline or observation failure releases
+budget or creates permission to submit a replacement.
+
 An unresolved earlier request keeps its conservative budget liability. A distinct allowlisted
 document may start only under an explicit aggregate USD review that retains the prior budget caps,
 pins the new budget's immutable Created identity, and admits a new bounded budget within the user's

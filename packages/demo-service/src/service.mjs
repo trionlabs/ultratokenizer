@@ -239,6 +239,41 @@ export class DemoService {
       return this.status(id);
     });
   }
+  /** Operator-only observation; the existing paid request is never resubmitted. */
+  async resumeSubmittedProof(id) {
+    const revision = this.store.get(id).journalHash;
+    return this.store.serial(async () => {
+      const job = this.store.get(id);
+      await this.authenticate(job, { holderSignature: job.holderSignature });
+      check(
+        job.journalHash === revision &&
+          this.running.size === 0 &&
+          job.status === 'attention_required' &&
+          job.phase === 'proof' &&
+          job.reservation &&
+          !job.proof &&
+          !job.bundle &&
+          [
+            'preparation_failed',
+            'proof_observation_unavailable',
+            'proof_request_uncertain',
+            'service_unavailable',
+          ].includes(job.detailCode),
+        'proof_request_uncertain',
+      );
+      const binding = await this.runtime.checkSubmittedProofRecovery(
+        job,
+        this.store.directory(id),
+      );
+      await this.store.update(job, {
+        status: 'queued',
+        detailCode: null,
+        observationJournalHash: binding.journalHash,
+      });
+      this.launch(job, { submitted: true });
+      return this.status(id);
+    });
+  }
   launch(job, options) {
     const work = this.pipeline(job, options)
       .catch(() => {
@@ -248,11 +283,13 @@ export class DemoService {
       .finally(() => this.running.delete(job.jobId));
     this.running.set(job.jobId, work);
   }
-  async pipeline(job, { prepared = false } = {}) {
+  async pipeline(job, { prepared = false, submitted = false } = {}) {
     try {
-      await this.runtime.assertOperationsEnabled();
-      await this.runtime.assertCredentialsReady();
-      if (!prepared) {
+      if (!submitted) {
+        await this.runtime.assertOperationsEnabled();
+        await this.runtime.assertCredentialsReady();
+      }
+      if (!submitted && !prepared) {
         const reservation = await this.runtime.reserve(
           job,
           this.store.directory(job.jobId),
@@ -262,10 +299,13 @@ export class DemoService {
           status: 'preparing_proof',
         });
       }
-      const proof = await this.runtime.prove(
+      const produce = submitted
+        ? this.runtime.observeSubmittedProof.bind(this.runtime)
+        : this.runtime.prove.bind(this.runtime);
+      const proof = await produce(
         job,
         this.store.directory(job.jobId),
-        async (status) => {
+        async (status, detailCode = null) => {
           check(
             [
               'preparing_proof',
@@ -277,7 +317,12 @@ export class DemoService {
             'service_unavailable',
             503,
           );
-          await this.store.update(job, { status });
+          check(
+            detailCode === null ||
+              detailCode === 'proof_observation_unavailable',
+            'service_unavailable',
+          );
+          await this.store.update(job, { status, detailCode });
         },
         { prepared },
       );

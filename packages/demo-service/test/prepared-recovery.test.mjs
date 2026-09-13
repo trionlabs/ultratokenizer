@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { checkPreparedRecovery } from '../src/prepared-recovery.mjs';
+import {
+  checkPreparedRecovery,
+  checkSubmittedRecovery,
+} from '../src/prepared-recovery.mjs';
 import { sha256 } from '../src/io.mjs';
 
 async function fixture(t) {
@@ -49,7 +52,7 @@ async function fixture(t) {
     write('reservation-hash.json', job.reservation),
   ]);
   const check = () => checkPreparedRecovery(folder, job, review, program);
-  return { check, write, preparation, job };
+  return { check, write, preparation, job, folder, review, program };
 }
 
 await test('only matching local preparation artifacts can be reused', async (t) => {
@@ -69,6 +72,81 @@ await test('only matching local preparation artifacts can be reused', async (t) 
     });
     await assert.rejects(f.check(), { code: 'preparation_failed' });
   }
+});
+
+await test('submitted recovery requires the exact already-reserved paid identity', async (t) => {
+  const f = await fixture(t);
+  const budgetFolder = await mkdtemp(join(tmpdir(), 'ut-observation-budget-'));
+  t.after(() => rm(budgetFolder, { recursive: true, force: true }));
+  const budgetPath = join(budgetFolder, 'budget.jsonl');
+  const requester = `0x${'66'.repeat(20)}`;
+  const budgetId = '88'.repeat(32);
+  const requestId = `0x${'99'.repeat(32)}`;
+  const transactionHash = `0x${'aa'.repeat(32)}`;
+  const plan = {
+    preparation: f.preparation,
+    budgetId,
+    planId: 'same-plan',
+    requestIdentity: 'same-paid-identity',
+    quote: { requester, maxRequestCostWei: '123' },
+    settings: { deadlineUnix: 1800000000 },
+  };
+  const rows = [
+    { body: { event: 'prepared', plan } },
+    { body: { event: 'signed' } },
+    { body: { event: 'dispatch_attempted' } },
+    {
+      body: {
+        event: 'acknowledged',
+        request_id: requestId,
+        transaction_hash: transactionHash,
+      },
+    },
+  ];
+  const budget = [
+    { eventHash: budgetId, body: { event: 'created', requester } },
+    {
+      body: {
+        event: 'reserved',
+        plan_id: plan.planId,
+        request_identity: plan.requestIdentity,
+        maximum_cost_wei: '123',
+      },
+    },
+  ];
+  const writeRows = (path, input) =>
+    writeFile(path, input.map((row) => JSON.stringify(row) + '\n').join(''), {
+      mode: 0o600,
+    });
+  const requestPath = join(f.folder, 'job.sp1-network-request.jsonl');
+  await writeRows(requestPath, rows);
+  await writeRows(budgetPath, budget);
+  const check = () =>
+    checkSubmittedRecovery(
+      f.folder,
+      f.job,
+      f.review,
+      f.program,
+      budgetPath,
+      requester,
+    );
+  assert.equal((await check()).requestId, requestId);
+  await writeRows(budgetPath, [budget[0]]);
+  await assert.rejects(check(), { code: 'proof_request_uncertain' });
+  await writeRows(budgetPath, budget);
+  await writeRows(requestPath, [
+    ...rows,
+    {
+      body: {
+        event: 'recovered',
+        request_id: `0x${'bb'.repeat(32)}`,
+        transaction_hash: transactionHash,
+      },
+    },
+  ]);
+  await assert.rejects(check(), { code: 'proof_request_uncertain' });
+  await writeRows(requestPath, rows.slice(0, 3));
+  await assert.rejects(check(), { code: 'proof_request_uncertain' });
 });
 
 for (const name of [

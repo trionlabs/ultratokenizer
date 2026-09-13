@@ -469,3 +469,44 @@ await test('failed preparation artifact admission cannot mutate or launch the re
     { code: 'ENOENT' },
   );
 });
+
+await test('submitted-proof continuation observes the same job without credentials, budget admission or dispatch', async (t) => {
+  const f = await fixture(t, { failure: 'prove' });
+  const prepared = await f.prepare();
+  await f.service.start(prepared.jobId, await f.sign(prepared));
+  await f.settle();
+  let observations = 0;
+  f.runtime.checkSubmittedProofRecovery = async () => ({
+    journalHash: 'retained',
+  });
+  f.runtime.assertOperationsEnabled = async () => {
+    throw new Error('New spend is forbidden');
+  };
+  f.runtime.assertCredentialsReady = async () => {
+    throw new Error('Credential loading is forbidden');
+  };
+  f.runtime.observeSubmittedProof = async (job, _folder, update) => {
+    observations++;
+    await update('proving');
+    throw new ServiceError('proof_observation_unavailable');
+  };
+  const attempts = await Promise.allSettled(
+    Array.from({ length: 8 }, () =>
+      f.service.resumeSubmittedProof(prepared.jobId),
+    ),
+  );
+  await f.settle();
+  assert.equal(
+    attempts.filter((result) => result.status === 'fulfilled').length,
+    1,
+  );
+  assert.equal(f.counts.reserve, 1);
+  assert.equal(f.counts.prove, 1);
+  assert.equal(observations, 1);
+  // A later explicit read-only continuation may retry observation, never spending.
+  await f.service.resumeSubmittedProof(prepared.jobId);
+  await f.settle();
+  assert.equal(observations, 2);
+  assert.equal(f.counts.reserve, 1);
+  assert.equal(f.counts.prove, 1);
+});

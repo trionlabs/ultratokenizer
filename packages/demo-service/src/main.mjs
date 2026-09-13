@@ -11,12 +11,18 @@ let store;
 try {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
-    options: { 'resume-prepared-proof': { type: 'string' } },
+    options: {
+      'resume-prepared-proof': { type: 'string' },
+      'resume-submitted-proof': { type: 'string' },
+    },
   });
   const recoveryId = values['resume-prepared-proof'];
+  const submittedId = values['resume-submitted-proof'];
   if (
     positionals.length !== 1 ||
-    (recoveryId !== undefined && !/^[0-9a-f]{64}$/.test(recoveryId))
+    (recoveryId !== undefined && !/^[0-9a-f]{64}$/.test(recoveryId)) ||
+    (submittedId !== undefined && !/^[0-9a-f]{64}$/.test(submittedId)) ||
+    (recoveryId !== undefined && submittedId !== undefined)
   )
     throw new Error('A private configuration file is required.');
   const runtime = await RuntimeAdapter.load(
@@ -47,6 +53,21 @@ try {
         () =>
           console.error(
             'Prepared proof continuation was refused. Existing artifacts were retained; review the job before any further action.',
+          ),
+      );
+    }
+    if (submittedId) {
+      void service.resumeSubmittedProof(submittedId).then(
+        () =>
+          console.log(
+            JSON.stringify({
+              status: 'submitted-proof-observation-started',
+              jobId: submittedId,
+            }),
+          ),
+        () =>
+          console.error(
+            'Submitted proof observation was refused. The existing request and budget were retained; no replacement was submitted.',
           ),
       );
     }

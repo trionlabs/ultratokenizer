@@ -26,6 +26,8 @@ const ERRORS = {
   reservation_uncertain:
     'The reservation needs reconciliation before another attempt.',
   proof_request_uncertain: 'The submitted proof request needs reconciliation.',
+  proof_observation_unavailable:
+    'Proof status is temporarily unavailable. The existing request is retained and will not be submitted again.',
   proof_deadline_elapsed:
     'The proof deadline passed without a verified result.',
   proof_unavailable: 'The verified proof package is not ready yet.',
