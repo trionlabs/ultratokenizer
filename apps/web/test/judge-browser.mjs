@@ -31,6 +31,15 @@ try {
     await expect(
       page.getByRole('link', { name: 'Download Demo 08 PDF' }),
     ).toBeVisible();
+    await expect(
+      page.getByRole('link', { name: 'Download all 50 PDFs' }),
+    ).toBeVisible();
+    await expect(page.getByText('Try it', { exact: true })).toBeVisible();
+    await page.getByText('Try it', { exact: true }).click();
+    await expect(
+      page.getByRole('link', { name: 'Download sample' }),
+    ).toBeVisible();
+    await page.getByText('Try it', { exact: true }).click();
     await expect(page.getByText('What the demo establishes')).toBeVisible();
     assert(
       await page.evaluate(
@@ -50,6 +59,20 @@ try {
     createHash('sha256').update(bytes).digest('hex'),
     '595483b171e2214304251ce54b07e540702f03d14ef6d3fdab6a833bffbc89de',
   );
+  const catalogResponse = await page.request.get(
+    new URL('jury/documents/catalog.json', base).href,
+  );
+  assert.equal(catalogResponse.status(), 200);
+  const catalog = await catalogResponse.json();
+  assert.equal(catalog.format, 'ultratokenizer.public-jury-documents.v1');
+  assert.equal(catalog.documents.length, 50);
+  assert.equal(new Set(catalog.documents.map((item) => item.sha256)).size, 50);
+  assert.equal(catalog.documents[7].presenterDocument, true);
+  const archive = await page.request.get(
+    new URL('jury/ultratokenizer-jury-documents.zip', base).href,
+  );
+  assert.equal(archive.status(), 200);
+  assert((await archive.body()).length > 100_000);
   assert.deepEqual(errors, []);
   console.log(
     'Judge walkthrough: desktop/mobile layout, calls to action and exact Demo 08 download passed.',

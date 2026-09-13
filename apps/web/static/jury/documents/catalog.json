@@ -1,0 +1,364 @@
+{
+  "format": "ultratokenizer.public-jury-documents.v1",
+  "synthetic": true,
+  "signedDocuments": 50,
+  "recipient": "0x63Bd536Eb8eccf793A2e3CB878B33806617fD8a6",
+  "sourceSignerFingerprint": "563a7d6493ac97c193e8f2fec36006ac3c73e61ee51fab5a40d4e4ca293c0157",
+  "documents": [
+    {
+      "number": "01",
+      "file": "01-gold.pdf",
+      "sha256": "c89318649c130b5b9302db3840a0ef95c15a6eb234d149ed73815411304b8937",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "02",
+      "file": "02-gold.pdf",
+      "sha256": "754f15147e89e40f429abd1946ec0c4c6e6728b433b150ca15b8d28a3e8144c4",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "03",
+      "file": "03-gold.pdf",
+      "sha256": "54933f9d5d5d648a09b366f4a4626ff62b3bf18e23c4a6e9fa63fd033e5d0b77",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "04",
+      "file": "04-gold.pdf",
+      "sha256": "29f9e66aa4cf77221aa70ace285bac05a83eb892d4f760bcdbd68072ba548441",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "05",
+      "file": "05-gold.pdf",
+      "sha256": "6cdd17507e3b1456902971d552302f31f88a8f261b8923fb1140524d0624cf28",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "06",
+      "file": "06-gold.pdf",
+      "sha256": "ae0567e8d8dcc9e40af131314d9ce8953c4a019cc92d849ed7819cc5630c8d04",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "07",
+      "file": "07-gold.pdf",
+      "sha256": "175fea69e07bc4bf33cce86f8d54015d3caae96060a7728f23dd6fabe72eb31e",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "08",
+      "file": "08-gold.pdf",
+      "sha256": "595483b171e2214304251ce54b07e540702f03d14ef6d3fdab6a833bffbc89de",
+      "amountMilligrams": "1000",
+      "presenterDocument": true
+    },
+    {
+      "number": "09",
+      "file": "09-gold.pdf",
+      "sha256": "7d58f67414140eeaf054cc142d601086381e06923125ea8cb49f576ae4fefb3d",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "10",
+      "file": "10-gold.pdf",
+      "sha256": "5e5134412dc807a3750bf09ea9fcea9f3e697727f152a325230f55ed5994781b",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "11",
+      "file": "11-gold.pdf",
+      "sha256": "912b3006c8ae3d6db829a51a8b0333b57f36e04814c0d75e431500d74b2a1d36",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "12",
+      "file": "12-gold.pdf",
+      "sha256": "c50f4f4a20b136967e8269bec4e1b4f9f9407e31bca494878fff445446d1351d",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "13",
+      "file": "13-gold.pdf",
+      "sha256": "9f66698af83faa977b22b9365c4d434910065d976240b1fb4a134d3d8b683fd7",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "14",
+      "file": "14-gold.pdf",
+      "sha256": "c529ba0f52a4acc8dbf489e8c1289cd0047bffb55d9421e732776ee22e8b13cc",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "15",
+      "file": "15-gold.pdf",
+      "sha256": "8f5405d417813a9e297b7900677693c2244466d63d393fc70dbab0004ef96660",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "16",
+      "file": "16-gold.pdf",
+      "sha256": "55d38e24779064519b4f35ede988db247e5d92d07e42aa420dea4b728a1a2f58",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "17",
+      "file": "17-gold.pdf",
+      "sha256": "44cf9d741fcf599f1f4071432d44d48408302ccf86ec998a01afdd7b09fef5c6",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "18",
+      "file": "18-gold.pdf",
+      "sha256": "8721cef10b90940b7c562205e47ca31949b3fcf72eb4c441ed5b002efd6dffa7",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "19",
+      "file": "19-gold.pdf",
+      "sha256": "f51a60c1e04207ba400cb23d14bba5cadbed4290833f78c214a94c00f4774e0d",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "20",
+      "file": "20-gold.pdf",
+      "sha256": "bd4d62a15d17886de6b017ede0e5c7e0571b3cc114598a67874a630d14520399",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "21",
+      "file": "21-gold.pdf",
+      "sha256": "e798108102da9a0fdbb7eaa35ca6ecfb9a72b17428a301f8873bcd8443c0a9a5",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "22",
+      "file": "22-gold.pdf",
+      "sha256": "1a40cc0a308d1deae687832199260961c527a820dee2166686f74e1adeb57aec",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "23",
+      "file": "23-gold.pdf",
+      "sha256": "dd0d81f2f3c34cd32f8070bf8b6983037c903a7128540d0f5ae88bfcd40fb4f9",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "24",
+      "file": "24-gold.pdf",
+      "sha256": "57b4edc3b7beb21d5551be29fdde997adb3fc7b8cdb4cd41787418101326f140",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "25",
+      "file": "25-gold.pdf",
+      "sha256": "de654d6b9d156902fd5fb36030340f0f373c2f7886cf74ca1ad384f79e99fe58",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "26",
+      "file": "26-gold.pdf",
+      "sha256": "5b0aefeb6b185bedaae8d5f044ec2145a27c424fa2e3b9438004e81916865bd8",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "27",
+      "file": "27-gold.pdf",
+      "sha256": "7fa716439605a12a96b43c99b0130624110ebdc0b6bcbd3e3b3c08f3a32babca",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "28",
+      "file": "28-gold.pdf",
+      "sha256": "e8b597406091587e69628b4299fabdeb5625fd55fcfa94949a534f40800a8812",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "29",
+      "file": "29-gold.pdf",
+      "sha256": "2e80152609b3315874385091151a44e9b48f9001b022abfa998a453ad41809f3",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "30",
+      "file": "30-gold.pdf",
+      "sha256": "255fd126e40bdf55036a423d40f8781ea294caae1dea844eedd108667dcc9858",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "31",
+      "file": "31-gold.pdf",
+      "sha256": "cf2fb93a61c91164719e744614a3c2a1dee402367efc77ac55f6e5f713017bd4",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "32",
+      "file": "32-gold.pdf",
+      "sha256": "a41b4557a48b121a6fadff3ad379f97a27757562dd8e1c4c05e5c43df25a3d1f",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "33",
+      "file": "33-gold.pdf",
+      "sha256": "300e6ffec39c83b40ed12e8eba5f5cbb3df94c9aa09fdc9ba3fd52dc98c65ec5",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "34",
+      "file": "34-gold.pdf",
+      "sha256": "e7f7d704f182a41c23bc56a094bc4aacc177de4a00e46174d6cdbfa4e5cc2841",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "35",
+      "file": "35-gold.pdf",
+      "sha256": "fc74c52721cb05173683ae33ea2c72e333231cc9bd9d5b349b96be4b1df2cbf3",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "36",
+      "file": "36-gold.pdf",
+      "sha256": "64bd99b5c9d35c67cfc7257f20c302cdb4c159c7e3da718d63ee7147ec3b652f",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "37",
+      "file": "37-gold.pdf",
+      "sha256": "cdee03bf514ea10e37cbce9c62ae8d8cdfd23afc0860482b77b00f4826be8c5d",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "38",
+      "file": "38-gold.pdf",
+      "sha256": "c6f6fdf3e72caa897960d40f7e27843068b9ebfb46945817f797adcf2d2382c4",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "39",
+      "file": "39-gold.pdf",
+      "sha256": "1e0d55d5ab5b5897f8a296f202853f4ce5ecc47288df8794e4a9c9297459970f",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "40",
+      "file": "40-gold.pdf",
+      "sha256": "6131dbaa5ee01b78fce53fcf064c7dd572ffbbff0a58db02f477d8b05c1ba1f2",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "41",
+      "file": "41-gold.pdf",
+      "sha256": "c3d340d951076746f45eec7529246119e96ccac9f08336738a40d7048ff9bb4f",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "42",
+      "file": "42-gold.pdf",
+      "sha256": "f0e2fefaf495b076e23f0807b8ba52c9b20768d6c9cd7eae00ccbe893be7202e",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "43",
+      "file": "43-gold.pdf",
+      "sha256": "54619d649b39e04b3001e27a38718d97cde02592f25008c39ee16196b9b1da96",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "44",
+      "file": "44-gold.pdf",
+      "sha256": "e68989c80ba999988b60d14dc97e69913d61b674bcbd98ba927c7a78930a3b00",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "45",
+      "file": "45-gold.pdf",
+      "sha256": "7a9b0c250e7d4e9b7d27efda3536d78bb1b1a59fa0be67174bdb8142a91cbbe1",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "46",
+      "file": "46-gold.pdf",
+      "sha256": "249014b43da0b513b597b6543a27ba94c5347cf97dc127e2458b188b66f24e07",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "47",
+      "file": "47-gold.pdf",
+      "sha256": "da7db781e1df79fe87c5c0509cf481d81ba05d6f51fee9825ffd9baf21c449ec",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "48",
+      "file": "48-gold.pdf",
+      "sha256": "7078d5b3378eb3172b5629166d6eef59fc59b9ec7edd826668115064adcdfa71",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "49",
+      "file": "49-gold.pdf",
+      "sha256": "8c8ddd86e20582cd22a5463183f9d7744f1e2ccca4a7414abcb8ad8443c8ee78",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    },
+    {
+      "number": "50",
+      "file": "50-gold.pdf",
+      "sha256": "d909f4bb4f5b7d31f5c9061ba4a7d1e9db533e877d2e59b59ac0a4fa49c2dc00",
+      "amountMilligrams": "1000",
+      "presenterDocument": false
+    }
+  ],
+  "limits": {
+    "zkProofsIncluded": 0,
+    "permitsIncluded": 0,
+    "mintsIncluded": 0
+  }
+}

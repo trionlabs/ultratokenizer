@@ -6,12 +6,18 @@ Start at [ultratokenizer.trionlabs.dev/judge](https://ultratokenizer.trionlabs.d
 
 ## Inspect without a wallet
 
-1. Download the synthetic Demo 08 PDF from the judge page.
+1. Download the synthetic Demo 08 PDF from the judge page. The same page also
+   offers 50 separately signed test rights; any of them can be uploaded and
+   inspected without starting a paid proof.
 2. Open **Tokenize**, upload the unchanged PDF and inspect the fixed amount and selected institution.
 3. Open **How it works** to follow document authentication, SP1, issuer reservation, the Gate and ATS.
 4. Open **Trust** to inspect the Hedera contracts and ERC-8004 Identity records.
 
 Uploading the document does not spend proof funds or mint a token. The PDF is bound to the presenter's test wallet, so another wallet cannot redirect the mint.
+
+The public 50-document archive contains distinct signed rights, their SHA-256
+catalog and no witness, private key, proof, permit or mint. Demo 08 remains the
+canonical presenter-led proof attempt.
 
 ## Presenter-led live run
 

@@ -50,6 +50,10 @@
     'Independent verification is a product surface, not a promise: a third party re-checks an exported receipt offline against a trust policy obtained separately.',
   ];
 
+  const documentNumbers = Array.from({ length: 50 }, (_, index) =>
+    String(index + 1).padStart(2, '0'),
+  );
+
   let service = $state<'checking' | 'ready' | 'busy' | 'unavailable'>(
     'checking',
   );
@@ -154,6 +158,35 @@
         <a href="/demo/">See the mechanism</a>
       </div>
     </article>
+  </section>
+
+  <section class="document-library" aria-labelledby="documents-title">
+    <div>
+      <p class="eyebrow">Signed test set</p>
+      <h2 id="documents-title">Try any of 50 separate rights</h2>
+      <p>
+        Every PDF is a distinct, CMS-signed synthetic 1.000 g right for the
+        presenter wallet. Uploading one authenticates and displays it without
+        starting paid proof work.
+      </p>
+    </div>
+    <div class="library-actions">
+      <a class="primary" href="/jury/ultratokenizer-jury-documents.zip" download
+        >Download all 50 PDFs</a
+      >
+      <details>
+        <summary>Choose one document</summary>
+        <div class="document-grid">
+          {#each documentNumbers as number (number)}
+            <a href={`/jury/documents/${number}-gold.pdf`} download>{number}</a>
+          {/each}
+        </div>
+      </details>
+    </div>
+    <p class="boundary">
+      Demo 08 is reserved for the presenter-led proof attempt. The set contains
+      no proofs, permits, mints, bank backing or wallet keys.
+    </p>
   </section>
 
   <section class="route" aria-labelledby="review-order">
@@ -266,16 +299,173 @@
       >Read the full judge report →</a
     >
   </section>
+
+  <details class="try-guide">
+    <summary>Try it</summary>
+    <div>
+      <strong>Inspect a signed right</strong>
+      <ol>
+        <li>Download a sample PDF.</li>
+        <li>Upload it in Tokenize.</li>
+        <li>Check its issuer and fixed amount.</li>
+      </ol>
+      <p>
+        No wallet or PROVE is needed for inspection. Proof and mint are
+        presenter-led.
+      </p>
+      <nav aria-label="Try the demo">
+        <a href="/jury/08-gold.pdf" download>Download sample</a>
+        <a href="/#engine">Open Tokenize</a>
+      </nav>
+    </div>
+  </details>
 </PortalShell>
 
 <style>
+  .try-guide {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 20;
+    width: min(310px, calc(100vw - 32px));
+    border: 1px solid var(--p-line);
+    border-radius: 20px;
+    background: color-mix(in srgb, var(--p-paper) 96%, var(--p-iris));
+    box-shadow: 0 18px 55px rgb(58 50 70 / 12%);
+  }
+  .try-guide summary {
+    cursor: pointer;
+    padding: 13px 18px;
+    color: var(--p-accent);
+    font-size: 0.78rem;
+    font-weight: 700;
+    list-style: none;
+  }
+  .try-guide summary::-webkit-details-marker {
+    display: none;
+  }
+  .try-guide summary::after {
+    content: '+';
+    float: right;
+    color: var(--p-iris);
+  }
+  .try-guide[open] summary::after {
+    content: '−';
+  }
+  .try-guide > div {
+    padding: 0 18px 18px;
+    border-top: 1px solid var(--p-line);
+  }
+  .try-guide strong {
+    display: block;
+    margin-top: 14px;
+    font-size: 0.86rem;
+  }
+  .try-guide ol {
+    margin: 9px 0 0;
+    padding-left: 18px;
+    border: 0;
+    color: var(--p-muted);
+    font-size: 0.74rem;
+  }
+  .try-guide li {
+    display: list-item;
+    padding: 2px 0;
+    border: 0;
+  }
+  .try-guide p {
+    margin-top: 10px;
+    color: var(--p-muted);
+    font-size: 0.7rem;
+  }
+  .try-guide nav {
+    display: flex;
+    gap: 14px;
+    margin-top: 12px;
+  }
+  .try-guide a {
+    color: var(--p-accent);
+    font-size: 0.72rem;
+    font-weight: 650;
+    text-decoration: none;
+  }
   .track {
     padding: 30px 0;
     border-top: 1px solid var(--p-line);
   }
+  .document-library {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.8fr);
+    gap: 22px 44px;
+    padding: 30px 0;
+    border-top: 1px solid var(--p-line);
+  }
+  .document-library h2 {
+    margin-top: 6px;
+    font-size: 1.7rem;
+  }
+  .document-library p {
+    max-width: 42rem;
+    margin-top: 10px;
+    color: var(--p-muted);
+    font-size: 0.8rem;
+  }
+  .library-actions {
+    display: grid;
+    align-content: start;
+    gap: 12px;
+  }
+  .library-actions > .primary {
+    display: block;
+    padding: 12px 18px;
+    border-radius: 999px;
+    background: var(--p-accent);
+    color: white;
+    font-size: 0.78rem;
+    font-weight: 650;
+    text-align: center;
+    text-decoration: none;
+  }
+  .library-actions details {
+    padding: 12px 16px;
+    border: 1px solid var(--p-line);
+    border-radius: 16px;
+    background: var(--p-paper);
+  }
+  .library-actions summary {
+    cursor: pointer;
+    color: var(--p-accent);
+    font-size: 0.78rem;
+    font-weight: 650;
+  }
+  .document-grid {
+    display: grid;
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    gap: 5px;
+    margin-top: 12px;
+  }
+  .document-grid a {
+    padding: 6px 2px;
+    border: 1px solid var(--p-line);
+    border-radius: 7px;
+    color: var(--p-muted);
+    font-size: 0.66rem;
+    text-align: center;
+    text-decoration: none;
+  }
+  .document-grid a:hover,
+  .document-grid a:focus-visible {
+    border-color: var(--p-iris);
+    color: var(--p-accent);
+  }
+  .document-library .boundary {
+    grid-column: 1 / -1;
+    margin: -8px 0 0;
+    font-size: 0.72rem;
+  }
   .track-list {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
     gap: 18px;
     margin: 20px 0 0;
     padding: 0;
@@ -537,10 +727,22 @@
     li a {
       grid-column: 2;
     }
+    .try-guide {
+      right: 12px;
+      bottom: 12px;
+    }
   }
   @media (prefers-reduced-motion: reduce) {
     .live > span.waiting {
       animation: none;
+    }
+  }
+  @media (max-width: 720px) {
+    .document-library {
+      grid-template-columns: 1fr;
+    }
+    .document-grid {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
     }
   }
 </style>
