@@ -140,9 +140,15 @@ try {
       // static/deployment.json is Git-ignored, so a fresh checkout cannot check
       // the rendered addresses. It must still say the configuration is absent
       // rather than render nothing, and the summary reports the narrower run.
-      await expect(page.locator('.item-body')).toContainText(
-        'has not published a configuration',
-      );
+      // Scoped to this one item: `.item-body` is rendered for every detail row
+      // whether or not it is open, so a bare locator matches all three on this
+      // step and fails Playwright's strict mode.
+      await expect(
+        page
+          .locator('.items > li')
+          .filter({ hasText: 'Deployed contracts' })
+          .locator('.item-body'),
+      ).toContainText('has not published a configuration');
     }
     await page.getByText('Track requirements').click();
     await expect(page.locator('.criteria li')).toHaveCount(4);

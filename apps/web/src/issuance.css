@@ -929,7 +929,11 @@
 .setup-dialog .inline-error {
   margin-top: 16px;
 }
-.stage-action > :first-child {
+/* Every child of the step block arrives at the same moment, so they move
+   together. Animating only the first child left the upload control sliding in
+   while the privacy note, the error line and the link beneath it appeared at
+   full opacity with no transition at all. */
+.stage-action > * {
   animation: action-enter 350ms ease-out;
 }
 /* The whole rail moves together. Without `color` here the numeral turned

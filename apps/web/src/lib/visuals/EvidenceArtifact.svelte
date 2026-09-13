@@ -395,11 +395,18 @@
     font-size: 10px;
     letter-spacing: 0.025em;
   }
+  /* The dot settles with the sheet and the seal beside it; without these it
+     filled instantly while everything else in the same moment interpolated.
+     Its opacity is left alone deliberately: that value is driven by the pulse
+     animation, and a transition does not fire when an animation is removed. */
   .artifact-caption i {
     width: 4px;
     height: 4px;
     border: 1px solid currentColor;
     border-radius: 50%;
+    transition:
+      background 400ms,
+      border-color 400ms;
   }
   .proof-object.compact {
     height: clamp(180px, 24vh, 240px);
@@ -484,7 +491,9 @@
     .artifact-body,
     .proof-sheet,
     .coin-face,
-    .artifact-seal {
+    .artifact-seal,
+    .artifact-lift,
+    .artifact-caption i {
       transition: none;
     }
   }

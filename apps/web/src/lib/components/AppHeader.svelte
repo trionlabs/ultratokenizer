@@ -48,10 +48,10 @@
 <style>
   .app-header {
     width: min(100% - 40px, 1400px);
-    /* The brand lockup is 52px; this leaves it room and nothing spare. The
-       header test pins the box to be identical across routes, not to a
-       number, so the bar's height is a design choice made in one place. */
-    min-height: 72px;
+    /* The brand lockup is one 34px line; this leaves it room and nothing
+       spare. The header test pins the box to be identical across routes, not
+       to a number, so the bar's height is a design choice made in one place. */
+    min-height: 54px;
     margin: 0 auto;
     display: flex;
     align-items: center;
@@ -60,7 +60,12 @@
     padding-block: 10px;
     border-bottom: 1px solid var(--p-line);
   }
+  /* The descriptor reads beside the wordmark, not under it: stacked, it cost
+     the bar a second line on every route for six words. */
   .brand-block {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     margin-right: auto;
     min-width: 0;
     max-width: 100%;
@@ -94,10 +99,11 @@
     font-style: normal;
   }
   .engine-label {
-    display: block;
+    padding-left: 10px;
+    border-left: 1px solid var(--p-line);
     color: var(--p-muted);
-    font-size: 0.62rem;
-    margin: 3px 0 0 38px;
+    font-size: 0.68rem;
+    white-space: nowrap;
   }
   nav {
     display: flex;
@@ -111,7 +117,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 42px;
+    /* Matches the brand line, so the bar is one row tall and neither child
+       props it open. Still well past the 24px minimum target size, and the
+       horizontal padding keeps the hit area generous. */
+    min-height: 36px;
     padding: 8px 11px;
     border-radius: 24px;
     color: var(--p-muted);
@@ -124,12 +133,15 @@
     background: var(--p-accent-soft);
     color: var(--p-ink);
   }
+  /* Reserves the wallet button's height so the bar does not jump between a
+     read-only route and a connected one. Both are 36px, matching the brand
+     line and the nav, so the header is one row on every route and state. */
   .header-actions {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     flex: 0 0 160px;
-    min-height: 42px;
+    min-height: 36px;
   }
   .read-mode {
     color: var(--p-muted);
@@ -141,8 +153,8 @@
     align-items: center;
     justify-content: center;
     gap: 7px;
-    min-height: 42px;
-    padding: 8px 15px;
+    min-height: 36px;
+    padding: 7px 15px;
     border-radius: 24px;
     border: 1px solid var(--p-accent);
     background: var(--p-accent);

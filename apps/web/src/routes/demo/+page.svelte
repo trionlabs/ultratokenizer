@@ -30,9 +30,9 @@
       id: 'Prove',
       who: 'you',
       line: 'The signature is checked inside a proof. What comes out is 224 bytes, not the document.',
-      why: 'The verifier and the chain learn that a document signed by this key authorised exactly this request. They learn nothing else in it — not the account, not the balance, not your name.',
+      why: 'The chain learns that a document signed by this key authorised exactly this request, and nothing else in it.',
       aside:
-        'zkPDF reads the signature. SP1 is the VM it runs in. The on-chain verifier is a third thing — step three. In this demo the prover runs in a local service, because a browser cannot run SP1; the 224 bytes are what reaches the chain either way.',
+        'zkPDF reads the signature. SP1 is the VM it runs in. The on-chain verifier at step three is a third thing. In this demo the prover runs in a local service, because a browser cannot run SP1.',
       items: [
         {
           icon: 'lock' as const,
@@ -240,13 +240,12 @@
     <p class="eyebrow">How it works</p>
     <h1>How a signed gold document becomes a token on Hedera</h1>
     <p class="standing">
-      Everything below is deployed on Hedera testnet. <strong
+      Deployed on Hedera testnet. <strong
         >No token had been minted as of block {asOf.block}</strong
       >
-      ({asOf.date}): the Groth16 proof has not returned, so the Gate was still
-      paused. This page makes no chain call —
-      <a href="/trust/">Trust</a> reads the current state. The source document is
-      synthetic, from no real bank.
+      ({asOf.date}): the Groth16 proof has not returned and the Gate was paused.
+      This page makes no chain call — <a href="/trust/">Trust</a> reads live state.
+      The source document is synthetic, from no real bank.
     </p>
   </section>
 
@@ -432,10 +431,12 @@
       </div>
 
       {#if last}
+        <!-- The reason the Gate was paused is in the standing disclosure at
+             the top of the same screen; repeating it here was duplication,
+             not care. This keeps the flag and the pointer to live state. -->
         <p class="pending">
-          <strong>Not live yet.</strong> The Groth16 proof has not returned, so
-          at block {asOf.block} ({asOf.date}) the Gate was paused and nothing
-          had been minted. Read it live on <a href="/trust/">Trust</a>.
+          <strong>Not live yet.</strong> No mint had run at block {asOf.block};
+          read the current state on <a href="/trust/">Trust</a>.
         </p>
       {/if}
     </section>
@@ -516,12 +517,19 @@
   }
   /* The step's sentences keep a readable measure; the width left over goes to
      the detail rows instead of stretching one line across the whole page. */
+  /* Proportional tracks, not a `ch` maximum: at 200% text a 46ch first column
+     grew to 1020px and starved the second to zero, which pushed the detail
+     rows 144px off-screen. Fractions cannot starve, and the measure is capped
+     on the copy itself instead. */
   .panel-body {
     display: grid;
-    grid-template-columns: minmax(0, 46ch) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 0.62fr) minmax(0, 1fr);
     column-gap: 40px;
     align-items: start;
     margin-top: 10px;
+  }
+  .copy {
+    max-width: 46ch;
   }
 
   .rail {

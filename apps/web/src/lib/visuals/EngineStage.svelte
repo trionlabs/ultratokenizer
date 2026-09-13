@@ -39,6 +39,19 @@
     (_, index) => 72 + (index * 153) / (CHECKS - 1),
   );
 
+  // Sourcify compared every deployed contract against its published source.
+  // All twenty match the code that is running; seventeen also match the code
+  // that created them. Drawing one cell per contract lets the reader count the
+  // three that do not, instead of reading "17/20" as a cipher.
+  const DEPLOYED = 20;
+  const RUNTIME_MATCHES = 20;
+  const CREATION_MATCHES = 17;
+  const REGISTRY_RECORDS = 3;
+  const cells = Array.from(
+    { length: DEPLOYED },
+    (_, index) => 744 + (index * 190) / (DEPLOYED - 1),
+  );
+
   const summary = $derived([
     { at: 0, text: 'Signed document, 196-byte capsule' },
     { at: 0, text: 'zkPDF inside the SP1 guest' },
@@ -49,7 +62,10 @@
     { at: 2, text: 'Token: not minted yet' },
     {
       at: 3,
-      text: `20 contracts deployed, 3 ERC-8004 records${asOf ? `, read ${asOf}` : ''}`,
+      text:
+        `${DEPLOYED} contracts deployed, ${RUNTIME_MATCHES}/${DEPLOYED} running and ` +
+        `${CREATION_MATCHES}/${DEPLOYED} creation code matches, ` +
+        `${REGISTRY_RECORDS} ERC-8004 records${asOf ? `, read ${asOf}` : ''}`,
     },
   ]);
   const label = $derived(
@@ -172,23 +188,69 @@
     >
   </g>
 
-  <path class="link" pathLength="1" data-state={on(2)} d="M726 145h30" />
+  <path
+    class="link"
+    pathLength="1"
+    data-state={on(2)}
+    d="M726 145c26 0 46-14 46-33"
+  />
 
+  <!-- The token sits high in its column so the evidence it is checked against
+       has the rest of it. Its position never changes between steps; only its
+       state does. -->
   <g class="part" data-state={on(2)}>
-    <circle class="iris unminted" cx="806" cy="145" r="34" />
-    <circle class="iris thin" cx="806" cy="145" r="25" />
-    <text class="mono mid" x="806" y="150">1.000 g</text>
-    <text class="micro mid" x="806" y="204">NOT MINTED YET</text>
+    <circle class="iris unminted" cx="806" cy="112" r="34" />
+    <circle class="iris thin" cx="806" cy="112" r="25" />
+    <text class="mono mid" x="806" y="117">1.000 g</text>
+    <text class="micro mid" x="806" y="166">NOT MINTED YET</text>
   </g>
 
-  <!-- step four: the evidence around the finished picture -->
+  <!-- Step four: what a stranger can check for themselves. One cell per
+       deployed contract, so the three whose creation code Sourcify could not
+       match are three visible gaps rather than a number to decode. -->
   <g class="part evidence" data-state={on(3)}>
-    <rect class="soft-box" x="744" y="20" width="196" height="26" rx="8" />
-    <text class="micro" x="756" y="37">20/20 RUNTIME · 17/20 CREATION</text>
-    <rect class="soft-box" x="744" y="52" width="196" height="26" rx="8" />
-    <text class="micro" x="756" y="69">ERC-8004 · 3 RECORDS</text>
-    <rect class="soft-box" x="744" y="84" width="196" height="26" rx="8" />
-    <text class="micro" x="756" y="101">20 CONTRACTS DEPLOYED</text>
+    <path class="hair" d="M744 178h196" />
+    <text class="micro" x="744" y="192"
+      >SOURCE CHECK · {DEPLOYED} CONTRACTS</text
+    >
+
+    <text class="micro" x="744" y="211">RUNNING CODE</text>
+    <text class="mono" x="940" y="211" text-anchor="end"
+      >{RUNTIME_MATCHES}/{DEPLOYED}</text
+    >
+    {#each cells as x, index}
+      <rect
+        class="cell"
+        data-on={index < RUNTIME_MATCHES}
+        {x}
+        y="217"
+        width="6"
+        height="6"
+        rx="1"
+      />
+    {/each}
+
+    <text class="micro" x="744" y="243">CREATION CODE</text>
+    <text class="mono" x="940" y="243" text-anchor="end"
+      >{CREATION_MATCHES}/{DEPLOYED}</text
+    >
+    {#each cells as x, index}
+      <rect
+        class="cell"
+        data-on={index < CREATION_MATCHES}
+        {x}
+        y="249"
+        width="6"
+        height="6"
+        rx="1"
+      />
+    {/each}
+
+    <text class="micro" x="744" y="278">ERC-8004 RECORDS</text>
+    <text class="mono" x="940" y="278" text-anchor="end"
+      >{REGISTRY_RECORDS}</text
+    >
+
     {#if asOf}
       <text class="micro" x="940" y="14" text-anchor="end"
         >READ {asOf.toUpperCase()}</text
@@ -290,10 +352,6 @@
     fill: var(--p-paper);
     stroke: none;
   }
-  .soft-box {
-    fill: var(--p-accent-soft);
-    stroke: none;
-  }
 
   .byte {
     fill: var(--p-line);
@@ -301,6 +359,17 @@
     transition: fill 420ms ease;
   }
   .byte[data-hot='true'] {
+    fill: var(--p-accent);
+  }
+
+  /* One cell per deployed contract. An unmatched contract is a gap, not a
+     rounded-off number. */
+  .cell {
+    fill: var(--p-line);
+    stroke: none;
+    transition: fill 420ms ease;
+  }
+  .cell[data-on='true'] {
     fill: var(--p-accent);
   }
 
@@ -365,6 +434,7 @@
   @media (prefers-reduced-motion: reduce) {
     .part,
     .byte,
+    .cell,
     .link,
     .rail,
     .rung .dot {
