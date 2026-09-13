@@ -94,14 +94,32 @@ export async function snapshotBuild(source, scratch) {
   }
 }
 
+export function localApiProxy(port) {
+  if (port === undefined) return undefined;
+  if (!/^\d+$/.test(port) || Number(port) < 1024 || Number(port) > 65535)
+    throw new Error('--api-port must be an integer from 1024 to 65535.');
+  return {
+    '/api': {
+      target: `http://127.0.0.1:${Number(port)}`,
+      changeOrigin: false,
+    },
+  };
+}
+
 async function main() {
   const { values } = parseArgs({
-    options: { port: { type: 'string', default: '4173' } },
+    options: {
+      port: { type: 'string', default: '4173' },
+      'api-port': { type: 'string' },
+    },
   });
   const port = Number(values.port);
   if (!/^\d+$/.test(values.port) || port < 1 || port > 65535) {
     throw new Error('--port must be an integer from 1 to 65535.');
   }
+  const proxy = localApiProxy(values['api-port']);
+  if (proxy && Number(values['api-port']) === port)
+    throw new Error('API and preview ports must differ.');
   const web = fileURLToPath(new URL('../', import.meta.url));
   const headers = {};
   const policy = await readFile(join(web, 'static/_headers'), 'utf8');
@@ -147,6 +165,7 @@ async function main() {
       strictPort: true,
       cors: false,
       headers,
+      proxy,
     },
   });
   console.log(`Serving a fixed build snapshot: ${snapshot}`);

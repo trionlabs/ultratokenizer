@@ -12,7 +12,16 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { snapshotBuild } from '../scripts/preview-demo.mjs';
+import { localApiProxy, snapshotBuild } from '../scripts/preview-demo.mjs';
+
+test('document API proxy is loopback-only and preserves browser origin', () => {
+  assert.equal(localApiProxy(undefined), undefined);
+  assert.deepEqual(localApiProxy('4175'), {
+    '/api': { target: 'http://127.0.0.1:4175', changeOrigin: false },
+  });
+  for (const value of ['https://example.org', '80', '65536', '-1', '1.5', ''])
+    assert.throws(() => localApiProxy(value), /api-port/);
+});
 
 test('preview snapshots survive replacement builds and refuse incomplete or linked builds', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'preview-demo-test-'));
