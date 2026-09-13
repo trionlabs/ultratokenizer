@@ -50,7 +50,7 @@
           icon: 'eye' as const,
           label: 'What stays hidden',
           line: 'Seven values are published. The rest of the document is not.',
-          why: 'The proof commits to profile version, request digest, signer fingerprint, source id, claim usage id, claim commitment and expiry. The claim id, issuer id, holder address, capacity and unit reach the chain only as one hash, and the claim usage id is a nullifier: the Gate can enforce single use without learning which claim it is. Amount and recipient are deliberately public — the Gate has to account for them.',
+          why: 'The proof commits to profile version, request digest, signer fingerprint, source id, claim usage id, claim commitment and expiry. The claim id, issuer id, holder address, capacity and unit reach the chain only as one hash, and the claim usage id is a nullifier: the Gate can enforce single use without learning which claim it is. Amount and recipient are deliberately public, because the Gate has to account for them.',
           visual: Step03Zkpdf,
           href: `${repo}proofs/claim-evidence/src/lib.rs`,
         },
@@ -82,7 +82,7 @@
         {
           icon: 'lock' as const,
           label: 'Reserved, not issued',
-          line: 'Cap 1000, reserved 1000, issued 0.',
+          line: 'The full amount is set aside. Nothing is issued.',
           why: 'So the obligation is visible on chain before any token exists.',
           visual: Step07Reservation,
           href: `${repo}contracts/README.md#reservations-and-governance`,
@@ -232,7 +232,7 @@
 </script>
 
 <svelte:head>
-  <title>How it works — Ultratokenizer</title>
+  <title>How it works · Ultratokenizer</title>
   <meta
     name="description"
     content="How a signed gold document becomes a token on Hedera: prove it, authorise the amount, mint on chain, then check the result."
@@ -244,10 +244,10 @@
     <h1>How a signed gold document becomes a token on Hedera</h1>
     <p class="standing">
       Deployed on Hedera testnet, and the Gate was open at block {asOf.block}
-      ({asOf.date}) with 1000 mg reserved against it.
+      ({asOf.date}) with backing reserved against it.
       <strong>No token had been minted</strong>: the Groth16 proof has not
       returned, and that proof is the one thing the Gate still needs. This page
-      makes no chain call — <a href="/trust/">Trust</a> reads live state. The source
+      makes no chain call. <a href="/trust/">Trust</a> reads live state. The source
       document is synthetic, from no real bank.
     </p>
   </section>

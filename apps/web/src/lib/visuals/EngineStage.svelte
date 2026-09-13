@@ -56,7 +56,7 @@
     { at: 0, text: 'Signed document, 196-byte capsule' },
     { at: 0, text: 'zkPDF inside the SP1 guest' },
     { at: 0, text: '224 bytes of public values' },
-    { at: 1, text: 'Reserved 1000 mg, issued 0' },
+    { at: 1, text: 'Backing reserved, issued 0' },
     { at: 1, text: 'Issuer permit, expires in minutes' },
     { at: 2, text: `${CHECKS} ordered checks, one transaction` },
     { at: 2, text: 'Token: not minted yet' },
@@ -134,7 +134,7 @@
     <rect class="ink" x="132" y="46" width="196" height="30" rx="6" />
     <rect class="fill" x="132" y="46" width="196" height="30" rx="6" />
     <text class="mono mid light" x="230" y="66">RESERVED 1000 mg</text>
-    <text class="micro" x="132" y="34">BACKING POOL · ISSUED 0</text>
+    <text class="micro" x="132" y="34">THIS REQUEST · NOT ISSUED</text>
   </g>
 
   <path class="link" pathLength="1" data-state={on(1)} d="M336 61h24" />
