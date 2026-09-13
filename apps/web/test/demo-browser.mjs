@@ -124,7 +124,7 @@ try {
     }
     await page.getByText('Track requirements').click();
     await expect(page.locator('.criteria li')).toHaveCount(4);
-    await expect(page.locator('.criteria li[data-met="false"]')).toHaveCount(1);
+    await expect(page.locator('.criteria li[data-met="false"]')).toHaveCount(2);
     assert.deepEqual(external, []);
     assert.deepEqual(errors, []);
     await page.close();

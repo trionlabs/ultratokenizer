@@ -15,7 +15,7 @@
 
   $effect(() => {
     clearInterval(timer);
-    if (step < 2 || prefersReducedMotion.current) {
+    if (step !== 2 || prefersReducedMotion.current) {
       rung = step < 2 ? 0 : 10;
       return;
     }
@@ -133,20 +133,20 @@
   <path class="link" pathLength="1" data-state={on(2)} d="M726 145h30" />
 
   <g class="part" data-state={on(2)}>
-    <circle class="iris" cx="806" cy="145" r="34" />
+    <circle class="iris unminted" cx="806" cy="145" r="34" />
     <circle class="iris thin" cx="806" cy="145" r="25" />
     <text class="mono mid" x="806" y="150">1.000 g</text>
-    <text class="micro mid" x="806" y="204">YOUR TOKEN</text>
+    <text class="micro mid" x="806" y="204">NOT MINTED YET</text>
   </g>
 
   <!-- step four: the evidence around the finished picture -->
   <g class="part evidence" data-state={on(3)}>
     <rect class="soft-box" x="744" y="20" width="196" height="26" rx="8" />
-    <text class="micro" x="756" y="37">20/20 SOURCES VERIFIED</text>
+    <text class="micro" x="756" y="37">20/20 RUNTIME · 17/20 CREATION</text>
     <rect class="soft-box" x="744" y="52" width="196" height="26" rx="8" />
     <text class="micro" x="756" y="69">ERC-8004 · 3 RECORDS</text>
     <rect class="soft-box" x="744" y="84" width="196" height="26" rx="8" />
-    <text class="micro" x="756" y="101">4 CONTRACTS LIVE</text>
+    <text class="micro" x="756" y="101">20 CONTRACTS DEPLOYED</text>
   </g>
 </svg>
 
@@ -166,7 +166,7 @@
       transform 420ms ease;
   }
   .part[data-state='off'] {
-    opacity: 0.16;
+    opacity: 0.4;
   }
   .part[data-state='on'] {
     opacity: 1;
@@ -188,6 +188,9 @@
   }
   .iris {
     stroke: var(--p-iris);
+  }
+  .iris.unminted {
+    stroke-dasharray: 5 4;
   }
   .iris.thin {
     stroke: var(--p-line);

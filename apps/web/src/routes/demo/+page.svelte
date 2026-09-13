@@ -37,8 +37,8 @@
         {
           icon: 'receipt' as const,
           label: 'One digest',
-          line: 'Thirteen fields, one hash.',
-          why: 'So the proof cannot be replayed against another chain, contract or wallet.',
+          line: 'Fifteen fields, one hash.',
+          why: 'Fifteen request fields hash into one digest, and the EIP-712 domain binds it to this chain and this contract on top. That domain binding is why the same proof cannot be replayed anywhere else.',
           visual: Step04Digest,
           href: `${repo}packages/domain/README.md#request-format-version-1`,
         },
@@ -88,7 +88,7 @@
           icon: 'shield' as const,
           label: 'One door',
           line: 'The adapter holds the only ISSUER role.',
-          why: 'So no admin key can inflate supply behind the Gate.',
+          why: 'The ATS admin role is held by the profile contract, and its deployed runtime has no grantRole function at all, so no second minter can be added.',
           visual: Step09Ats,
           href: `${repo}contracts/ats/README.md#source-and-compiler-provenance`,
         },
@@ -105,7 +105,7 @@
     {
       id: 'Evidence',
       who: 'anyone',
-      line: 'All of it is deployed on Hedera testnet and checkable by anyone.',
+      line: 'The contracts are deployed and verified on Hedera testnet. The mint itself has not run yet.',
       why: 'Otherwise you would have to take our word for every claim on this page.',
       aside: '',
       items: [
@@ -113,7 +113,7 @@
           icon: 'eye' as const,
           label: 'ERC-8004 registry',
           line: 'Names the issuer. Decides nothing.',
-          why: 'So a reviewer resolves who the issuer is without asking us. Three records, each cross-checked against live contract state on eight points before the app shows it. The Gate still decides every mint.',
+          why: 'So a reviewer resolves who the issuer is without asking us. Each record is cross-checked against live contract state before the app shows it, and the Gate still decides every mint. Be aware: our own deployment and auditor records share one key, so this deployment has no independent auditor.',
           visual: Step10Registry,
           href: 'https://eips.ethereum.org/EIPS/eip-8004#registration-v1',
         },
@@ -150,7 +150,10 @@
   );
 
   const required = [
-    { need: 'Use ATS to issue or manage a tokenised asset', status: 'Met' },
+    {
+      need: 'Use ATS to issue or manage a tokenised asset',
+      status: 'Partly met',
+    },
     { need: 'Deploy and demonstrate on Hedera testnet', status: 'Deployed' },
     { need: 'Public repo, contracts verified', status: 'Met' },
     {
@@ -198,6 +201,12 @@
   <section class="masthead" aria-label="Summary">
     <p class="eyebrow">How it works</p>
     <h1>How a signed gold document becomes a token on Hedera</h1>
+    <p class="standing">
+      Everything below is deployed on Hedera testnet. <strong
+        >No token has been minted yet</strong
+      >: the Groth16 proof has not returned, so the Gate is still paused. The
+      source document is synthetic, from no real bank.
+    </p>
   </section>
 
   <section class="stage-wrap" aria-label="The engine">
@@ -248,7 +257,7 @@
       {#if current.aside}<p class="aside">{current.aside}</p>{/if}
 
       <ul class="items">
-        {#each current.items as item}
+        {#each current.items as item (item.label)}
           <li>
             <details>
               <summary>
@@ -319,7 +328,9 @@
                 >
                 <span class="item-copy">
                   <strong>Track requirements</strong>
-                  <small>Three met, one partly. Nothing hidden.</small>
+                  <small
+                    >One met, one deployed, two partly. Nothing hidden.</small
+                  >
                 </span>
               </summary>
               <div class="item-body">
@@ -454,6 +465,16 @@
     font-size: 0.94rem;
     line-height: 1.5;
     max-width: 52ch;
+  }
+  .standing {
+    margin: 8px 0 0;
+    padding: 10px 13px;
+    border-radius: 10px;
+    background: #f6e9e6;
+    color: #8b3f3f;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    max-width: 78ch;
   }
   .why {
     margin: 0;
