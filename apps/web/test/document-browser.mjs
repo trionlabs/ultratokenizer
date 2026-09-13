@@ -1,5 +1,6 @@
 import { mkdir } from 'node:fs/promises';
-import { chromium } from '@playwright/test';
+import assert from 'node:assert/strict';
+import { chromium, expect } from '@playwright/test';
 import { loadModule } from './helpers.mjs';
 import { exerciseIssuanceRecovery } from './fixtures/issuance-browser.mjs';
 
@@ -33,6 +34,59 @@ try {
     outcome: 'confirmed',
     documentFlow: true,
   });
+  const page = await browser.newPage();
+  const mutations = [];
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.route('**/*', (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.origin !== base.origin || request.method() !== 'GET') {
+      mutations.push(request.method());
+      return route.abort();
+    }
+    if (url.pathname === '/deployment.json')
+      return route.fulfill({ json: fixture.deployment });
+    if (url.pathname === '/api/config')
+      return route.fulfill({
+        status: 503,
+        json: { error: { code: 'service_unavailable' } },
+      });
+    return route.continue();
+  });
+  await page.addInitScript(() => {
+    sessionStorage.setItem('ultratokenizer.document-job.v1', 'invalid json');
+  });
+  await page.goto(base.href, { waitUntil: 'networkidle' });
+  const recovery = page.getByRole('region', {
+    name: 'Unreadable saved request',
+  });
+  await expect(recovery).toBeVisible();
+  const remove = recovery.getByRole('button', {
+    name: 'Remove unreadable record',
+  });
+  await expect(remove).toBeDisabled();
+  await expect(
+    page.getByRole('button', { name: 'Upload signed PDF' }),
+  ).toHaveCount(0);
+  await recovery.getByRole('checkbox').check();
+  await remove.click();
+  await expect(recovery).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Upload signed PDF' }),
+  ).toBeEnabled();
+  assert.equal(
+    await page.evaluate(() =>
+      sessionStorage.getItem('ultratokenizer.document-job.v1'),
+    ),
+    null,
+  );
+  assert.deepEqual(mutations, []);
+  assert.deepEqual(errors, []);
+  await page.close();
+  console.log(
+    'Unreadable saved request requires acknowledgment; removal restores upload without network mutation.',
+  );
 } finally {
   await browser.close();
 }

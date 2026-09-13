@@ -280,6 +280,13 @@ try {
     .locator('.stage-action')
     .getByRole('button', { name: 'Connect wallet', exact: true })
     .click();
+  const verifyEvidence = page.getByRole('button', {
+    name: 'Verify evidence',
+    exact: true,
+  });
+  await expect(verifyEvidence).toBeEnabled();
+  assert.deepEqual(rpcCalls, [], 'wallet connection does not admit contracts');
+  await verifyEvidence.click();
   await expect(page.locator('.stage-action .inline-error')).toContainText(
     'do not match',
   );
