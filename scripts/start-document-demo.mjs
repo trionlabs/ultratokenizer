@@ -8,6 +8,7 @@ import { parseArgs } from 'node:util';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const { values } = parseArgs({
   options: {
+    'resume-prepared-proof': { type: 'string' },
     config: {
       type: 'string',
       default: 'work/runtime/hedera-testnet/document-flow/service.json',
@@ -36,6 +37,9 @@ function launch(args) {
 process.once('SIGINT', () => stop(130));
 process.once('SIGTERM', () => stop(143));
 try {
+  const recoveryId = values['resume-prepared-proof'];
+  if (recoveryId !== undefined && !/^[0-9a-f]{64}$/.test(recoveryId))
+    throw new Error();
   const info = await lstat(configPath);
   if (
     !info.isFile() ||
@@ -66,7 +70,11 @@ try {
   } catch (error) {
     if (error.message === 'occupied') throw error;
   }
-  launch(['packages/demo-service/src/main.mjs', configPath]);
+  launch([
+    'packages/demo-service/src/main.mjs',
+    configPath,
+    ...(recoveryId ? ['--resume-prepared-proof', recoveryId] : []),
+  ]);
   let ready = false;
   for (let i = 0; i < 30 && !stopping; i++) {
     try {

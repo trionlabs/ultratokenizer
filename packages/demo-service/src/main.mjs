@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { parseArgs } from 'node:util';
 import { RuntimeAdapter } from './runtime.mjs';
 import { JobStore } from './store.mjs';
 import { DemoService } from './service.mjs';
@@ -8,11 +9,19 @@ import { stopSubprocesses } from './io.mjs';
 process.umask(0o077);
 let store;
 try {
-  if (process.argv.length !== 3)
+  const { values, positionals } = parseArgs({
+    allowPositionals: true,
+    options: { 'resume-prepared-proof': { type: 'string' } },
+  });
+  const recoveryId = values['resume-prepared-proof'];
+  if (
+    positionals.length !== 1 ||
+    (recoveryId !== undefined && !/^[0-9a-f]{64}$/.test(recoveryId))
+  )
     throw new Error('A private configuration file is required.');
   const runtime = await RuntimeAdapter.load(
     process.cwd(),
-    resolve(process.argv[2]),
+    resolve(positionals[0]),
   );
   store = await new JobStore(runtime.path('storePath')).open();
   const service = new DemoService(runtime, store);
@@ -25,6 +34,22 @@ try {
         operationsEnabled: runtime.config.operationsEnabled,
       }),
     );
+    if (recoveryId) {
+      void service.resumePreparedProof(recoveryId).then(
+        (status) =>
+          console.log(
+            JSON.stringify({
+              status: 'prepared-proof-continuation-started',
+              jobId: recoveryId,
+              phase: status.phase,
+            }),
+          ),
+        () =>
+          console.error(
+            'Prepared proof continuation was refused. Existing artifacts were retained; review the job before any further action.',
+          ),
+      );
+    }
   });
   const stop = () => {
     stopSubprocesses();

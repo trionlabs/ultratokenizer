@@ -32,6 +32,31 @@ const sample = JSON.parse(
     'utf8',
   ),
 );
+
+await test('both credential identities are admitted before a new reservation can begin', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'ut-demo-credentials-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(join(root, 'test.env'), `TEST_KEY=${testKey}\n`, {
+    mode: 0o600,
+  });
+  const runtime = new RuntimeAdapter(root, {
+    issuerCredential: { path: 'test.env', variable: 'TEST_KEY' },
+    network: {
+      credential: { path: 'test.env', variable: 'TEST_KEY' },
+      requesterAddress: issuer.address,
+    },
+  });
+  runtime.policy = { issuerAddress: issuer.address };
+  await runtime.assertCredentialsReady();
+  runtime.config.network.requesterAddress = `0x${'22'.repeat(20)}`;
+  await assert.rejects(runtime.assertCredentialsReady(), {
+    code: 'operations_disabled',
+  });
+  runtime.config.network.credential.path = '../outside.env';
+  await assert.rejects(runtime.assertCredentialsReady(), {
+    code: 'operations_disabled',
+  });
+});
 async function fixture(t) {
   const folder = await mkdtemp(join(tmpdir(), 'ut-demo-issuer-'));
   await writeFile(join(folder, 'test.env'), `TEST_ISSUER_KEY=${testKey}\n`, {

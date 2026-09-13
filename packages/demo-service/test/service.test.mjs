@@ -69,6 +69,8 @@ async function fixture(t, { enabled = true, failure } = {}) {
     assertOperationsEnabled: async () => {
       if (!enabled) throw new ServiceError('operations_disabled');
     },
+    assertCredentialsReady: async () => {},
+    checkPreparedProofRecovery: async () => {},
     reserve: async () => {
       counts.reserve += 1;
       if (failure === 'reserve')
@@ -379,4 +381,91 @@ await test('a durable interrupted dispatch blocks a new document after process r
   } finally {
     await reopened.close();
   }
+});
+
+await test('credential preflight failure cannot reserve backing or retain a dispatch signature', async (t) => {
+  const f = await fixture(t);
+  const job = await f.prepare();
+  f.runtime.assertCredentialsReady = async () => {
+    throw new ServiceError('operations_disabled');
+  };
+  await assert.rejects(f.service.start(job.jobId, await f.sign(job)), {
+    code: 'operations_disabled',
+  });
+  assert.equal(f.store.get(job.jobId).status, 'awaiting_signature');
+  assert.equal(f.store.get(job.jobId).holderSignature, undefined);
+  assert.equal(f.counts.reserve + f.counts.prove, 0);
+});
+
+await test('explicit prepared-proof continuation reuses the reservation and starts only once', async (t) => {
+  const f = await fixture(t, { failure: 'prove' });
+  const prepared = await f.prepare();
+  await f.service.start(prepared.jobId, await f.sign(prepared));
+  await f.settle();
+  const job = f.store.get(prepared.jobId);
+  // Historical failed credential loading occurred after native preparation.
+  await f.store.update(job, { detailCode: 'invalid_request' });
+  let dispatches = 0;
+  f.runtime.prove = async (same, _folder, update, options) => {
+    assert.equal(same.requestDigest, prepared.requestDigest);
+    assert.equal(options.prepared, true);
+    dispatches++;
+    await update('proving');
+    return { testOnly: true, request: same.request };
+  };
+  const results = await Promise.allSettled(
+    Array.from({ length: 8 }, () => f.service.resumePreparedProof(job.jobId)),
+  );
+  await f.settle();
+  assert.equal(
+    results.filter((result) => result.status === 'fulfilled').length,
+    1,
+  );
+  assert.equal(f.counts.reserve, 1);
+  assert.equal(dispatches, 1);
+  assert.equal(job.status, 'ready_to_mint');
+  assert.equal(
+    JSON.parse(
+      await readFile(
+        join(f.directory, job.jobId, 'prepared-proof-recovery.json'),
+        'utf8',
+      ),
+    ).requestDigest,
+    prepared.requestDigest,
+  );
+});
+
+await test('an uncertain stage or paid request cannot enter prepared-proof continuation', async (t) => {
+  const f = await fixture(t, { failure: 'prove' });
+  const job = await f.prepare();
+  await f.service.start(job.jobId, await f.sign(job));
+  await f.settle();
+  await assert.rejects(f.service.resumePreparedProof(job.jobId), {
+    code: 'proof_request_uncertain',
+  });
+  assert.equal(f.counts.reserve, 1);
+  assert.equal(f.counts.prove, 1);
+});
+
+await test('failed preparation artifact admission cannot mutate or launch the retained job', async (t) => {
+  const f = await fixture(t, { failure: 'prove' });
+  const prepared = await f.prepare();
+  await f.service.start(prepared.jobId, await f.sign(prepared));
+  await f.settle();
+  const job = f.store.get(prepared.jobId);
+  await f.store.update(job, { detailCode: 'invalid_request' });
+  f.runtime.checkPreparedProofRecovery = async () => {
+    throw new ServiceError('proof_request_uncertain');
+  };
+  await assert.rejects(f.service.resumePreparedProof(job.jobId), {
+    code: 'proof_request_uncertain',
+  });
+  assert.equal(job.status, 'attention_required');
+  assert.equal(job.detailCode, 'invalid_request');
+  assert.equal(f.counts.reserve, 1);
+  assert.equal(f.counts.prove, 1);
+  await assert.rejects(
+    stat(join(f.directory, job.jobId, 'prepared-proof-recovery.json')),
+    { code: 'ENOENT' },
+  );
 });

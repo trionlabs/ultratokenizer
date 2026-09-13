@@ -4,7 +4,15 @@ import {
   getIssuanceRequestTypedData,
   parseIssuanceRequest,
 } from '../../../dist/domain/src/index.js';
-import { check, exact, randomId, sha256, ServiceError } from './io.mjs';
+import { join } from 'node:path';
+import {
+  check,
+  exact,
+  randomId,
+  sha256,
+  ServiceError,
+  writeNew,
+} from './io.mjs';
 
 export const MAX_PDF_BYTES = 256 * 1024;
 const ACTIVE = new Set([
@@ -182,31 +190,78 @@ export class DemoService {
         });
         return this.status(id);
       }
+      await this.runtime.assertCredentialsReady();
       // A durable signature precedes every allocation, chain write and paid network action.
       await this.store.update(job, {
         holderSignature: signature,
         status: 'reserving',
         detailCode: null,
       });
-      const work = this.pipeline(job)
-        .catch(() => {
-          // If persistence itself fails, retain the in-memory stop state. Never replay.
-          job.status = 'attention_required';
-          job.detailCode = 'service_unavailable';
-        })
-        .finally(() => this.running.delete(id));
-      this.running.set(id, work);
+      this.launch(job);
       return this.status(id);
     });
   }
-  async pipeline(job) {
+  /** Operator-only continuation of a reviewed local preparation; no HTTP route. */
+  async resumePreparedProof(id) {
+    return this.store.serial(async () => {
+      const job = this.store.get(id);
+      await this.authenticate(job, { holderSignature: job.holderSignature });
+      check(
+        this.running.size === 0 &&
+          job.status === 'attention_required' &&
+          job.phase === 'proof' &&
+          ['invalid_request', 'operations_disabled'].includes(job.detailCode) &&
+          job.reservation &&
+          !job.proof &&
+          !job.bundle &&
+          ![...this.store.jobs.values()].some(
+            (other) =>
+              other !== job &&
+              (other.detailCode === 'reservation_uncertain' ||
+                (other.holderSignature && !other.proof)),
+          ),
+        'proof_request_uncertain',
+      );
+      const folder = this.store.directory(id);
+      await this.runtime.checkPreparedProofRecovery(job, folder);
+      // An exclusive durable marker makes a second continuation impossible,
+      // including after a process crash before staging creates its own journal.
+      await writeNew(join(folder, 'prepared-proof-recovery.json'), {
+        requestDigest: job.requestDigest,
+        reservationTransactionHash: job.reservation.transactionHash,
+        startedAt: new Date().toISOString(),
+      });
+      await this.store.update(job, {
+        status: 'preparing_proof',
+        detailCode: null,
+      });
+      this.launch(job, { prepared: true });
+      return this.status(id);
+    });
+  }
+  launch(job, options) {
+    const work = this.pipeline(job, options)
+      .catch(() => {
+        job.status = 'attention_required';
+        job.detailCode = 'service_unavailable';
+      })
+      .finally(() => this.running.delete(job.jobId));
+    this.running.set(job.jobId, work);
+  }
+  async pipeline(job, { prepared = false } = {}) {
     try {
       await this.runtime.assertOperationsEnabled();
-      const reservation = await this.runtime.reserve(
-        job,
-        this.store.directory(job.jobId),
-      );
-      await this.store.update(job, { reservation, status: 'preparing_proof' });
+      await this.runtime.assertCredentialsReady();
+      if (!prepared) {
+        const reservation = await this.runtime.reserve(
+          job,
+          this.store.directory(job.jobId),
+        );
+        await this.store.update(job, {
+          reservation,
+          status: 'preparing_proof',
+        });
+      }
       const proof = await this.runtime.prove(
         job,
         this.store.directory(job.jobId),
@@ -224,6 +279,7 @@ export class DemoService {
           );
           await this.store.update(job, { status });
         },
+        { prepared },
       );
       await this.store.update(job, {
         status: 'authorizing',

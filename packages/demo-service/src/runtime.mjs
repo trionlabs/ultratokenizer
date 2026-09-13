@@ -37,6 +37,7 @@ import {
 } from './io.mjs';
 import { credential, issuerProvider } from './issuer-provider.mjs';
 import { checkBudgetReview } from './budget.mjs';
+import { checkPreparedRecovery } from './prepared-recovery.mjs';
 
 /** Concrete local adapter. Configuration is operator-owned; request bodies never choose tools or pins. */
 /**
@@ -315,6 +316,25 @@ export class RuntimeAdapter {
     const state = await this.configuration({ newJob });
     check(state.readiness.canStart, state.readiness.blocker);
   }
+  async assertCredentialsReady() {
+    try {
+      const issuer = privateKeyToAccount(
+        await credential(this.root, this.config.issuerCredential),
+      );
+      const requester = privateKeyToAccount(
+        await credential(this.root, this.config.network.credential),
+      );
+      check(
+        issuer.address.toLowerCase() ===
+          this.policy.issuerAddress.toLowerCase() &&
+          requester.address.toLowerCase() ===
+            this.config.network.requesterAddress.toLowerCase(),
+        'operations_disabled',
+      );
+    } catch {
+      throw new ServiceError('operations_disabled');
+    }
+  }
   async source(id) {
     const source = this.sources.get(id);
     check(source && this.inspected.has(id), 'unsupported_document', 404);
@@ -479,19 +499,8 @@ export class RuntimeAdapter {
       throw new ServiceError(code);
     }
   }
-  async prove(job, folder, update) {
-    await this.assertOperationsEnabled();
-    const source = this.sources.get(job.documentId);
-    const prefix = join(folder, 'job');
-    const preparationPath = `${prefix}.sp1-network-preparation.json`;
-    const stagePath = `${prefix}.sp1-network-staging.jsonl`;
-    const quotePath = `${prefix}.sp1-network-quote.json`;
-    const settingsPath = `${prefix}.sp1-network-submission.json`;
-    const requestJournal = `${prefix}.sp1-network-request.jsonl`;
-    const budgetPath = confined(this.root, this.config.network.budgetPath);
-    const requestPath = join(folder, 'request.json');
-    await writeNew(requestPath, job.request);
-    const review = {
+  proofReview(job, source, requestBytes) {
+    return {
       schemaVersion: 2,
       purpose: 'authorized-synthetic-demo-job-proof',
       sourceKind: 'synthetic-signed-pdf-capsule',
@@ -506,23 +515,139 @@ export class RuntimeAdapter {
       amountMilligrams: '1000',
       signerFingerprint: source.source.signerFingerprint,
       pdfSha256: job.documentId,
-      requestJsonSha256: sha256(await readOwned(requestPath, 16 * 1024)),
+      requestJsonSha256: sha256(requestBytes),
       requestDigest: job.requestDigest,
     };
+  }
+  async checkPreparedProofRecovery(job, folder) {
+    await this.assertOperationsEnabled({ newJob: true });
+    await this.assertCredentialsReady();
+    const source = this.sources.get(job.documentId);
+    check(source, 'source_not_admitted');
+    const requestBytes = await readOwned(
+      join(folder, 'request.json'),
+      16 * 1024,
+    );
+    const { preparation } = await checkPreparedRecovery(
+      folder,
+      job,
+      this.proofReview(job, source, requestBytes),
+      this.program,
+    );
+    const [pdf, elf, manifest] = await Promise.all([
+      readOwned(source.pdfPath, 256 * 1024),
+      readOwned(this.path('elfPath'), 32 * 1024 * 1024, false),
+      readOwned(this.path('programManifestPath'), 64 * 1024, false),
+    ]);
+    check(
+      sha256(pdf) === job.documentId &&
+        sha256(elf) === this.program.elfSha256 &&
+        sha256(manifest) === preparation.programManifestSha256,
+      'preparation_failed',
+    );
+    const client = createIssuerClient({
+      provider: {
+        request: async () => {
+          throw new ServiceError('operations_disabled');
+        },
+      },
+      deployment: this.deployment,
+    });
+    await client.waitPreparedReservation(
+      job.prepared,
+      job.reservation.transactionHash,
+    );
+    const block = await this.reader.getBlock();
+    const [reservation, used, requestUsed, requestIdUsed, nonceUsed] =
+      await Promise.all([
+        this.reader.readContract({
+          address: this.policy.gate,
+          abi: ISSUANCE_GATE_ABI,
+          functionName: 'reservations',
+          args: [job.request.issuerId, job.request.reservationId],
+          blockNumber: block.number,
+        }),
+        this.reader.readContract({
+          address: this.policy.gate,
+          abi: ISSUANCE_GATE_ABI,
+          functionName: 'usedClaims',
+          args: [job.request.claimUsageId],
+          blockNumber: block.number,
+        }),
+        this.reader.readContract({
+          address: this.policy.gate,
+          abi: ISSUANCE_GATE_ABI,
+          functionName: 'usedRequests',
+          args: [job.requestDigest],
+          blockNumber: block.number,
+        }),
+        this.reader.readContract({
+          address: this.policy.gate,
+          abi: ISSUANCE_GATE_ABI,
+          functionName: 'usedRequestIds',
+          args: [job.request.requestId],
+          blockNumber: block.number,
+        }),
+        this.reader.readContract({
+          address: this.policy.gate,
+          abi: ISSUANCE_GATE_ABI,
+          functionName: 'usedHolderNonces',
+          args: [job.request.recipient, BigInt(job.request.nonce)],
+          blockNumber: block.number,
+        }),
+      ]);
+    check(
+      !used &&
+        !requestUsed &&
+        !requestIdUsed &&
+        !nonceUsed &&
+        getAddress(reservation[0]) === job.request.recipient &&
+        getAddress(reservation[1]) === job.request.token &&
+        reservation[2] === BigInt(job.request.amount) &&
+        reservation[3] === 0n &&
+        reservation[4] === BigInt(job.request.validUntil) &&
+        !reservation[5] &&
+        reservation[6] === job.requestDigest &&
+        reservation[7] === job.request.claimUsageId &&
+        !reservation[8] &&
+        block.timestamp < BigInt(job.request.validUntil) &&
+        (await this.reader.getBlock({ blockNumber: block.number })).hash ===
+          block.hash,
+      'reservation_uncertain',
+    );
+  }
+  async prove(job, folder, update, { prepared = false } = {}) {
+    await this.assertOperationsEnabled();
+    const source = this.sources.get(job.documentId);
+    const prefix = join(folder, 'job');
+    const preparationPath = `${prefix}.sp1-network-preparation.json`;
+    const stagePath = `${prefix}.sp1-network-staging.jsonl`;
+    const quotePath = `${prefix}.sp1-network-quote.json`;
+    const settingsPath = `${prefix}.sp1-network-submission.json`;
+    const requestJournal = `${prefix}.sp1-network-request.jsonl`;
+    const budgetPath = confined(this.root, this.config.network.budgetPath);
+    const requestPath = join(folder, 'request.json');
+    if (!prepared) await writeNew(requestPath, job.request);
+    const review = this.proofReview(
+      job,
+      source,
+      await readOwned(requestPath, 16 * 1024),
+    );
     const reviewPath = join(folder, 'review.json');
-    await writeNew(reviewPath, review);
+    if (!prepared) await writeNew(reviewPath, review);
     const reviewHash = sha256(await readOwned(reviewPath, 16 * 1024));
     await update('preparing_proof');
-    await runJson(this.path('claimRunnerPath'), [
-      'network-prepare-reviewed-synthetic',
-      this.path('elfPath'),
-      this.path('programManifestPath'),
-      reviewPath,
-      reviewHash,
-      source.pdfPath,
-      requestPath,
-      preparationPath,
-    ]);
+    if (!prepared)
+      await runJson(this.path('claimRunnerPath'), [
+        'network-prepare-reviewed-synthetic',
+        this.path('elfPath'),
+        this.path('programManifestPath'),
+        reviewPath,
+        reviewHash,
+        source.pdfPath,
+        requestPath,
+        preparationPath,
+      ]);
     await this.assertOperationsEnabled();
     const key = await credential(this.root, this.config.network.credential);
     check(

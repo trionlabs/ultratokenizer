@@ -102,6 +102,24 @@ and SP1 journals when reconciling. Do not delete a job or release its ledger all
 Automatic crash recovery, cancellation/release and final mint-to-ledger reconciliation are not
 service endpoints; use the existing trusted institution chain bridge and requester recovery tools.
 
+An operator may explicitly continue one narrowly identified pre-upload failure:
+
+```sh
+node scripts/start-document-demo.mjs --resume-prepared-proof <existing-64-hex-job-id>
+```
+
+Stop the existing launcher first and correct its private credential configuration. This startup
+option keeps the status API available while continuing the same job; it is not an HTTP endpoint.
+It accepts only a signed, reserved job stopped with `invalid_request` or `operations_disabled`,
+with matching request/review/native preparation and no staging, quote or paid-request artifacts.
+It rechecks the existing reservation against canonical chain observations and rejects any consumed,
+cancelled or expired right. An exclusive durable continuation marker prevents a second attempt,
+including after a crash. The reservation and preparation files are retained; no allocation or
+reservation is repeated. Rust staging still re-authenticates the PDF and re-derives the witness
+against the sealed preparation before upload. Any later or ambiguous job requires operator
+reconciliation instead. Both issuer and requester credentials are validated before a new start can
+persist its dispatch signature or reserve backing.
+
 An unresolved earlier request keeps its conservative budget liability. A distinct allowlisted
 document may start only under an explicit aggregate USD review that retains the prior budget caps,
 pins the new budget's immutable Created identity, and admits a new bounded budget within the user's
