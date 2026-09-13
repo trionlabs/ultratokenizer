@@ -2,6 +2,7 @@
 
 use crate::{
     direct::{encode_artifact, encoded_message_sha256, DirectNetwork},
+    disclosure::{self, PublicDisclosure},
     journal::{self, StageEvent, StageEventBody, STAGING_SUFFIX},
     read_preparation, sha256_hex, unix_time,
 };
@@ -85,6 +86,7 @@ pub async fn run(args: &[String]) -> Result<(), &'static str> {
     }
 
     let witness = load_witness(&preparation, args)?;
+    let public_disclosure = load_disclosure(&preparation, &expected_requester, args)?;
 
     let light = ProverClient::builder().light().build().await;
     let key = light
@@ -106,7 +108,11 @@ pub async fn run(args: &[String]) -> Result<(), &'static str> {
         return Err("Requester key does not match the explicitly authorized address.");
     }
 
-    let operation_id = crate::operation_id(&preparation.preparation_id, &requester);
+    let operation_id = disclosure::operation_id(
+        &preparation.preparation_id,
+        &requester,
+        public_disclosure.as_ref(),
+    )?;
     let journal_path = Path::new(&args[4]);
     journal::create(
         journal_path,
@@ -118,6 +124,7 @@ pub async fn run(args: &[String]) -> Result<(), &'static str> {
                 elf_sha256: preparation.elf_sha256.clone(),
                 witness_sha256: preparation.witness_sha256.clone(),
                 proof_request_allowed: false,
+                public_disclosure: public_disclosure.clone(),
             },
         )?,
     )?;
@@ -166,12 +173,19 @@ pub async fn run(args: &[String]) -> Result<(), &'static str> {
     let mut stdin = SP1Stdin::new();
     stdin.write_vec(witness);
     let stdin_payload = encode_artifact(&stdin)?;
+    if let Some(disclosure) = &public_disclosure {
+        disclosure.fresh(unix_time()?)?;
+    }
     let stdin_uri = stage_artifact_once(
         &direct,
         journal_path,
         &operation_id,
-        "synthetic_private_stdin",
-        ArtifactType::PrivateStdin,
+        disclosure::artifact_kind(public_disclosure.as_ref()),
+        if public_disclosure.is_some() {
+            ArtifactType::Stdin
+        } else {
+            ArtifactType::PrivateStdin
+        },
         stdin_payload,
     )
     .await?;
@@ -215,15 +229,41 @@ pub async fn run(args: &[String]) -> Result<(), &'static str> {
             "requester":requester,
             "programRegistered":true,
             "stdinUriSha256":sha256_hex(stdin_uri.as_bytes()),
+            "stdinPrivate": public_disclosure.is_none(),
             "proofRequestSubmitted":false,
         })
     );
     Ok(())
 }
 
+fn load_disclosure(
+    preparation: &Preparation,
+    requester: &str,
+    args: &[String],
+) -> Result<Option<PublicDisclosure>, &'static str> {
+    if args.first().map(String::as_str) != Some("stage-reviewed-public-synthetic") {
+        return Ok(None);
+    }
+    if args.len() != 11 {
+        return Err("Public staging requires an exact disclosure file and its reviewed hash.");
+    }
+    let bytes = read_private_bounded(&args[9], 16 * 1024)?;
+    if sha256_hex(&bytes) != args[10] {
+        return Err("Public disclosure file differs from its explicitly reviewed hash.");
+    }
+    let disclosure: PublicDisclosure = serde_json::from_slice(&bytes)
+        .map_err(|_| "Invalid public synthetic disclosure authorization.")?;
+    disclosure.validate(preparation, requester)?;
+    disclosure.fresh(unix_time()?)?;
+    Ok(Some(disclosure))
+}
+
 fn load_witness(preparation: &Preparation, args: &[String]) -> Result<Vec<u8>, &'static str> {
     preparation.validate_synthetic()?;
-    if args[0] == "stage-reviewed-synthetic" {
+    if matches!(
+        args[0].as_str(),
+        "stage-reviewed-synthetic" | "stage-reviewed-public-synthetic"
+    ) {
         let review = preparation
             .reviewed_synthetic
             .as_ref()
@@ -449,6 +489,10 @@ async fn stage_artifact_once(
             },
         )?,
     )?;
+
+    if artifact_kind != "synthetic_program" {
+        disclosure::validate_stdin_uri(&allocation.uri, artifact_kind == "synthetic_public_stdin")?;
+    }
 
     let payload_sha256 = sha256_hex(&payload);
     let payload_bytes = payload.len();
@@ -760,6 +804,34 @@ mod tests {
             .unwrap_err();
         // No environment access or live SP1 operation is necessary for this rejection.
         assert_eq!(run(&args).await.unwrap_err(), expected);
+        assert!(!journal.exists());
+        let mut public_args = args.clone();
+        public_args[0] = "stage-reviewed-public-synthetic".into();
+        let disclosure = PublicDisclosure {
+            schema_version: 1,
+            purpose: "public-synthetic-sp1-control".into(),
+            authorized_public_disclosure: true,
+            preparation_id: preparation.preparation_id.clone(),
+            requester: public_args[2].clone(),
+            review_manifest_sha256: preparation.review_manifest_sha256.clone().unwrap(),
+            valid_until_unix: unix_time().unwrap() + 3600,
+        };
+        let bytes = serde_json::to_vec(&disclosure).unwrap();
+        public_args.push(write("disclosure.json", &bytes));
+        public_args.push(sha256_hex(&bytes));
+        assert_eq!(
+            load_disclosure(&preparation, &public_args[2], &public_args).unwrap(),
+            Some(disclosure.clone())
+        );
+        public_args[10] = "99".repeat(32);
+        assert!(load_disclosure(&preparation, &public_args[2], &public_args).is_err());
+        let mut pending = disclosure;
+        pending.authorized_public_disclosure = false;
+        let bytes = serde_json::to_vec(&pending).unwrap();
+        public_args[9] = write("pending-disclosure.json", &bytes);
+        public_args[10] = sha256_hex(&bytes);
+        assert!(load_disclosure(&preparation, &public_args[2], &public_args).is_err());
+        assert!(run(&public_args).await.is_err());
         assert!(!journal.exists());
         std::fs::remove_dir_all(directory).unwrap();
     }

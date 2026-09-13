@@ -171,3 +171,55 @@ CI exercises authenticated reviewed-field comparisons using the embedded synthet
 rejects relabeling that witness as the deployment PDF. It does not upload a witness, read a
 requester key or prove live network acceptance. The approved deployment's private artifacts
 remain outside the repository.
+
+### Explicit public synthetic control
+
+`stage` and `stage-reviewed-synthetic` retain private inputs. The separate
+`stage-reviewed-public-synthetic` command can publish only an already allowlisted, reviewed
+synthetic preparation. It requires additional, explicit authorization for **public** witness
+visibility. A local `privateStdinEnabled` setting does not establish that Succinct has enabled
+private inputs for a requester; [private inputs require provider enablement](https://docs.succinct.xyz/docs/sp1/prover-network/advanced-usage).
+
+Prepare this separate authorization file for human review. Keep `authorizedPublicDisclosure`
+false until approval covers the complete synthetic PDF, certificate/signature material and
+request encoded in the witness. The preparation ID binds their exact hashes and the pinned ELF,
+VKey and public values. The requester and review hash are checked independently.
+
+```json
+{
+  "schemaVersion": 1,
+  "purpose": "public-synthetic-sp1-control",
+  "authorizedPublicDisclosure": false,
+  "preparationId": "EXACT_EXISTING_PREPARATION_ID",
+  "requester": "0xEXPECTED_REQUESTER",
+  "reviewManifestSha256": "REVIEWED_REVIEW_FILE_SHA256",
+  "validUntilUnix": 0
+}
+```
+
+After approval, set the approved expiry and disclosure flag, review the exact file hash, and
+use a **new attempt directory**. Do not modify an existing private staging or paid journal.
+
+```sh
+network-requester stage-reviewed-public-synthetic \
+  work/public-control/run.sp1-network-preparation.json \
+  0xEXPECTED_REQUESTER proofs/elf/ultratokenizer-claim-guest \
+  work/public-control/run.sp1-network-staging.jsonl \
+  work/public-control/review.json REVIEWED_REVIEW_FILE_SHA256 \
+  work/public-control/allocation.synthetic.pdf work/public-control/request.json \
+  work/public-control/public-disclosure.json REVIEWED_PUBLIC_DISCLOSURE_FILE_SHA256
+```
+
+Staging uses `ArtifactType::Stdin`, records the disclosure in its append-only intent and permits
+no proof submission. The ordinary quote/prepare/submit commands retain that authorization in
+the sealed plan and encode `stdin_private = false`. A public/private URI or journal substitution
+fails before paid dispatch. Private plans omit the new field so existing plan hashes remain valid.
+Recovery and retrieval compare the signed visibility flag with the exact observed request.
+
+Changing visibility preserves the underlying witness identity. An already reserved witness
+cannot get another spending slot in the same budget. An explicitly approved comparison therefore
+needs a separately reviewed attempt budget **while retaining every old outstanding maximum in
+the operator's global spending calculation**. This is a second paid request, not recovery or a
+refund of the private request. Never reset a budget, reuse journals or automatically resend.
+Neither a public upload nor a successful control proves the cause of an earlier private failure.
+No source document, witness or credential is committed by this workflow.

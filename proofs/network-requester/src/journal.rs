@@ -32,6 +32,8 @@ pub enum StageEventBody {
         elf_sha256: String,
         witness_sha256: String,
         proof_request_allowed: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        public_disclosure: Option<crate::disclosure::PublicDisclosure>,
     },
     ProgramObserved {
         registered: bool,
@@ -142,6 +144,7 @@ fn validate(events: &[StageEvent]) -> Result<(), &'static str> {
         requester,
         witness_sha256,
         proof_request_allowed,
+        public_disclosure,
         ..
     } = &events[0].body
     else {
@@ -150,6 +153,13 @@ fn validate(events: &[StageEvent]) -> Result<(), &'static str> {
     if *proof_request_allowed || preparation_id.is_empty() || requester.is_empty() {
         return Err("Staging intent is malformed or permits a proof request.");
     }
+    if let Some(disclosure) = public_disclosure {
+        disclosure.validate_shape()?;
+        if &disclosure.preparation_id != preparation_id || &disclosure.requester != requester {
+            return Err("Public staging intent differs from its disclosure authorization.");
+        }
+    }
+    let stdin_kind = crate::disclosure::artifact_kind(public_disclosure.as_ref());
     let operation_id = &events[0].operation_id;
     if !is_prefixed_hash(operation_id) {
         return Err("Staging operation identity is malformed.");
@@ -194,7 +204,8 @@ fn validate(events: &[StageEvent]) -> Result<(), &'static str> {
             }
             StageEventBody::ArtifactAllocationAttempted { artifact_kind } => {
                 validate_artifact_kind(artifact_kind)?;
-                if observed_program.is_none()
+                if (artifact_kind != "synthetic_program" && artifact_kind != stdin_kind)
+                    || observed_program.is_none()
                     || allocations.contains_key(artifact_kind)
                     || uploaded.contains(artifact_kind)
                 {
@@ -318,8 +329,8 @@ fn validate(events: &[StageEvent]) -> Result<(), &'static str> {
                     || complete_requester != requester
                     || complete_witness != witness_sha256
                     || registered_program.as_deref() != Some(program_uri)
-                    || allocations.get("synthetic_private_stdin") != Some(stdin_uri)
-                    || !uploaded.contains("synthetic_private_stdin")
+                    || allocations.get(stdin_kind) != Some(stdin_uri)
+                    || !uploaded.contains(stdin_kind)
                 {
                     return Err("Staging completion is inconsistent.");
                 }
@@ -330,7 +341,10 @@ fn validate(events: &[StageEvent]) -> Result<(), &'static str> {
 }
 
 fn validate_artifact_kind(kind: &str) -> Result<(), &'static str> {
-    if matches!(kind, "synthetic_program" | "synthetic_private_stdin") {
+    if matches!(
+        kind,
+        "synthetic_program" | "synthetic_private_stdin" | "synthetic_public_stdin"
+    ) {
         Ok(())
     } else {
         Err("Staging artifact kind is unsupported.")
@@ -402,6 +416,7 @@ mod tests {
                 elf_sha256: "22".repeat(32),
                 witness_sha256: "33".repeat(32),
                 proof_request_allowed: true,
+                public_disclosure: None,
             },
         };
         assert!(validate(&[event]).is_err());
@@ -425,6 +440,7 @@ mod tests {
                     elf_sha256: "22".repeat(32),
                     witness_sha256: "33".repeat(32),
                     proof_request_allowed: false,
+                    public_disclosure: None,
                 },
             ),
             wrap(

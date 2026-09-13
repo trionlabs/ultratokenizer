@@ -43,6 +43,8 @@ pub struct Plan {
     pub settings: Settings,
     pub program_uri: String,
     pub stdin_uri: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_disclosure: Option<crate::disclosure::PublicDisclosure>,
 }
 
 impl Plan {
@@ -111,10 +113,10 @@ impl Plan {
         }
         validate_uri(&self.program_uri)?;
         validate_uri(&self.stdin_uri)?;
-        // The current SDK PrivateStdin store is the only admitted staging path.
-        if !self.stdin_uri.contains("private-stdins/") {
-            return Err("Paid request requires an explicitly staged PrivateStdin artifact.");
+        if let Some(disclosure) = &self.public_disclosure {
+            disclosure.validate(&self.preparation, &self.quote.requester)?;
         }
+        crate::disclosure::validate_stdin_uri(&self.stdin_uri, self.public_disclosure.is_some())?;
         let domain = decode_prefixed(&self.quote.domain)?;
         if domain.is_empty() || domain.len() > 256 {
             return Err("Auction domain is outside its bound.");
@@ -133,6 +135,9 @@ impl Plan {
     }
 
     pub fn fresh(&self, now: u64) -> Result<(), &'static str> {
+        if let Some(disclosure) = &self.public_disclosure {
+            disclosure.fresh(now)?;
+        }
         if now < self.quote.observed_at_unix
             || now >= self.quote.review_valid_until_unix
             || now >= self.settings.deadline_unix
@@ -188,7 +193,7 @@ impl Plan {
             max_price_per_pgu: self.quote.max_price_per_pgu_wei.clone(),
             variant: rpc::TransactionVariant::RequestVariant.into(),
             treasury: decode_prefixed(&self.quote.treasury)?,
-            stdin_private: true,
+            stdin_private: self.public_disclosure.is_none(),
         })
     }
 }

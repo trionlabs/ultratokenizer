@@ -142,6 +142,7 @@ fn plan(requester: &str, budget_id: &str) -> Plan {
         quote,
         program_uri: "s3://fixture/programs/1".into(),
         stdin_uri: "s3://fixture/private-stdins/1".into(),
+        public_disclosure: None,
     }
     .seal()
     .unwrap()
@@ -246,7 +247,7 @@ impl Network {
             whitelist: body.whitelist.clone(),
             base_fee: Some(body.base_fee.clone()),
             max_price_per_pgu: Some(body.max_price_per_pgu.clone()),
-            stdin_private: true,
+            stdin_private: body.stdin_private,
             ..Default::default()
         }];
         self.transactions = vec![rpc::TransactionDetails {
@@ -875,7 +876,7 @@ async fn executed_recovery_requires_a_matching_commitment_and_rejects_either_res
 }
 
 fn staged_events(plan: &Plan) -> Vec<crate::journal::StageEvent> {
-    let kind = "synthetic_private_stdin".to_owned();
+    let kind = crate::disclosure::artifact_kind(plan.public_disclosure.as_ref()).to_owned();
     let body = vec![
         StageEventBody::Intent {
             preparation_id: plan.preparation.preparation_id.clone(),
@@ -883,6 +884,7 @@ fn staged_events(plan: &Plan) -> Vec<crate::journal::StageEvent> {
             elf_sha256: plan.preparation.elf_sha256.clone(),
             witness_sha256: plan.preparation.witness_sha256.clone(),
             proof_request_allowed: false,
+            public_disclosure: plan.public_disclosure.clone(),
         },
         StageEventBody::ProgramObserved {
             registered: true,
@@ -920,10 +922,12 @@ fn staged_events(plan: &Plan) -> Vec<crate::journal::StageEvent> {
         .map(|body| crate::journal::StageEvent {
             schema_version: 1,
             at_unix: plan.quote.observed_at_unix,
-            operation_id: crate::operation_id(
+            operation_id: crate::disclosure::operation_id(
                 &plan.preparation.preparation_id,
                 &plan.quote.requester,
-            ),
+                plan.public_disclosure.as_ref(),
+            )
+            .unwrap(),
             body,
         })
         .collect()
@@ -931,12 +935,27 @@ fn staged_events(plan: &Plan) -> Vec<crate::journal::StageEvent> {
 
 #[test]
 fn offline_prepare_binds_exact_quote_and_staging_bytes_before_reserving_budget() {
+    offline_prepare_reviewed_stage(false);
+    offline_prepare_reviewed_stage(true);
+}
+
+fn offline_prepare_reviewed_stage(public: bool) {
     let directory = Directory::new();
     let signer = Signer::fixture();
-    let mut value = plan(&signer.address(), &"bb".repeat(32));
+    let mut value = if public {
+        reviewed_public_plan(&signer.address(), &"bb".repeat(32))
+    } else {
+        plan(&signer.address(), &"bb".repeat(32))
+    };
     let now = unix_time().unwrap();
     value.preparation.created_at_unix = now;
     value.preparation = value.preparation.seal();
+    if let Some(disclosure) = &mut value.public_disclosure {
+        disclosure
+            .preparation_id
+            .clone_from(&value.preparation.preparation_id);
+        disclosure.valid_until_unix = now + 4000;
+    }
     value.quote.preparation_id = value.preparation.preparation_id.clone();
     value.quote.observed_at_unix = now;
     value.quote.review_valid_until_unix = now + 300;
@@ -995,6 +1014,8 @@ fn offline_prepare_binds_exact_quote_and_staging_bytes_before_reserving_budget()
     let budget_log = Journal::<BudgetEvent>::open(&budget_path).unwrap();
     let request_log = Journal::<RequestEvent>::open(&request_path).unwrap();
     let state = RequestState::read(request_log.events()).unwrap();
+    assert_eq!(state.plan.public_disclosure.is_some(), public);
+    assert_eq!(state.plan.body(7).unwrap().stdin_private, !public);
     Budget::read(budget_log.events())
         .unwrap()
         .require_reservation(&state.plan, budget_log.events())
@@ -1004,4 +1025,190 @@ fn offline_prepare_binds_exact_quote_and_staging_bytes_before_reserving_budget()
     drop(budget_log);
     drop(request_log);
     assert!(prepare(&args).is_err());
+}
+
+fn reviewed_public_plan(requester: &str, budget_id: &str) -> Plan {
+    use ultratokenizer_network_request_schema::*;
+    let mut value = plan(requester, budget_id);
+    let review = ReviewedSynthetic {
+        schema_version: 2,
+        purpose: "authorized-synthetic-demo-job-proof".into(),
+        source_kind: "synthetic-signed-pdf-capsule".into(),
+        synthetic: true,
+        production_approved: false,
+        chain_id: "296".into(),
+        gate: DEMO_JOB_GATE.into(),
+        token: DEMO_JOB_TOKEN.into(),
+        recipient: format!("0x{}", "33".repeat(20)),
+        issuer_id: format!("0x{}", "44".repeat(32)),
+        source_id: format!("0x{}", "55".repeat(32)),
+        amount_milligrams: "1000".into(),
+        signer_fingerprint: DEMO_JOB_SIGNER.into(),
+        pdf_sha256: DEMO_JOB_PDFS[0].into(),
+        request_json_sha256: "66".repeat(32),
+        request_digest: value.preparation.request_digest.clone(),
+    };
+    let mut words = hex::decode(&value.preparation.public_values[2..]).unwrap();
+    words[64..96].copy_from_slice(&hex::decode(DEMO_JOB_SIGNER).unwrap());
+    value.preparation.schema_version = REVIEWED_PREPARATION_SCHEMA_VERSION;
+    value.preparation.fixture_kind = REVIEWED_SYNTHETIC_KIND.into();
+    value.preparation.pdf_sha256.clone_from(&review.pdf_sha256);
+    value
+        .preparation
+        .request_json_sha256
+        .clone_from(&review.request_json_sha256);
+    value.preparation.public_values = format!("0x{}", hex::encode(&words));
+    value.preparation.public_values_sha256 = sha256_hex(&words);
+    value.preparation.review_manifest_sha256 =
+        Some(sha256_hex(&serde_json::to_vec(&review).unwrap()));
+    value.preparation.reviewed_synthetic = Some(review);
+    value.preparation = value.preparation.seal();
+    value
+        .quote
+        .preparation_id
+        .clone_from(&value.preparation.preparation_id);
+    value.quote = value.quote.seal();
+    value.settings.quote_id.clone_from(&value.quote.quote_id);
+    value.stdin_uri = "s3://fixture/stdins/1".into();
+    value.public_disclosure = Some(crate::disclosure::PublicDisclosure {
+        schema_version: 1,
+        purpose: "public-synthetic-sp1-control".into(),
+        authorized_public_disclosure: true,
+        preparation_id: value.preparation.preparation_id.clone(),
+        requester: requester.into(),
+        review_manifest_sha256: value.preparation.review_manifest_sha256.clone().unwrap(),
+        valid_until_unix: NOW + 4000,
+    });
+    let value = value.seal().unwrap();
+    value.validate().unwrap();
+    value
+}
+
+#[test]
+fn public_visibility_is_bound_to_synthetic_review_and_legacy_identity_is_preserved() {
+    let signer = Signer::fixture();
+    let legacy = plan(&signer.address(), &"bb".repeat(32));
+    let bytes = serde_json::to_vec(&legacy).unwrap();
+    assert!(!String::from_utf8(bytes.clone())
+        .unwrap()
+        .contains("publicDisclosure"));
+    let restored: Plan = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(restored.seal().unwrap().plan_id, legacy.plan_id);
+    assert!(legacy.body(7).unwrap().stdin_private);
+    let public = reviewed_public_plan(&signer.address(), &"bb".repeat(32));
+    assert!(!public.body(7).unwrap().stdin_private);
+    let mut private = public.clone();
+    private.public_disclosure = None;
+    private.stdin_uri = "s3://fixture/private-stdins/1".into();
+    let private = private.seal().unwrap();
+    private.validate().unwrap();
+    assert!(private.body(7).unwrap().stdin_private);
+    assert_eq!(public.request_identity, private.request_identity);
+    assert_ne!(public.plan_id, private.plan_id);
+    for (mut value, uri) in [
+        (public.clone(), "s3://fixture/private-stdins/1"),
+        (private, "s3://fixture/stdins/1"),
+        (public.clone(), "s3://stdins/other/1"),
+        (public.clone(), "s3://fixture/private-stdins/stdins/1"),
+    ] {
+        value.stdin_uri = uri.into();
+        assert!(value.seal().unwrap().validate().is_err());
+    }
+    for index in 0..6 {
+        let mut changed = public.clone();
+        let disclosure = changed.public_disclosure.as_mut().unwrap();
+        match index {
+            0 => disclosure.authorized_public_disclosure = false,
+            1 => disclosure.preparation_id = "other".into(),
+            2 => disclosure.requester = format!("0x{}", "99".repeat(20)),
+            3 => disclosure.review_manifest_sha256 = "99".repeat(32),
+            4 => disclosure.purpose = "private-source-document".into(),
+            _ => disclosure.schema_version = 2,
+        }
+        assert!(changed.seal().unwrap().validate().is_err());
+    }
+    assert!(public
+        .public_disclosure
+        .as_ref()
+        .unwrap()
+        .fresh(NOW + 4000)
+        .is_err());
+    let mut embedded = legacy;
+    embedded.public_disclosure = public.public_disclosure.clone();
+    embedded.stdin_uri = public.stdin_uri;
+    assert!(embedded.seal().unwrap().validate().is_err());
+}
+
+#[test]
+fn public_staging_rejects_visibility_substitution_and_cannot_bypass_reserved_witness() {
+    let directory = Directory::new();
+    let signer = Signer::fixture();
+    let mut budget_log = budget(&directory, &signer.address(), "500", "2000");
+    let budget_id = Budget::read(budget_log.events()).unwrap().id;
+    let public = reviewed_public_plan(&signer.address(), &budget_id);
+    let encode = |events: &[crate::journal::StageEvent]| {
+        events
+            .iter()
+            .map(|event| format!("{}\n", serde_json::to_string(event).unwrap()))
+            .collect::<String>()
+    };
+    let events = staged_events(&public);
+    assert!(crate::journal::parse(encode(&events).as_bytes()).is_ok());
+    let mut changed = events.clone();
+    if let StageEventBody::Intent {
+        public_disclosure, ..
+    } = &mut changed[0].body
+    {
+        *public_disclosure = None;
+    }
+    assert!(crate::journal::parse(encode(&changed).as_bytes()).is_err());
+    let mut changed = events;
+    if let StageEventBody::ArtifactAllocationAttempted { artifact_kind } = &mut changed[2].body {
+        *artifact_kind = "synthetic_private_stdin".into();
+    }
+    assert!(crate::journal::parse(encode(&changed).as_bytes()).is_err());
+    let mut private = public.clone();
+    private.public_disclosure = None;
+    private.stdin_uri = "s3://fixture/private-stdins/1".into();
+    let private = private.seal().unwrap();
+    reserve(&mut budget_log, &private);
+    assert!(Budget::read(budget_log.events())
+        .unwrap()
+        .can_reserve(&public)
+        .is_err());
+    assert_eq!(budget_log.events().len(), 2);
+}
+
+#[tokio::test]
+async fn public_paid_request_sends_once_and_unsigned_recovery_binds_visibility() {
+    let directory = Directory::new();
+    let signer = Signer::fixture();
+    let value = reviewed_public_plan(&signer.address(), &"bb".repeat(32));
+    let mut log = Journal::create(
+        &directory.path("request.jsonl"),
+        RequestEvent::Prepared {
+            plan: Box::new(value.clone()),
+        },
+        NOW,
+    )
+    .unwrap();
+    let mut network = Network::fixture(&value, directory.path("request.jsonl"));
+    submit_once(&mut log, &mut network, &signer, || Ok(NOW))
+        .await
+        .unwrap();
+    assert!(!network.sends[0].body.as_ref().unwrap().stdin_private);
+    network.index_sent();
+    recover_once(&mut log, &mut network, || Ok(NOW + 1))
+        .await
+        .unwrap();
+    network.candidates[0].stdin_private = true;
+    assert!(recover_once(&mut log, &mut network, || Ok(NOW + 2))
+        .await
+        .is_err());
+    assert!(submit_once(&mut log, &mut network, &signer, || Ok(NOW + 2))
+        .await
+        .is_err());
+    assert_eq!(network.sends.len(), 1);
+    assert_eq!(network.nonce_calls, 1);
+    assert_eq!(signer.calls.get(), 1);
 }

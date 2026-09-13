@@ -66,6 +66,7 @@ pub fn prepare(args: &[String]) -> Result<(), &'static str> {
         requester,
         elf_sha256,
         witness_sha256,
+        public_disclosure,
         ..
     } = &first.body
     else {
@@ -75,7 +76,12 @@ pub fn prepare(args: &[String]) -> Result<(), &'static str> {
         || requester != &quote.requester
         || elf_sha256 != &preparation.elf_sha256
         || witness_sha256 != &preparation.witness_sha256
-        || first.operation_id != crate::operation_id(preparation_id, requester)
+        || first.operation_id
+            != crate::disclosure::operation_id(
+                preparation_id,
+                requester,
+                public_disclosure.as_ref(),
+            )?
     {
         return Err("Staged program and witness do not match this preparation and requester.");
     }
@@ -104,6 +110,7 @@ pub fn prepare(args: &[String]) -> Result<(), &'static str> {
         settings,
         program_uri: program_uri.clone(),
         stdin_uri: stdin_uri.clone(),
+        public_disclosure: public_disclosure.clone(),
     }
     .seal()?;
     plan.validate()?;

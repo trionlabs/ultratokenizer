@@ -426,6 +426,7 @@ async fn recovered_fixture(directory: &Directory) -> (std::path::PathBuf, String
         quote,
         program_uri: "s3://fixture/programs/1".into(),
         stdin_uri: "s3://fixture/private-stdins/1".into(),
+        public_disclosure: None,
     }
     .seal()
     .unwrap();

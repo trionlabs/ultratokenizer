@@ -1,6 +1,7 @@
 //! Credential-bearing Succinct mainnet boundary for a reviewed synthetic request.
 
 mod direct;
+mod disclosure;
 mod journal;
 mod paid;
 mod paid_journal;
@@ -285,6 +286,13 @@ async fn run() -> Result<(), &'static str> {
         Some("quote") => Err(
             "Usage: network-requester quote <preparation-file> <expected-requester-address> <new-quote-file>",
         ),
+        Some("stage-reviewed-public-synthetic") if args.len() == 11 => {
+            initialize_tls()?;
+            stage::run(&args).await
+        }
+        Some("stage-reviewed-public-synthetic") => Err(
+            "Usage: network-requester stage-reviewed-public-synthetic <preparation-file> <expected-requester-address> <elf> <new-staging-journal> <review-json> <review-sha256> <synthetic-pdf> <request-json> <public-disclosure-json> <public-disclosure-sha256>",
+        ),
         Some("stage-reviewed-synthetic") if args.len() == 9 => {
             initialize_tls()?;
             stage::run(&args).await
@@ -333,7 +341,7 @@ async fn run() -> Result<(), &'static str> {
             "Usage: network-requester retrieve-proof <fulfilled-request-journal> <expected-journal-sha256> <reviewed-origin-json> <new-raw-proof> <new-normalized-proof> <new-retrieval-receipt>",
         ),
         _ => Err(
-            "Available commands: quote, stage, stage-reviewed-synthetic, inspect-stage, init-budget, prepare-request, submit-request, recover-request, retrieve-proof. Paid submission requires an explicitly reviewed budget and fresh exact quote.",
+            "Available commands: quote, stage, stage-reviewed-synthetic, stage-reviewed-public-synthetic, inspect-stage, init-budget, prepare-request, submit-request, recover-request, retrieve-proof. Paid submission requires an explicitly reviewed budget and fresh exact quote.",
         ),
     }
 }
