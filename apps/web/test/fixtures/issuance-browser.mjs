@@ -373,7 +373,7 @@ export async function exerciseIssuanceRecovery({
     await route.abort();
   });
   await page.addInitScript(
-    ({ account, signature, start, originalHash }) => {
+    ({ account, signature, start, originalHash, documentFlow }) => {
       const listeners = new Map();
       window.issuanceWallet = {
         account,
@@ -401,6 +401,15 @@ export async function exerciseIssuanceRecovery({
         async request({ method, params }) {
           window.issuanceWallet.methods.push(method);
           if (method === 'eth_chainId') return window.issuanceWallet.chain;
+          if (method === 'eth_requestAccounts' && documentFlow) {
+            await new Promise((resolve) => {
+              window.grantIssuanceWallet = () => {
+                for (const callback of listeners.get('accountsChanged') ?? [])
+                  callback([window.issuanceWallet.account]);
+                resolve();
+              };
+            });
+          }
           if (method === 'eth_accounts' || method === 'eth_requestAccounts')
             return [window.issuanceWallet.account];
           if (method === 'eth_signTypedData_v4') return signature;
@@ -419,6 +428,7 @@ export async function exerciseIssuanceRecovery({
       signature: holderSignature,
       start,
       originalHash,
+      documentFlow,
     },
   );
   try {
@@ -514,6 +524,25 @@ export async function exerciseIssuanceRecovery({
       await page
         .getByRole('button', { name: 'Connect recipient wallet', exact: true })
         .click();
+      const connecting = page.getByRole('button', {
+        name: 'Connecting…',
+        exact: true,
+      });
+      await expect(connecting).toHaveCount(2);
+      await expect(connecting.first()).toBeDisabled();
+      await expect(connecting.last()).toHaveAttribute('aria-busy', 'true');
+      await expect(page.getByText('Connecting to your wallet…')).toBeVisible();
+      assert.equal(proofStarts, 0, 'connecting cannot start a paid proof');
+      assert.deepEqual(
+        await page.evaluate(() => window.issuanceWallet.sends),
+        [],
+        'connecting cannot broadcast a transaction',
+      );
+      await page.evaluate(() => window.grantIssuanceWallet());
+      await expect(connecting).toHaveCount(0);
+      await expect(page.locator('.session-list')).toContainText(
+        request.recipient,
+      );
       await page.getByRole('checkbox').check();
       await checkViewport(true);
       await page
@@ -531,7 +560,7 @@ export async function exerciseIssuanceRecovery({
       );
       await expect(page.locator('.proof-object')).toHaveAttribute(
         'data-state',
-        'loaded',
+        'working',
       );
       await expect(page.locator('.artifact-body')).not.toHaveClass(/is-coin/);
       await page

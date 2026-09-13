@@ -136,6 +136,111 @@ test('connecting before deployment requests only wallet access and keeps issuanc
   wrongChain.dispose();
 });
 
+test('the first wallet grant accepts its accountsChanged event only after fresh account and chain reads', async () => {
+  const fixture = await createFixture();
+  const methods = [];
+  const wallet = { address: fixture.bundle.request.recipient, chainId: '296' };
+  let session;
+  session = createIssuanceSession(() => ({
+    connect: async () => {
+      session.walletChanged();
+      return wallet;
+    },
+  }));
+  session.setProvider({
+    async request({ method }) {
+      methods.push(method);
+      if (method === 'eth_accounts') return [wallet.address];
+      if (method === 'eth_chainId') return '0x128';
+      throw new Error(`Unexpected wallet method: ${method}`);
+    },
+  });
+  session.loadDeployment(JSON.stringify(fixture.deployment));
+  await session.connect();
+  assert.deepEqual(session.read().wallet, wallet);
+  assert.deepEqual(methods, ['eth_accounts', 'eth_chainId']);
+  assert.equal(session.read().busy, undefined);
+  assert.equal(session.read().error, undefined);
+  assert.equal(session.read().sourceProof, 'unchecked');
+  assert.equal(session.read().signature, undefined);
+  session.dispose();
+});
+
+for (const changed of ['account', 'chain', 'during-observation', 'provider']) {
+  test(`a connection cannot accept a stale result after ${changed} changes`, async () => {
+    const fixture = await createFixture();
+    const wallet = {
+      address: fixture.bundle.request.recipient,
+      chainId: '296',
+    };
+    let session;
+    session = createIssuanceSession(() => ({
+      connect: async () => {
+        if (changed === 'provider') session.setProvider({ request() {} });
+        else session.walletChanged();
+        return wallet;
+      },
+    }));
+    session.setProvider({
+      async request({ method }) {
+        if (method === 'eth_accounts')
+          return [
+            changed === 'account'
+              ? fixture.deployment.auditPolicy.issuerAddress
+              : wallet.address,
+          ];
+        if (method === 'eth_chainId') {
+          if (changed === 'during-observation') session.walletChanged();
+          return changed === 'chain' ? '0x1' : '0x128';
+        }
+        throw new Error(`Unexpected wallet method: ${method}`);
+      },
+    });
+    session.loadDeployment(JSON.stringify(fixture.deployment));
+    await session.connect();
+    assert.equal(session.read().wallet, undefined);
+    assert.equal(session.read().busy, undefined);
+    assert.equal(session.read().sourceProof, 'unchecked');
+    assert.equal(session.read().signature, undefined);
+    assert.ok(session.read().error);
+    session.dispose();
+  });
+}
+
+test('a delayed first-grant reconciliation cannot publish a wallet after its deadline', async (t) => {
+  const fixture = await createFixture();
+  const wallet = { address: fixture.bundle.request.recipient, chainId: '296' };
+  const reply = deferred();
+  let session;
+  session = createIssuanceSession(() => ({
+    connect: async () => {
+      session.walletChanged();
+      return wallet;
+    },
+  }));
+  session.setProvider({
+    async request({ method }) {
+      if (method === 'eth_accounts') return reply.promise;
+      if (method === 'eth_chainId') return '0x128';
+      throw new Error(`Unexpected wallet method: ${method}`);
+    },
+  });
+  session.loadDeployment(JSON.stringify(fixture.deployment));
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const connecting = session.connect();
+  await Promise.resolve();
+  t.mock.timers.tick(120_000);
+  await connecting;
+  assert.equal(session.read().pendingOperation, 'connecting');
+  assert.equal(session.read().wallet, undefined);
+  reply.resolve([wallet.address]);
+  await flushLateReply();
+  assert.equal(session.read().pendingOperation, undefined);
+  assert.equal(session.read().wallet, undefined);
+  assert.match(session.read().error, /delayed check finished/i);
+  session.dispose();
+});
+
 test('explicit Hedera testnet switch adds an unknown chain, switches again and rechecks account and chain', async () => {
   const fixture = await createFixture();
   const calls = [];

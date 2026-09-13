@@ -79,6 +79,10 @@
   let busy = $derived(
     !!snapshot.busy || (!!flow.pending && flow.pending !== 'configuration'),
   );
+  let connecting = $derived(
+    snapshot.busy === 'connecting' ||
+      snapshot.pendingOperation === 'connecting',
+  );
   let walletMatches = $derived(
     !!document &&
       snapshot.wallet?.address.toLowerCase() ===
@@ -453,10 +457,13 @@
           <button
             class="primary-button"
             disabled={busy || unresolved}
+            aria-busy={connecting}
             onclick={connectWallet}
-            ><Glyph name="wallet" size={16} />{walletNeedsTestnet
-              ? 'Switch to Hedera testnet'
-              : 'Connect recipient wallet'}</button
+            ><Glyph name="wallet" size={16} />{connecting
+              ? 'Connecting…'
+              : walletNeedsTestnet
+                ? 'Switch to Hedera testnet'
+                : 'Connect recipient wallet'}</button
           >
           {#if snapshot.wallet && !walletNeedsTestnet}<p class="field-hint">
               Select the recipient account shown above, then connect again.
@@ -572,13 +579,17 @@
                   : 'Checking the exact issuance request…'}
       </p>{/if}
     {#if snapshot.busy && !flow.pending}<p class="status-line" role="status">
-        {snapshot.busy === 'confirming'
-          ? 'Checking the transaction outcome…'
-          : snapshot.busy === 'submitting'
-            ? 'Confirm the mint in your wallet…'
-            : snapshot.busy === 'simulating'
-              ? 'Checking current mint conditions…'
-              : 'Checking the wallet and request…'}
+        {snapshot.busy === 'connecting'
+          ? 'Connecting to your wallet…'
+          : snapshot.busy === 'confirming'
+            ? 'Checking the transaction outcome…'
+            : snapshot.busy === 'submitting'
+              ? 'Confirm the mint in your wallet…'
+              : snapshot.busy === 'simulating'
+                ? 'Checking current mint conditions…'
+                : snapshot.busy === 'signing'
+                  ? 'Approve the request in your wallet…'
+                  : 'Checking the issuance request…'}
       </p>{/if}
     {#if uploadError || flow.error}<p class="inline-error" role="alert">
         {uploadError || flow.error}

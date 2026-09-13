@@ -67,6 +67,10 @@
   }
 
   let connected = $derived(!!snapshot.wallet);
+  let connecting = $derived(
+    snapshot.busy === 'connecting' ||
+      snapshot.pendingOperation === 'connecting',
+  );
   let walletNeedsTestnet = $derived(
     connected &&
       snapshot.deployment?.auditPolicy.chainId === '296' &&
@@ -364,13 +368,16 @@
       <button
         class="header-wallet"
         disabled={!!snapshot.busy || unresolved}
+        aria-busy={connecting}
         onclick={connectWallet}
         title={snapshot.wallet?.address}
-        ><Glyph name="wallet" size={15} />{walletNeedsTestnet
-          ? 'Switch to testnet'
-          : connected
-            ? `${snapshot.wallet?.address.slice(0, 6)}…${snapshot.wallet?.address.slice(-4)}`
-            : 'Connect wallet'}</button
+        ><Glyph name="wallet" size={15} />{connecting
+          ? 'Connecting…'
+          : walletNeedsTestnet
+            ? 'Switch to testnet'
+            : connected
+              ? `${snapshot.wallet?.address.slice(0, 6)}…${snapshot.wallet?.address.slice(-4)}`
+              : 'Connect wallet'}</button
       >
     {/snippet}
   </AppHeader>
@@ -640,11 +647,14 @@
               <button
                 class="primary-button wide-button"
                 disabled={busy || unresolved}
+                aria-busy={connecting}
                 onclick={connectWallet}
                 ><Glyph name="wallet" size={16} />
-                {walletNeedsTestnet
-                  ? 'Switch to Hedera testnet'
-                  : 'Connect wallet'}</button
+                {connecting
+                  ? 'Connecting…'
+                  : walletNeedsTestnet
+                    ? 'Switch to Hedera testnet'
+                    : 'Connect wallet'}</button
               >
               {#if !snapshot.providerAvailable}
                 <p class="field-hint">No browser wallet detected.</p>

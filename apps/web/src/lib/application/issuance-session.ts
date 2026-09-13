@@ -599,9 +599,10 @@ export function createIssuanceSession(
     connect() {
       return run('connecting', async (revision) => {
         const currentProvider = provider;
+        const deployment = state.deployment;
         if (!currentProvider) throw new IssuanceClientError('wrong_account');
         let wallet: ConnectedWallet;
-        if (state.deployment) {
+        if (deployment) {
           try {
             wallet = await requireClient().connect();
           } catch (error) {
@@ -609,8 +610,13 @@ export function createIssuanceSession(
               error instanceof IssuanceClientError &&
               error.code === 'wrong_chain'
             ) {
+              const observedRevision = walletRevision;
               const observed = await observedWallet(currentProvider, false);
-              if (provider === currentProvider && !state.pendingOperation)
+              if (
+                provider === currentProvider &&
+                state.deployment === deployment &&
+                unchanged(observedRevision)
+              )
                 update({ wallet: observed });
             }
             throw error;
@@ -618,8 +624,26 @@ export function createIssuanceSession(
         } else {
           wallet = await observedWallet(currentProvider, true);
         }
-        if (provider === currentProvider && unchanged(revision))
-          update({ wallet });
+        if (provider !== currentProvider || state.deployment !== deployment)
+          throw new IssuanceClientError('wrong_account');
+        let acceptedRevision = revision;
+        if (revision !== walletRevision) {
+          // Granting account access can emit accountsChanged. Reconcile that
+          // event against fresh observations instead of discarding the grant or
+          // trusting a stale result from before an actual account change.
+          acceptedRevision = walletRevision;
+          const observed = await observedWallet(currentProvider, false);
+          if (observed.address !== wallet.address)
+            throw new IssuanceClientError('wrong_account');
+          if (observed.chainId !== wallet.chainId)
+            throw new IssuanceClientError('wrong_chain');
+        }
+        if (
+          provider === currentProvider &&
+          state.deployment === deployment &&
+          unchanged(acceptedRevision)
+        )
+          update({ wallet, error: undefined });
       });
     },
     switchToTestnet() {
