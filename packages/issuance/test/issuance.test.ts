@@ -2017,6 +2017,156 @@ const preparedRequest = {
   rightsTermsHash: word('02'),
 };
 
+await test('prepared operations reuse their admitted snapshot for the wallet check', async (t) => {
+  for (const action of ['prepare', 'sign'] as const) {
+    await t.test(action, async (subtest) => {
+      const { state, client, holderSignature } = await rpcFixture(subtest);
+      state.reservationExists = false;
+      state.pending = 0n;
+      let codeReads = 0;
+      let beforeSignature = 0;
+      state.onRpcRequest = (method) => {
+        if (method === 'eth_getCode') codeReads++;
+      };
+      state.onWalletRequest = (method) => {
+        if (method === 'eth_signTypedData_v4') beforeSignature = codeReads;
+      };
+      if (action === 'prepare') {
+        await client.prepareRequest(preparedRequest);
+        // HTS authority reads Gate/verifier twice, then the registered adapter.
+        // The account check must not repeat deployment admission a third time.
+        assert.equal(codeReads, 5);
+        assert.equal(state.signs, 0);
+      } else {
+        assert.equal(
+          await client.signRequest(preparedRequest),
+          holderSignature,
+        );
+        assert.equal(beforeSignature, 5);
+        assert.equal(
+          codeReads,
+          10,
+          'Authority is admitted again after signing',
+        );
+        assert.equal(state.signs, 1);
+      }
+      assert.equal(state.proofReads, 0);
+      assert.equal(state.sends, 0);
+    });
+  }
+});
+
+await test('prepared signing reports request, wallet and returned-signature checks at their actual boundaries', async (t) => {
+  const { state, client, holderSignature } = await rpcFixture(t);
+  state.reservationExists = false;
+  state.pending = 0n;
+  const events: string[] = [];
+  state.onWalletRequest = (method) => {
+    if (method === 'eth_signTypedData_v4') events.push('wallet_requested');
+  };
+  state.onSign = () => {
+    events.push('wallet_returned');
+  };
+  const signature = await client.signRequest(preparedRequest, (stage) => {
+    events.push(stage);
+    if (stage === 'checking_signature')
+      throw new Error('A broken progress observer cannot alter verification');
+  });
+  assert.equal(signature, holderSignature);
+  assert.deepEqual(events, [
+    'checking_request',
+    'awaiting_signature',
+    'wallet_requested',
+    'wallet_returned',
+    'checking_signature',
+  ]);
+  assert.equal(state.signs, 1);
+  assert.equal(state.sends, 0);
+});
+
+await test('prepared wallet checks reject account, chain and canonical changes before any signature', async (t) => {
+  for (const change of ['account', 'chain', 'canonical'] as const) {
+    await t.test(change, async (subtest) => {
+      const { state, client } = await rpcFixture(subtest);
+      state.reservationExists = false;
+      state.pending = 0n;
+      state.onWalletRequest = (method) => {
+        if (method === 'eth_accounts') {
+          if (change === 'account') state.account = issuer.address;
+          if (change === 'chain') state.walletChain = '0x1';
+          if (change === 'canonical') state.canonicalHash = word('21');
+        }
+      };
+      const progress: string[] = [];
+      await assert.rejects(
+        client.signRequest(preparedRequest, (stage) => progress.push(stage)),
+        hasCode(
+          change === 'account'
+            ? 'wrong_account'
+            : change === 'chain'
+              ? 'wrong_chain'
+              : 'issuance_preflight_unavailable',
+        ),
+      );
+      assert.deepEqual(progress, ['checking_request']);
+      assert.equal(state.signs, 0);
+      assert.equal(state.sends, 0);
+    });
+  }
+});
+
+await test('prepared signing freshly rejects authority, replay and expiry changes after wallet approval', async (t) => {
+  for (const change of [
+    'source',
+    'program',
+    'issuer',
+    'used',
+    'cap',
+    'reservation',
+    'expiry',
+    'chain',
+  ] as const) {
+    await t.test(change, async (subtest) => {
+      const { state, client } = await rpcFixture(subtest);
+      state.reservationExists = false;
+      state.pending = 0n;
+      state.onSign = () => {
+        if (change === 'source') state.sourceRevoked = true;
+        if (change === 'program') state.programRevoked = true;
+        if (change === 'issuer') state.issuerRevoked = true;
+        if (change === 'used') state.used = true;
+        if (change === 'cap') state.cap = 0n;
+        if (change === 'reservation') state.reservationExists = true;
+        if (change === 'expiry')
+          state.timestamp = `0x${BigInt(request.validUntil).toString(16)}`;
+        if (change === 'chain') state.walletChain = '0x1';
+      };
+      const progress: string[] = [];
+      const expected = {
+        source: 'deployment_mismatch',
+        program: 'deployment_mismatch',
+        issuer: 'deployment_mismatch',
+        used: 'already_used',
+        cap: 'capacity_exceeded',
+        reservation: 'reservation_mismatch',
+        expiry: 'expired',
+        chain: 'wrong_chain',
+      } as const;
+      await assert.rejects(
+        client.signRequest(preparedRequest, (stage) => progress.push(stage)),
+        hasCode(expected[change]),
+      );
+      assert.deepEqual(progress, [
+        'checking_request',
+        'awaiting_signature',
+        'checking_signature',
+      ]);
+      assert.equal(state.signs, 1);
+      assert.equal(state.sends, 0);
+    });
+  }
+});
+
 await test('prepared request authenticates authority and exact holder intent without inventing a proof or transaction', async (t) => {
   const { state, client, holderSignature } = await rpcFixture(t);
   state.reservationExists = false;

@@ -523,15 +523,25 @@ async function each<T>(
   work: (value: T) => Promise<void>,
 ): Promise<void> {
   let next = 0;
+  let failed = false;
+  let failure: unknown;
   await Promise.all(
     Array.from({ length: Math.min(6, values.length) }, async () => {
-      for (;;) {
+      while (!failed) {
         const index = next++;
         if (index >= values.length) return;
-        await work(values[index]);
+        try {
+          await work(values[index]);
+        } catch (error) {
+          if (!failed) failure = error;
+          failed = true;
+        }
       }
     }),
   );
+  // A rejected check stops the queue and drains already-started reads before
+  // returning, so a retry cannot overlap an abandoned verification workload.
+  if (failed) throw failure;
 }
 
 /** Verify current admitted topology at one block. Does not certify canonical
@@ -607,25 +617,32 @@ export async function verifyAtsBackend(
           observedAddress(embedded) === b.libraries[link.library].address,
       );
     }
-    const proxyWords = await Promise.all(
-      [0, 1, 2].map((offset) =>
-        storage(
-          token,
-          toHex(BigInt(PROXY_SLOT) + BigInt(offset), { size: 32 }),
+    // Every queued check performs one RPC read. Flatten independent reads into
+    // one six-call queue; nested per-facet or per-role pools multiply traffic.
+    const checks: Array<() => Promise<void>> = [];
+    for (const [offset, expected] of [
+      BigInt(b.resolver.address),
+      BigInt(b.configuration.id),
+      1n,
+    ].entries())
+      checks.push(async () =>
+        matches(
+          BigInt(
+            await storage(
+              token,
+              toHex(BigInt(PROXY_SLOT) + BigInt(offset), { size: 32 }),
+            ),
+          ) === expected,
         ),
-      ),
-    );
-    matches(
-      BigInt(proxyWords[0]) === BigInt(b.resolver.address) &&
-        proxyWords[1] === b.configuration.id &&
-        BigInt(proxyWords[2]) === 1n,
-    );
-    await each(ZERO_TOKEN_SLOTS, async (slot) =>
-      matches((await storage(token, slot)) === zeroHash),
-    );
-    await each([...OVERRIDE_SLOTS, ZERO_TOKEN_SLOTS[17]], async (slot) =>
-      matches((await storage(b.resolver.address, slot)) === zeroHash),
-    );
+      );
+    for (const slot of ZERO_TOKEN_SLOTS)
+      checks.push(async () =>
+        matches((await storage(token, slot)) === zeroHash),
+      );
+    for (const slot of [...OVERRIDE_SLOTS, ZERO_TOKEN_SLOTS[17]])
+      checks.push(async () =>
+        matches((await storage(b.resolver.address, slot)) === zeroHash),
+      );
 
     const scalarChecks: Array<[Address, string, readonly unknown[], unknown]> =
       [
@@ -679,34 +696,44 @@ export async function verifyAtsBackend(
         [token, 'getRoleCountFor', [b.adapter.address], 1n],
         [b.resolver.address, 'getRoleCountFor', [b.initializer.address], 1n],
       ];
-    await each(scalarChecks, async ([target, name, args, expected]) => {
-      const actual = await read(target, name, args);
-      matches(
-        typeof expected === 'string' && isAddress(expected)
-          ? observedAddress(actual) === getAddress(expected)
-          : actual === expected,
-      );
-    });
-    const supply = await read(token, 'totalSupply');
-    matches(
-      typeof supply === 'bigint' &&
-        supply >= 0n &&
-        supply <= BigInt(b.maxSupply),
-    );
-    const metadata = observedRecord(await read(token, 'getERC20Metadata'));
-    const info = observedRecord(metadata.info);
-    matches(
-      metadata.securityType === 5 && info.decimals === 3 && info.isin === '',
-    );
-    matches(
-      sameSet(
-        await read(b.resolver.address, 'getSelectorsBlacklist', [
-          b.configuration.id,
-          0n,
-          1n,
-        ]),
-        [],
-      ),
+    for (const [target, name, args, expected] of scalarChecks)
+      checks.push(async () => {
+        const actual = await read(target, name, args);
+        matches(
+          typeof expected === 'string' && isAddress(expected)
+            ? observedAddress(actual) === getAddress(expected)
+            : actual === expected,
+        );
+      });
+    checks.push(
+      async () => {
+        const supply = await read(token, 'totalSupply');
+        matches(
+          typeof supply === 'bigint' &&
+            supply >= 0n &&
+            supply <= BigInt(b.maxSupply),
+        );
+      },
+      async () => {
+        const metadata = observedRecord(await read(token, 'getERC20Metadata'));
+        const info = observedRecord(metadata.info);
+        matches(
+          metadata.securityType === 5 &&
+            info.decimals === 3 &&
+            info.isin === '',
+        );
+      },
+      async () =>
+        matches(
+          sameSet(
+            await read(b.resolver.address, 'getSelectorsBlacklist', [
+              b.configuration.id,
+              0n,
+              1n,
+            ]),
+            [],
+          ),
+        ),
     );
 
     const expectedPins = [
@@ -714,61 +741,77 @@ export async function verifyAtsBackend(
       ...Object.values(b.libraries),
       b.resolver,
     ];
-    const enrolled = await read(b.adapter.address, 'getRuntimePins');
-    matches(Array.isArray(enrolled) && enrolled.length === expectedPins.length);
-    enrolled.forEach((entry, index) => {
-      const pin = observedRecord(entry);
+    checks.push(async () => {
+      const enrolled = await read(b.adapter.address, 'getRuntimePins');
       matches(
-        observedAddress(pin.target) === expectedPins[index].address &&
-          pin.codeHash === expectedPins[index].codeHash,
+        Array.isArray(enrolled) && enrolled.length === expectedPins.length,
       );
+      enrolled.forEach((entry, index) => {
+        const pin = observedRecord(entry);
+        matches(
+          observedAddress(pin.target) === expectedPins[index].address &&
+            pin.codeHash === expectedPins[index].codeHash,
+        );
+      });
     });
-    const members = async (target: Address, role: Hex, expected: Address[]) => {
-      matches(
-        (await read(target, 'getRoleMemberCount', [role])) ===
-          BigInt(expected.length),
-      );
-      const accounts = await read(target, 'getRoleMembers', [
-        role,
-        0n,
-        BigInt(expected.length + 1),
-      ]);
-      matches(
-        Array.isArray(accounts) &&
-          sameSet(accounts.map(observedAddress), expected),
+    const members = (target: Address, role: Hex, expected: Address[]) => {
+      checks.push(
+        async () =>
+          matches(
+            (await read(target, 'getRoleMemberCount', [role])) ===
+              BigInt(expected.length),
+          ),
+        async () => {
+          // The bounded page derives from the admitted expectation, not the
+          // observed count, so these two reads have no ordering dependency.
+          const accounts = await read(target, 'getRoleMembers', [
+            role,
+            0n,
+            BigInt(expected.length + 1),
+          ]);
+          matches(
+            Array.isArray(accounts) &&
+              sameSet(accounts.map(observedAddress), expected),
+          );
+        },
       );
     };
-    await members(token, zeroHash, [b.initializer.address]);
-    await members(token, ISSUER_ROLE, [b.adapter.address]);
-    await members(b.resolver.address, zeroHash, [b.initializer.address]);
-    await each(ABSENT_ROLES, async (role) => {
-      await members(token, role, []);
-      await members(b.resolver.address, role, []);
-    });
-    await members(b.resolver.address, ISSUER_ROLE, []);
+    members(token, zeroHash, [b.initializer.address]);
+    members(token, ISSUER_ROLE, [b.adapter.address]);
+    members(b.resolver.address, zeroHash, [b.initializer.address]);
+    for (const role of ABSENT_ROLES) {
+      members(token, role, []);
+      members(b.resolver.address, role, []);
+    }
+    members(b.resolver.address, ISSUER_ROLE, []);
     // RoleData.roleAdmin is the first word of the role-keyed mapping value.
     // This checks a known scalar value, not emptiness of an arbitrary mapping.
-    await each([zeroHash, ISSUER_ROLE, ...ABSENT_ROLES], async (role) => {
+    for (const role of [zeroHash, ISSUER_ROLE, ...ABSENT_ROLES]) {
       const slot = keccak256(
         encodeAbiParameters(
           [{ type: 'bytes32' }, { type: 'bytes32' }],
           [role, ACCESS_CONTROL_SLOT],
         ),
       );
-      matches((await storage(token, slot)) === zeroHash);
-      matches((await storage(b.resolver.address, slot)) === zeroHash);
-    });
+      for (const target of [token, b.resolver.address])
+        checks.push(async () =>
+          matches((await storage(target, slot)) === zeroHash),
+        );
+    }
 
-    const facets = await read(
-      b.resolver.address,
-      'getFacetsByConfigurationIdAndVersion',
-      [b.configuration.id, 1n, 0n, 11n],
-    );
-    const versions = await read(
-      b.resolver.address,
-      'getFacetConfigurationsByConfigurationIdAndVersion',
-      [b.configuration.id, 1n, 0n, 11n],
-    );
+    const [facets, versions] = await Promise.all([
+      read(b.resolver.address, 'getFacetsByConfigurationIdAndVersion', [
+        b.configuration.id,
+        1n,
+        0n,
+        11n,
+      ]),
+      read(
+        b.resolver.address,
+        'getFacetConfigurationsByConfigurationIdAndVersion',
+        [b.configuration.id, 1n, 0n, 11n],
+      ),
+    ]);
     matches(
       Array.isArray(facets) &&
         facets.length === 10 &&
@@ -777,7 +820,7 @@ export async function verifyAtsBackend(
     );
     const expectedNames = Object.keys(ATS_FACET_PROFILE) as AtsFacetName[];
     const seen = new Set<string>();
-    await each(expectedNames, async (name) => {
+    for (const name of expectedNames) {
       const expected = ATS_FACET_PROFILE[name];
       const entry = facets
         .map(observedRecord)
@@ -792,33 +835,43 @@ export async function verifyAtsBackend(
           sameSet(entry.selectors, expected.selectors) &&
           version.version === 1n,
       );
-      matches(
-        (await read(b.facets[name].address, 'getStaticResolverKey')) ===
-          expected.key,
-      );
-      matches(
-        sameSet(
-          await read(b.facets[name].address, 'getStaticFunctionSelectors'),
-          expected.selectors,
-        ),
-      );
-      matches(
-        (await read(token, 'getFacetLastVersion', [expected.key])) === 1n,
-      );
-      matches(
-        (await read(token, 'getFacetVersionStatus', [expected.key, 1n])) === 1n,
+      checks.push(
+        async () =>
+          matches(
+            (await read(b.facets[name].address, 'getStaticResolverKey')) ===
+              expected.key,
+          ),
+        async () =>
+          matches(
+            sameSet(
+              await read(b.facets[name].address, 'getStaticFunctionSelectors'),
+              expected.selectors,
+            ),
+          ),
+        async () =>
+          matches(
+            (await read(token, 'getFacetLastVersion', [expected.key])) === 1n,
+          ),
+        async () =>
+          matches(
+            (await read(token, 'getFacetVersionStatus', [expected.key, 1n])) ===
+              1n,
+          ),
       );
       for (const selector of expected.selectors)
-        matches(
-          observedAddress(
-            await read(b.resolver.address, 'resolveResolverProxyCall', [
-              b.configuration.id,
-              1n,
-              selector,
-            ]),
-          ) === b.facets[name].address,
+        checks.push(async () =>
+          matches(
+            observedAddress(
+              await read(b.resolver.address, 'resolveResolverProxyCall', [
+                b.configuration.id,
+                1n,
+                selector,
+              ]),
+            ) === b.facets[name].address,
+          ),
         );
-    });
+    }
+    await each(checks, (check) => check());
 
     // A matching current proxy hash cannot establish a clean creation history.
     // Bind an independently reviewed direct initializer-creation transaction, and

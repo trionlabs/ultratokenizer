@@ -116,6 +116,24 @@ export function createIssuanceClient(input: {
       throw new IssuanceClientError('invalid_signature');
     return signature;
   }
+  async function preparedWallet(prepared: PreparedIssuanceRequest) {
+    const snapshot = await verifyPrepared(prepared);
+    // Authority was admitted at this snapshot. Read the wallet directly and
+    // recheck that block, without repeating the complete ATS graph admission.
+    const [addresses, walletChain] = await Promise.all([
+      wallet.getAddresses(),
+      wallet.getChainId(),
+    ]);
+    const account = addresses[0];
+    if (
+      !account ||
+      getAddress(account) !== getAddress(prepared.request.recipient)
+    )
+      throw new IssuanceClientError('wrong_account');
+    if (walletChain !== chainId) throw new IssuanceClientError('wrong_chain');
+    await assertCanonical(snapshot.block);
+    return { gatePaused: snapshot.gatePaused, account };
+  }
   async function simulation(value: unknown, holderSignature: Hex) {
     const bundle = await validateBundle(value);
     const account = await activeAccount(bundle.request.recipient);
@@ -161,25 +179,39 @@ export function createIssuanceClient(input: {
     > {
       return preflight(async () => {
         const prepared = parsePreparedIssuanceRequest(value);
-        const { gatePaused } = await verifyPrepared(prepared);
-        await activeAccount(prepared.request.recipient);
+        const { gatePaused } = await preparedWallet(prepared);
         return Object.freeze({ prepared, gatePaused });
       });
     },
-    signRequest(value: unknown): Promise<Hex> {
+    signRequest(
+      value: unknown,
+      onProgress?: (
+        stage: 'checking_request' | 'awaiting_signature' | 'checking_signature',
+      ) => void,
+    ): Promise<Hex> {
+      const progress = (
+        stage: 'checking_request' | 'awaiting_signature' | 'checking_signature',
+      ) => {
+        try {
+          onProgress?.(stage);
+        } catch {
+          // A presentation observer cannot replace wallet or authority results.
+        }
+      };
       return preflight(async () => {
         const prepared = parsePreparedIssuanceRequest(value);
-        await verifyPrepared(prepared);
-        const account = await activeAccount(prepared.request.recipient);
+        progress('checking_request');
+        const { account } = await preparedWallet(prepared);
+        progress('awaiting_signature');
         const signature = await walletPrompt(() =>
           wallet.signTypedData({
             account,
             ...getIssuanceRequestTypedData(prepared.request),
           }),
         );
+        progress('checking_signature');
         const checked = await checkedSignature(prepared.request, signature);
-        await verifyPrepared(prepared);
-        await activeAccount(prepared.request.recipient);
+        await preparedWallet(prepared);
         return checked;
       });
     },

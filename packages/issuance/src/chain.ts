@@ -89,7 +89,11 @@ export function createChainContext(input: {
   });
   const reader = createPublicClient({
     chain,
-    transport: http(deployment.rpcUrl, { timeout: 10_000, retryCount: 0 }),
+    transport: http(deployment.rpcUrl, {
+      timeout: 10_000,
+      retryCount: 0,
+      ...(ats ? { batch: { batchSize: 6, wait: 0 } } : {}),
+    }),
   });
   function makeWallet(onDispatch?: () => void) {
     return createWalletClient({

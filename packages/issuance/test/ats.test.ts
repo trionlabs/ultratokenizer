@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { createServer } from 'node:net';
 import { resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import {
   concatHex,
   createPublicClient,
@@ -34,6 +34,7 @@ import {
 } from '../../domain/src/index.js';
 import { POLICY_FORMAT } from '../../audit/src/index.js';
 import { createIssuanceClient } from '../src/client.js';
+import { createChainContext } from '../src/chain.js';
 import { ERC20_TOKEN_ABI, ISSUANCE_GATE_ABI, toIssueArgs } from '../src/abi.js';
 import {
   BUNDLE_FORMAT,
@@ -236,7 +237,11 @@ type CallEdit = (
  * Their bytecode is not executable ATS. Real EVM coverage is the optional test below.
  */
 function transportFixture(
-  options: { rpcEdit?: RpcEdit; callEdit?: CallEdit } = {},
+  options: {
+    rpcEdit?: RpcEdit;
+    callEdit?: CallEdit;
+    beforeRead?: () => Promise<void>;
+  } = {},
 ) {
   const b = createAtsBackendFixture();
   const codes = new Map<Address, Hex>();
@@ -384,6 +389,7 @@ function transportFixture(
         async request({ method, params = [] }) {
           const values: readonly unknown[] = params;
           reads.push({ method, params: values });
+          if (options.beforeRead) await options.beforeRead();
           let result: unknown;
           switch (method) {
             case 'eth_getBlockByNumber': {
@@ -487,6 +493,189 @@ function transportFixture(
   return { backend: parseAtsBackend(b), client, reads };
 }
 
+type HttpRequest = {
+  jsonrpc: string;
+  id: number;
+  method: string;
+  params?: readonly unknown[];
+};
+type HttpReply = { jsonrpc: '2.0'; id: number; result: unknown };
+
+/** Real viem HTTP transport, with a closed in-process JSON-RPC server fixture. */
+function httpFixture(
+  t: TestContext,
+  options: {
+    hts?: boolean;
+    replies?: (replies: HttpReply[]) => unknown;
+  } = {},
+) {
+  const fixture = transportFixture();
+  const batches: HttpRequest[][] = [];
+  const batchShapes: boolean[] = [];
+  let walletCalls = 0;
+  t.mock.method(
+    globalThis,
+    'fetch',
+    async (_input: unknown, init?: RequestInit) => {
+      assert.equal(typeof init?.body, 'string');
+      const body = JSON.parse(init!.body as string);
+      const batch: HttpRequest[] = Array.isArray(body) ? body : [body];
+      assert.ok(batch.length >= 1 && batch.length <= 6);
+      assert.equal(new Set(batch.map((item) => item.id)).size, batch.length);
+      batches.push(batch);
+      batchShapes.push(Array.isArray(body));
+      const replies = await Promise.all(
+        batch.map(async (item): Promise<HttpReply> => {
+          assert.equal(item.jsonrpc, '2.0');
+          assert.equal(typeof item.id, 'number');
+          assert.ok(
+            [
+              'eth_getBlockByNumber',
+              'eth_getCode',
+              'eth_getStorageAt',
+              'eth_call',
+              'eth_getTransactionByHash',
+              'eth_getTransactionReceipt',
+            ].includes(item.method),
+            `Unexpected HTTP RPC: ${item.method}`,
+          );
+          const result = await fixture.client.transport.request({
+            method: item.method,
+            params: item.params,
+          });
+          return { jsonrpc: '2.0', id: item.id, result };
+        }),
+      );
+      const response = options.replies
+        ? options.replies(replies)
+        : [...replies].reverse();
+      return new Response(
+        JSON.stringify(Array.isArray(body) ? response : replies[0]),
+        {
+          headers: { 'content-type': 'application/json' },
+        },
+      );
+    },
+  );
+  const { reader } = createChainContext({
+    provider: {
+      async request() {
+        walletCalls++;
+        throw new Error('ATS read verification cannot use the wallet');
+      },
+      on() {},
+      removeListener() {},
+    },
+    deployment: {
+      format: DEPLOYMENT_V2_FORMAT,
+      purpose: 'test',
+      rpcUrl: 'https://ats-rpc.invalid',
+      gateCodeHash: keccak256('0x6001'),
+      confirmations: 1,
+      backend: options.hts ? { kind: 'hts' } : fixture.backend,
+      auditPolicy: {
+        format: POLICY_FORMAT,
+        chainId: '296',
+        gate,
+        token,
+        issuerId: word(700),
+        issuerAddress: addr(900),
+        issuerKeyVersion: '1',
+        policyVersion: '1',
+        rightsVersion: '1',
+        programVKey: word(701),
+        profileVersion: '2',
+        sourceId: word(702),
+        sourceSignerFingerprint: word(703),
+        proofSystem: 'sp1-groth16',
+        outerVersion: 'v6.1.0',
+        verifierAddress: addr(502),
+        verifierCodeHash: keccak256('0x6002'),
+      },
+    },
+  });
+  return {
+    ...fixture,
+    reader,
+    batches,
+    batchShapes,
+    walletCalls: () => walletCalls,
+  };
+}
+
+await test('ATS HTTP batches at most six reads and accepts out-of-order replies by ID', async (t) => {
+  const fixture = httpFixture(t);
+  await verifyAtsBackend(fixture.reader, fixture.backend, context);
+  assert.ok(fixture.batchShapes.every(Boolean));
+  assert.ok(fixture.batches.some((batch) => batch.length === 6));
+  assert.ok(fixture.batches.length < fixture.reads.length / 3);
+  assert.equal(fixture.walletCalls(), 0);
+  for (const read of fixture.reads.filter((read) => read.method === 'eth_call'))
+    assert.equal(read.params[1], toHex(snapshotNumber));
+  t.diagnostic(
+    `${fixture.reads.length} RPC reads in ${fixture.batches.length} HTTP batches`,
+  );
+});
+
+await test('HTS HTTP transport remains unbatched', async (t) => {
+  const fixture = httpFixture(t, { hts: true });
+  await Promise.all([
+    fixture.reader.getCode({ address: token, blockNumber: snapshotNumber }),
+    fixture.reader.getCode({ address: gate, blockNumber: snapshotNumber }),
+  ]);
+  assert.equal(fixture.batches.length, 2);
+  assert.ok(fixture.batchShapes.every((batch) => !batch));
+  assert.equal(fixture.walletCalls(), 0);
+});
+
+await test('ATS batch errors, missing items and malformed values fail closed without retrying', async (t) => {
+  for (const failure of ['error', 'missing', 'malformed'] as const) {
+    await t.test(failure, async (subtest) => {
+      let failedId: number | undefined;
+      const fixture = httpFixture(subtest, {
+        replies(replies) {
+          if (failedId !== undefined || replies.length < 2) return replies;
+          failedId = replies[0].id;
+          if (failure === 'missing') return replies.slice(1);
+          return replies.map((reply, index) =>
+            index === 0
+              ? failure === 'error'
+                ? {
+                    jsonrpc: '2.0',
+                    id: reply.id,
+                    error: {
+                      code: -32603,
+                      message: 'Fixture read unavailable',
+                    },
+                  }
+                : { ...reply, result: { invalid: true } }
+              : reply,
+          );
+        },
+      });
+      await assert.rejects(
+        verifyAtsBackend(fixture.reader, fixture.backend, context),
+        AtsBackendError,
+      );
+      // The bounded readers already in flight finish before this mock is restored.
+      await setTimeout(20);
+      assert.notEqual(failedId, undefined);
+      const requests = fixture.batches.flat();
+      const failedRequest = requests.find((item) => item.id === failedId)!;
+      assert.equal(
+        requests.filter(
+          (item) =>
+            item.method === failedRequest.method &&
+            JSON.stringify(item.params) ===
+              JSON.stringify(failedRequest.params),
+        ).length,
+        1,
+      );
+      assert.equal(fixture.walletCalls(), 0);
+    });
+  }
+});
+
 await test('ATS checker uses viem ABI decoding and one fixed current state block', async () => {
   const { backend, client, reads } = transportFixture();
   await verifyAtsBackend(client, backend, context);
@@ -495,6 +684,67 @@ await test('ATS checker uses viem ABI decoding and one fixed current state block
     assert.equal(read.params[1], toHex(snapshotNumber));
   for (const read of reads.filter((read) => read.method === 'eth_getStorageAt'))
     assert.equal(read.params[2], toHex(snapshotNumber));
+});
+
+await test('ATS admission bounds RPC concurrency and avoids serial read waterfalls', async (t) => {
+  let active = 0;
+  let peak = 0;
+  let rounds = 0;
+  const pending: Array<() => void> = [];
+  const { backend, client, reads } = transportFixture({
+    beforeRead() {
+      active++;
+      peak = Math.max(peak, active);
+      if (pending.length === 0)
+        setImmediate(() => {
+          rounds++;
+          for (const release of pending.splice(0)) release();
+        });
+      return new Promise<void>((resolve) =>
+        pending.push(() => {
+          active--;
+          resolve();
+        }),
+      );
+    },
+  });
+  await verifyAtsBackend(client, backend, context);
+  t.diagnostic(
+    `${reads.length} RPC reads; ${rounds} logical rounds; peak ${peak}`,
+  );
+  assert.equal(active, 0);
+  assert.ok(peak <= 6, `At most six RPC reads may overlap, observed ${peak}`);
+  assert.ok(
+    rounds <= Math.ceil(reads.length / 6) + 8,
+    `Independent checks must share bounded waves, observed ${rounds} rounds`,
+  );
+});
+
+await test('ATS admission stops queued checks and drains active RPC reads after rejection', async () => {
+  let active = 0;
+  const { backend, client, reads } = transportFixture({
+    async beforeRead() {
+      active++;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      active--;
+    },
+    callEdit(_target, name, _args, result) {
+      return name === 'gate' ? addr(999) : result;
+    },
+  });
+  await assert.rejects(
+    verifyAtsBackend(client, backend, context),
+    errorCode('mismatch'),
+  );
+  assert.equal(active, 0, 'Rejection must wait for in-flight reads to settle');
+  const stoppedAt = reads.length;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(reads.length, stoppedAt, 'No abandoned queue may keep reading');
+  assert.equal(
+    reads.some((read) => read.method === 'eth_getTransactionReceipt'),
+    false,
+    'A failed admission must not advance to creation-history verification',
+  );
 });
 
 await test('ATS checker rejects token/Gate aliasing an enrolled authority before RPC', async () => {
