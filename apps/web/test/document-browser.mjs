@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { chromium, expect } from '@playwright/test';
 import { loadModule } from './helpers.mjs';
 import { exerciseIssuanceRecovery } from './fixtures/issuance-browser.mjs';
+import { exerciseWalletDiscovery } from './fixtures/wallet-discovery-browser.mjs';
 
 // All document, proof, RPC and wallet responses are explicit isolated test fixtures.
 // This exercises the production UI/client; it never signs with a real wallet or broadcasts.
@@ -19,6 +20,7 @@ const screenshots = new URL('../../../.scratch/web-qa/', import.meta.url);
 await mkdir(screenshots, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
+  await exerciseWalletDiscovery(browser, base);
   await exerciseIssuanceRecovery({
     browser,
     base,

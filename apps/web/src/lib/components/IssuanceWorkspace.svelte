@@ -1,9 +1,12 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import type { EIP1193Provider } from 'viem';
   import { afterNavigate, goto } from '$app/navigation';
   import { page } from '$app/state';
   import { createIssuanceSession } from '../application/issuance-session';
+  import {
+    watchWallets,
+    type WalletChoice,
+  } from '../application/wallet-discovery';
   import { fetchHostedDeployment } from '../application/hosted-deployment';
   import {
     formatGrams,
@@ -40,6 +43,11 @@
   let transferError = $state('');
   let recoveryHash = $state('');
   let walletHelp = $state(false);
+  let wallets = $state<readonly WalletChoice[]>([]);
+  let selectedWallet = $state<WalletChoice>();
+  let walletSelector = $state<HTMLSelectElement>();
+  let providerPinned = false;
+  let detachProvider = () => {};
   let workspaceView = $derived<'issue' | 'transfer'>(
     page.url.hash === '#transfer' ? 'transfer' : 'issue',
   );
@@ -58,12 +66,56 @@
   }
 
   function connectWallet() {
+    if (wallets.length > 1 && !selectedWallet) {
+      walletSelector?.focus();
+      return;
+    }
     if (!snapshot.providerAvailable) {
       walletHelp = true;
       return;
     }
     walletHelp = false;
+    providerPinned = true;
     void (walletNeedsTestnet ? session.switchToTestnet() : session.connect());
+  }
+
+  function useWallet(choice: WalletChoice | undefined) {
+    if (selectedWallet?.provider === choice?.provider) {
+      selectedWallet = choice;
+      return;
+    }
+    detachProvider();
+    selectedWallet = choice;
+    session.setProvider(choice?.provider);
+    clearEns();
+    const changed = () => {
+      session.walletChanged();
+      clearEns();
+    };
+    const provider = choice?.provider;
+    for (const event of [
+      'accountsChanged',
+      'chainChanged',
+      'disconnect',
+    ] as const)
+      provider?.on?.(event, changed);
+    detachProvider = () => {
+      for (const event of [
+        'accountsChanged',
+        'chainChanged',
+        'disconnect',
+      ] as const)
+        provider?.removeListener?.(event, changed);
+    };
+  }
+
+  function selectWallet(id: string) {
+    if (snapshot.busy || snapshot.pendingOperation || unresolved) return;
+    const choice = wallets.find((wallet) => wallet.id === id);
+    if (!choice) return;
+    providerPinned = true;
+    useWallet(choice);
+    walletHelp = false;
   }
 
   let connected = $derived(!!snapshot.wallet);
@@ -224,30 +276,27 @@
     const unsubscribe = session.subscribe((value) => {
       snapshot = value;
     });
-    const candidate = (window as Window & { ethereum?: EIP1193Provider })
-      .ethereum;
-    const provider =
-      candidate && typeof candidate.request === 'function'
-        ? candidate
-        : undefined;
     const navigation = document.querySelector<HTMLElement>(
       'nav[aria-label="Workspace"]',
     );
     navigation?.addEventListener('click', selectWorkspace);
-    session.setProvider(provider);
+    const stopDiscovery = watchWallets(window, (choices) => {
+      if (providerPinned && selectedWallet) {
+        const same = choices.find(
+          (choice) => choice.provider === selectedWallet?.provider,
+        );
+        wallets = same ? choices : [...choices, selectedWallet];
+        if (same) selectedWallet = same;
+      } else {
+        wallets = choices;
+        useWallet(choices.length === 1 ? choices[0] : undefined);
+      }
+    });
     void loadNetwork();
-    const changed = () => {
-      session.walletChanged();
-      clearEns();
-    };
-    provider?.on?.('accountsChanged', changed);
-    provider?.on?.('chainChanged', changed);
-    provider?.on?.('disconnect', changed);
     return () => {
       networkLoad?.abort();
-      provider?.removeListener?.('accountsChanged', changed);
-      provider?.removeListener?.('chainChanged', changed);
-      provider?.removeListener?.('disconnect', changed);
+      stopDiscovery();
+      detachProvider();
       navigation?.removeEventListener('click', selectWorkspace);
       unsubscribe();
       session.dispose();
@@ -362,9 +411,30 @@
 <div
   class="live-shell"
   class:document-workspace={!operatorMode && workspaceView === 'issue'}
+  class:multiple-wallets={wallets.length > 1}
 >
   <AppHeader current={workspaceView}>
     {#snippet actions()}
+      {#if wallets.length > 1}
+        <select
+          class="wallet-selector"
+          aria-label="Wallet extension"
+          title="Wallet names are supplied by extensions, not verified by this app."
+          bind:this={walletSelector}
+          value={selectedWallet?.id ?? ''}
+          disabled={!!snapshot.busy ||
+            !!snapshot.pendingOperation ||
+            unresolved}
+          onchange={(event) => selectWallet(event.currentTarget.value)}
+        >
+          <option value="" disabled>Select wallet</option>
+          {#each wallets as wallet (wallet.id)}
+            <option value={wallet.id}
+              >{wallet.name}{wallet.rdns ? ` · ${wallet.rdns}` : ''}</option
+            >
+          {/each}
+        </select>
+      {/if}
       <button
         class="header-wallet"
         disabled={!!snapshot.busy || unresolved}
@@ -1158,6 +1228,24 @@
 </div>
 
 <style>
+  .multiple-wallets :global(.header-actions) {
+    flex-basis: auto;
+    flex-wrap: wrap;
+    max-width: 100%;
+    gap: 8px;
+  }
+  .wallet-selector {
+    max-width: min(210px, 100%);
+    min-width: 0;
+    min-height: 36px;
+    border: 1px solid var(--p-line);
+    border-radius: 8px;
+    padding: 6px 8px;
+    background: var(--p-paper);
+    color: var(--p-ink);
+    font: inherit;
+    font-size: 12px;
+  }
   .live-footer {
     flex-wrap: wrap;
     padding-block: 16px;
