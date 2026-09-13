@@ -201,7 +201,9 @@ try {
       });
       await expect(
         page.getByRole('heading', {
-          name: route ? 'Verify a receipt' : 'Proof first. Tokens next.',
+          name: route
+            ? 'Verify a receipt'
+            : 'Ownership Docs. Verifiably tokenized.',
         }),
       ).toBeVisible();
     }
@@ -307,14 +309,37 @@ try {
   });
   for (const javaScriptEnabled of [true, false]) {
     await check(
-      `without HTTP headers a framed page exposes no controls (JavaScript ${javaScriptEnabled})`,
+      `without HTTP headers a framed page exposes no usable controls (JavaScript ${javaScriptEnabled})`,
       async () => {
         const { page } = await pageFor(unprotectedBase, javaScriptEnabled);
         await page.goto(new URL('embed', unprotectedBase).href, {
           waitUntil: 'networkidle',
         });
         const frame = page.frameLocator('iframe');
-        await expect(frame.locator('input, button')).toHaveCount(0);
+        if (javaScriptEnabled)
+          await expect(frame.locator('input, button')).toHaveCount(0);
+        else {
+          await expect(frame.locator('.app-surface')).toHaveAttribute(
+            'inert',
+            '',
+          );
+          assert(
+            await frame
+              .locator('input, button')
+              .evaluateAll((controls) =>
+                controls.every((control) => control.closest('[inert]')),
+              ),
+          );
+          await frame
+            .locator('.header-wallet')
+            .evaluate((button) => button.focus());
+          assert.equal(
+            await frame
+              .locator('.header-wallet')
+              .evaluate((button) => document.activeElement === button),
+            false,
+          );
+        }
         await expect(
           frame.getByRole('link', { name: 'Open Ultratokenizer directly' }),
         ).toBeVisible();

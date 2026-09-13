@@ -38,6 +38,17 @@ try {
         external.push(url.href);
         return route.abort();
       }
+      if (url.pathname.startsWith('/api/'))
+        return route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: {
+              code: 'service_unavailable',
+              message: 'Unavailable fixture service',
+            },
+          }),
+        });
       if (url.pathname === '/deployment.json')
         return route.fulfill({
           status: scenario === 'missing' ? 404 : 200,
@@ -49,7 +60,9 @@ try {
     });
     await page.goto(base, { waitUntil: 'networkidle' });
     await expect(
-      page.getByRole('heading', { name: 'Proof first. Tokens next.' }),
+      page.getByRole('heading', {
+        name: 'Ownership Docs. Verifiably tokenized.',
+      }),
     ).toBeVisible();
     await expect(page.locator('body')).not.toContainText('MINT CONFIRMED');
     await expect(page.locator('.engine-label')).toHaveText(
@@ -76,45 +89,21 @@ try {
       await expect(page.locator('.activity-rail')).toContainText(
         'Hedera testnet',
       );
-      const evidence = page.getByLabel('Import issuance bundle', {
-        exact: true,
-      });
-      await expect(evidence).toBeEnabled();
-      await evidence.setInputFiles({
-        name: 'evidence.json',
-        mimeType: 'application/json',
-        buffer: Buffer.from(JSON.stringify(fixture.bundle)),
-      });
-      await expect(page.locator('.proof-object')).toHaveAttribute(
-        'data-state',
-        'loaded',
-      );
-      await expect(page.locator('.proof-sheet')).toContainText('1.000 g');
     } else {
       await expect(page.locator('.header-wallet')).toBeEnabled();
-      await expect(page.locator('.live-footer')).toContainText(
-        'Connecting a wallet does not sign or mint.',
-      );
       await expect(page.locator('.activity-rail')).toHaveCount(0);
-      await expect(
-        page.getByLabel('Import issuance bundle', { exact: true }),
-      ).toHaveCount(0);
-      await expect(page.locator('.scene-kicker').first()).toContainText(
-        'How issuance works',
-      );
-      await expect(
-        page.locator('.flow-rail [aria-current="step"]'),
-      ).toHaveCount(0);
-      await expect(page.locator('.proof-sheet')).not.toContainText('— g');
-      const retry = page.getByRole('button', { name: 'Try again' });
-      if (scenario === 'missing') await expect(retry).toHaveCount(0);
-      else await expect(retry).toBeEnabled();
-      await expect(page.locator('.engine-stage .stage-action')).toContainText(
-        scenario === 'missing'
-          ? 'Gold issuance is unavailable'
-          : 'Could not check issuance status',
-      );
     }
+    await expect(
+      page.getByRole('button', { name: 'Upload signed PDF', exact: true }),
+    ).toBeEnabled();
+    await expect(
+      page.getByLabel('Import issuance bundle', { exact: true }),
+    ).toHaveCount(0);
+    await expect(page.locator('.flow-rail li')).toHaveCount(3);
+    await expect(
+      page.locator('.flow-rail [aria-current="step"]'),
+    ).toContainText('Upload document');
+    await expect(page.locator('.document-action')).not.toContainText('JSON');
     assert.deepEqual(await page.evaluate(() => window.walletCalls), []);
     if (scenario !== 'ready') {
       await page.locator('.header-wallet').click();
@@ -125,11 +114,6 @@ try {
         'eth_requestAccounts',
         'eth_chainId',
       ]);
-      await expect(page.locator('.engine-stage .stage-action')).toContainText(
-        scenario === 'missing'
-          ? 'Gold issuance is unavailable'
-          : 'Could not check issuance status',
-      );
     }
     assert.deepEqual(external, []);
     assert.deepEqual(errors, []);
@@ -291,9 +275,10 @@ try {
   await expect(stalled.locator('.direct-tab')).toContainText(
     'If this screen stays',
   );
-  await expect(
-    stalled.getByRole('heading', { name: 'Proof first. Tokens next.' }),
-  ).toHaveCount(0);
+  await expect(stalled.locator('#issuance-title')).toHaveText(
+    'Ownership Docs. Verifiably tokenized.',
+  );
+  await expect(stalled.locator('.app-surface')).toHaveAttribute('inert', '');
   const retry = stalled.getByRole('link', {
     name: 'Open Ultratokenizer directly',
   });
@@ -303,7 +288,9 @@ try {
     retry.click(),
   ]);
   await expect(
-    recovered.getByRole('heading', { name: 'Proof first. Tokens next.' }),
+    recovered.getByRole('heading', {
+      name: 'Ownership Docs. Verifiably tokenized.',
+    }),
   ).toBeVisible();
   await recovered.close();
   await stalled.close();
