@@ -1,14 +1,11 @@
 <script lang="ts">
   import ReceiptAudit from '$lib/components/ReceiptAudit.svelte';
   import AppHeader from '$lib/components/AppHeader.svelte';
+  import PageMeta from '$lib/components/PageMeta.svelte';
 </script>
 
-<svelte:head
-  ><title>Independent receipt verifier — Ultratokenizer</title><meta
-    name="description"
-    content="Check an issuance receipt against a trust policy obtained separately. Verify local signatures and bindings, with an optional online SP1 proof check."
-  /></svelte:head
->
+<PageMeta route="/verify/" />
+
 <a class="skip-link" href="#verifier">Skip to verifier</a>
 <div class="live-shell">
   <AppHeader current="verify" />

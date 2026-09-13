@@ -6,3 +6,50 @@
   Cross-Origin-Opener-Policy: same-origin
   Strict-Transport-Security: max-age=31536000
   Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'none'
+  X-Robots-Tag: all
+
+# The machine-readable layer is public evidence. Serving it cross-origin lets a
+# reviewer's own tooling fetch the deployment pins and the corpus directly.
+/deployment.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=300
+
+/discovery.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=300
+
+/llms.txt
+  Content-Type: text/markdown; charset=utf-8
+  Access-Control-Allow-Origin: *
+
+/llms-full.txt
+  Content-Type: text/markdown; charset=utf-8
+  Access-Control-Allow-Origin: *
+
+/index.md
+  Content-Type: text/markdown; charset=utf-8
+  Access-Control-Allow-Origin: *
+
+/demo.md
+  Content-Type: text/markdown; charset=utf-8
+  Access-Control-Allow-Origin: *
+
+/judge.md
+  Content-Type: text/markdown; charset=utf-8
+  Access-Control-Allow-Origin: *
+
+/trust.md
+  Content-Type: text/markdown; charset=utf-8
+  Access-Control-Allow-Origin: *
+
+/verify.md
+  Content-Type: text/markdown; charset=utf-8
+  Access-Control-Allow-Origin: *
+
+/institution.md
+  Content-Type: text/markdown; charset=utf-8
+  Access-Control-Allow-Origin: *
+
+/sitemap.xml
+  Content-Type: application/xml; charset=utf-8
+  Access-Control-Allow-Origin: *

@@ -11,6 +11,7 @@ const routes = [
   ['trust/', 'Trust', false],
   ['verify/', 'Verify', false],
   ['demo/', 'How it works', false],
+  ['judge/', 'Review demo', false],
 ];
 const labels = [
   'Tokenize',
@@ -19,6 +20,7 @@ const labels = [
   'Trust',
   'Verify',
   'How it works',
+  'Review demo',
 ];
 const errors = [];
 const external = [];
@@ -32,6 +34,16 @@ try {
       external.push(url.origin);
       return route.abort();
     }
+    if (url.pathname === '/api/health')
+      return route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'local-demo-service' }),
+      });
+    if (url.pathname === '/api/config')
+      return route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ readiness: { canStart: true } }),
+      });
     if (['/deployment.json', '/discovery.json'].includes(url.pathname))
       return route.fulfill({ status: 404, body: '' });
     return route.continue();
@@ -158,7 +170,7 @@ try {
   assert.deepEqual(errors, []);
   assert.deepEqual(external, []);
   console.log(
-    'Shared header: 5 routes x 4 widths, navigation scroll starts, 200% text and hydration passed; no wallet or chain calls.',
+    'Shared header: 6 routes x 4 widths, navigation scroll starts, 200% text and hydration passed; no wallet or chain calls.',
   );
 } finally {
   await browser.close();

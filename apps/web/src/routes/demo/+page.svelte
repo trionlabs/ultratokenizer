@@ -18,6 +18,7 @@
   import Step09Ats from '$lib/visuals/steps/Step09Ats.svelte';
   import Step10Registry from '$lib/visuals/steps/Step10Registry.svelte';
 
+  import PageMeta from '$lib/components/PageMeta.svelte';
   const repo = 'https://github.com/trionlabs/ultratokenizer/blob/main/';
 
   // This page makes no chain call by design; /trust/ is where live state is
@@ -231,13 +232,7 @@
   });
 </script>
 
-<svelte:head>
-  <title>How it works · Ultratokenizer</title>
-  <meta
-    name="description"
-    content="How a signed gold document becomes a token on Hedera: prove it, authorise the amount, mint on chain, then check the result."
-  />
-</svelte:head>
+<PageMeta route="/demo/" />
 
 <PortalShell current="demo">
   <section class="masthead" aria-label="Summary">
@@ -253,9 +248,7 @@
   </section>
 
   <section class="thesis" aria-label="What is different here">
-    <p class="thesis-head">
-      Each check has a separate role in issuance.
-    </p>
+    <p class="thesis-head">Each check has a separate role in issuance.</p>
     <ol>
       <li>
         <span class="q">Does the signed allocation match?</span>

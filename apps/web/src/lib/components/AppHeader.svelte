@@ -4,7 +4,14 @@
     current,
     actions,
   }: {
-    current: 'issue' | 'transfer' | 'institution' | 'trust' | 'verify' | 'demo';
+    current:
+      | 'issue'
+      | 'transfer'
+      | 'institution'
+      | 'trust'
+      | 'verify'
+      | 'demo'
+      | 'judge';
     actions?: Snippet;
   } = $props();
   const inEngine = $derived(current === 'issue' || current === 'transfer');
@@ -19,6 +26,7 @@
     { id: 'trust', label: 'Trust', href: '/trust/' },
     { id: 'verify', label: 'Verify', href: '/verify/' },
     { id: 'demo', label: 'How it works', href: '/demo/' },
+    { id: 'judge', label: 'Review demo', href: '/judge/' },
   ]);
 </script>
 
@@ -40,7 +48,9 @@
   <div class="header-actions">
     {#if actions}{@render actions()}
     {:else}<span class="read-mode"
-        >{current === 'demo' ? 'Guide' : 'Read-only'}</span
+        >{current === 'demo' || current === 'judge'
+          ? 'Guide'
+          : 'Read-only'}</span
       >{/if}
   </div>
 </header>

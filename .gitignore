@@ -140,3 +140,18 @@ skills-lock.json
 /apps/web/static/deployment.json.pending
 /apps/web/static/discovery.json
 /apps/web/static/discovery.json.pending
+# Local one-off deploy configuration. The supervised demo uses the reviewed
+# Git-ignored runtime Worker configuration instead.
+/apps/web/wrangler.deploy.jsonc
+
+# Generated machine-readable site layer; rebuilt by apps/web's build script
+# from src/lib/site-meta.js and the operator-provided deployment files.
+/apps/web/static/llms.txt
+/apps/web/static/llms-full.txt
+/apps/web/static/sitemap.xml
+/apps/web/static/index.md
+/apps/web/static/demo.md
+/apps/web/static/judge.md
+/apps/web/static/trust.md
+/apps/web/static/verify.md
+/apps/web/static/institution.md

@@ -6,7 +6,7 @@
     children,
     actions,
   }: {
-    current: 'institution' | 'trust' | 'demo';
+    current: 'institution' | 'trust' | 'demo' | 'judge';
     children: Snippet;
     actions?: Snippet;
   } = $props();

@@ -9,6 +9,68 @@
       href="%sveltekit.assets%/favicon.svg"
       type="image/svg+xml"
     />
+    <meta
+      name="robots"
+      content="index, follow, max-snippet:-1, max-image-preview:large"
+    />
+    <meta property="og:site_name" content="Ultratokenizer" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en" />
+    <meta name="twitter:card" content="summary" />
+    <!-- The machine-readable layer. /llms.txt indexes the site for language
+         models; /llms-full.txt is the complete corpus with deployed addresses. -->
+    <link
+      rel="alternate"
+      type="text/markdown"
+      href="/llms.txt"
+      title="llms.txt"
+    />
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://ultratokenizer.trionlabs.dev/#website",
+            "url": "https://ultratokenizer.trionlabs.dev/",
+            "name": "Ultratokenizer",
+            "description": "zkPDF-backed token issuance on Hedera. An authenticated gold-right document is proved with SP1 Groth16, authorised by an institution permit, and minted through the Hedera Asset Tokenization Studio only if an on-chain Gate agrees with every input at once.",
+            "inLanguage": "en",
+            "publisher": { "@id": "https://ultratokenizer.trionlabs.dev/#org" }
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://ultratokenizer.trionlabs.dev/#org",
+            "name": "Trionlabs",
+            "url": "https://ultratokenizer.trionlabs.dev/",
+            "sameAs": [
+              "https://github.com/trionlabs/ultratokenizer",
+              "https://github.com/yamancan/ultratokenizer"
+            ]
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://ultratokenizer.trionlabs.dev/#app",
+            "name": "Ultratokenizer",
+            "applicationCategory": "FinanceApplication",
+            "operatingSystem": "Web browser",
+            "url": "https://ultratokenizer.trionlabs.dev/",
+            "description": "A proof-gated token engine. It connects private, authenticated document evidence to institution-authorized token issuance and independently inspectable receipts. Deployed on Hedera testnet (chain ID 296) using the Hedera Asset Tokenization Studio; the mint role belongs to a proof-gated contract rather than a key holder.",
+            "isAccessibleForFree": true,
+            "author": { "@id": "https://ultratokenizer.trionlabs.dev/#org" },
+            "codeRepository": "https://github.com/trionlabs/ultratokenizer",
+            "featureList": [
+              "SP1 Groth16 proof of an authenticated off-chain right, verified on chain before minting",
+              "Exact all-or-nothing issuance bound to an EIP-712 request digest and a single-use claim id",
+              "Hedera Asset Tokenization Studio token graph with the mint role held by a Gate adapter",
+              "ERC-8004 identity records for issuer, deployment and auditor attribution",
+              "Offline, independent receipt verification against a separately obtained trust policy"
+            ]
+          }
+        ]
+      }
+    </script>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">

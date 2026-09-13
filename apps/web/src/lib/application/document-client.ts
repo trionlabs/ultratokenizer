@@ -33,7 +33,8 @@ const messages = {
     'The approved proof budget is unavailable. New verification requests are paused.',
   verification_in_progress:
     'Another verification request is still open. Reupload its document to resume it; starting a new request is paused.',
-  operations_disabled: 'The issuer has paused new verification requests.',
+  operations_disabled:
+    'Verification is unavailable for this saved request. Upload the current Demo 08 again.',
   source_not_admitted:
     'This document signer is not currently admitted by the issuer.',
   ledger_not_ready: 'The issuer ledger is not ready for this document.',

@@ -6,6 +6,7 @@
   import Glyph from '$lib/visuals/Glyph.svelte';
   import { fetchHostedDeployment } from '$lib/application/hosted-deployment';
   import { createIssuanceSession } from '$lib/application/issuance-session';
+  import PageMeta from '$lib/components/PageMeta.svelte';
   import {
     createAuthorityClient,
     readTrustSnapshot,
@@ -265,12 +266,8 @@
   }
 </script>
 
-<svelte:head
-  ><title>Institution console — Ultratokenizer</title><meta
-    name="description"
-    content="Review test issuance, reserve a complete allocation and authorize its mint with an institution wallet."
-  /></svelte:head
->
+<PageMeta route="/institution/" />
+
 <PortalShell current="institution">
   {#snippet actions()}
     <button

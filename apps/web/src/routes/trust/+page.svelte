@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import PortalShell from '$lib/components/PortalShell.svelte';
+  import PageMeta from '$lib/components/PageMeta.svelte';
   import {
     fetchHostedDeployment,
     fetchHostedDiscovery,
@@ -101,12 +102,8 @@
   }
 </script>
 
-<svelte:head
-  ><title>Trust and provenance — Ultratokenizer</title><meta
-    name="description"
-    content="Inspect the Gate, program, issuer and source records for this token deployment."
-  /></svelte:head
->
+<PageMeta route="/trust/" />
+
 <PortalShell current="trust">
   <p class="eyebrow">Deployment provenance</p>
   <h1>Follow the authority.</h1>
