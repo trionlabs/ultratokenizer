@@ -548,6 +548,10 @@ export class RuntimeAdapter {
         sha256(manifest) === preparation.programManifestSha256,
       'preparation_failed',
     );
+    await this.assertReservationUnused(job);
+  }
+  /** Read-only check of the original reservation and every single-use binding. */
+  async assertReservationUnused(job) {
     const client = createIssuerClient({
       provider: {
         request: async () => {
@@ -786,8 +790,21 @@ export class RuntimeAdapter {
     ]);
     const retrieval = await readJson(receipt);
     const preparation = await readJson(preparationPath);
+    const { exported } = await this.verifyGroth16(
+      job,
+      requestPath,
+      preparation,
+      normalized,
+      retrieval,
+    );
+    await writeNew(join(folder, 'verified-proof.json'), exported);
+    return exported;
+  }
+  /** Verify bytes cryptographically; this grants neither a permit nor a mint. */
+  async verifyGroth16(job, requestPath, preparation, normalized, retrieval) {
     check(
-      retrieval.status === 'downloaded_unverified' &&
+      retrieval.format === 'ultratokenizer.retrieved-proof.v1' &&
+        retrieval.status === 'downloaded_unverified' &&
         retrieval.programVKey === this.program.programVKey &&
         retrieval.publicValuesSha256 ===
           sha256(Buffer.from(preparation.publicValues.slice(2), 'hex')),
@@ -813,7 +830,9 @@ export class RuntimeAdapter {
     const proof = parseClaimProofExport(exported);
     check(
       getIssuanceRequestDigest(proof.request) === job.requestDigest &&
-        proof.publicValues === preparation.publicValues,
+        proof.publicValues === preparation.publicValues &&
+        proof.programVKey === this.program.programVKey &&
+        /^0x[0-9a-f]{448}$/.test(proof.publicValues),
       'proof_invalid',
     );
     const block = await this.reader.getBlock();
@@ -837,8 +856,19 @@ export class RuntimeAdapter {
         block.hash,
       'proof_invalid',
     );
-    await writeNew(join(folder, 'verified-proof.json'), exported);
-    return exported;
+    return {
+      exported,
+      acceptance: {
+        chainId: this.policy.chainId,
+        blockNumber: block.number.toString(),
+        blockHash: block.hash,
+        verifierAddress: this.policy.verifierAddress,
+        verifierCodeHash: this.policy.verifierCodeHash,
+        programVKey: proof.programVKey,
+        publicValuesSha256: retrieval.publicValuesSha256,
+        proofCryptography: 'native-sp1-sdk-and-pinned-deployed-verifier',
+      },
+    };
   }
   async permit(job, folder) {
     await this.assertOperationsEnabled();
