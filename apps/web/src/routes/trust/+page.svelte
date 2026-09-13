@@ -147,6 +147,31 @@
           >{/if}
       {:else}{address}{/if}
     {/snippet}
+    {@const checks = [
+      ['Gate open', !snapshot.paused],
+      ['Issuer pinned', snapshot.matches.issuer],
+      ['Program pinned', snapshot.matches.program],
+      ['Source pinned', snapshot.matches.source],
+      ['Token pinned', snapshot.matches.rights],
+      [
+        'Key in date',
+        snapshot.issuer.validUntil !== '0' && !snapshot.issuer.revoked,
+      ],
+      ['Program live', !snapshot.program.revoked],
+      ['Source live', !snapshot.source.revoked],
+      ['Policy live', !snapshot.policy.revoked],
+      ['Rights live', !snapshot.rights.revoked],
+    ]}
+    <ul class="checks" aria-label="Conditions checked at this block">
+      {#each checks as [label, ok] (label)}
+        <li class:ok>
+          <span aria-hidden="true">{ok ? '●' : '○'}</span>{label}<span
+            class="sr-only">{ok ? ' holds' : ' does not hold'}</span
+          >
+        </li>
+      {/each}
+    </ul>
+
     <section class="standing" aria-label="Backing at this block">
       <div>
         <span>Accepted cap</span>
@@ -468,6 +493,44 @@
 </PortalShell>
 
 <style>
+  .checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 22px;
+    margin: 0 0 26px;
+    padding: 0;
+    list-style: none;
+  }
+  .checks li {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--p-muted);
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .checks li span[aria-hidden] {
+    font-size: 0.62rem;
+    line-height: 1;
+  }
+  .checks li.ok {
+    color: var(--p-ink);
+  }
+  .checks li:not(.ok) span[aria-hidden] {
+    color: var(--p-accent);
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   .hash {
     margin: 8px 0 0;
     overflow-wrap: anywhere;

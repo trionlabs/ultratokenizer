@@ -1219,11 +1219,31 @@
               </div>
               <div>
                 <dt>Gate</dt>
-                <dd>{snapshot.deployment.auditPolicy.gate}</dd>
+                <dd>
+                  <a
+                    class="addr"
+                    href={hashscanContract(
+                      snapshot.deployment.auditPolicy.gate,
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >{snapshot.deployment.auditPolicy.gate}</a
+                  >
+                </dd>
               </div>
               <div>
                 <dt>Token</dt>
-                <dd>{snapshot.deployment.auditPolicy.token}</dd>
+                <dd>
+                  <a
+                    class="addr"
+                    href={hashscanContract(
+                      snapshot.deployment.auditPolicy.token,
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >{snapshot.deployment.auditPolicy.token}</a
+                  >
+                </dd>
               </div>
               <div>
                 <dt>Backend</dt>
@@ -1239,7 +1259,17 @@
               </div>
               <div>
                 <dt>Verifier</dt>
-                <dd>{snapshot.deployment.auditPolicy.verifierAddress}</dd>
+                <dd>
+                  <a
+                    class="addr"
+                    href={hashscanContract(
+                      snapshot.deployment.auditPolicy.verifierAddress,
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >{snapshot.deployment.auditPolicy.verifierAddress}</a
+                  >
+                </dd>
               </div>
             </dl>
           </details>
@@ -1353,6 +1383,17 @@
 </div>
 
 <style>
+  .addr {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px solid var(--p-line);
+  }
+  .addr:hover,
+  .addr:focus-visible {
+    color: var(--p-accent);
+    border-bottom-color: currentColor;
+  }
+
   .wallet-dialog {
     width: min(400px, calc(100vw - 32px));
     max-height: calc(100svh - 32px);
