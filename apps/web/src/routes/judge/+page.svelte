@@ -220,6 +220,14 @@
     </div>
     <div class="truth-grid">
       <p>
+        <strong>Enforcement</strong> Eleven checks in one transaction. One failure
+        reverts all of it.
+      </p>
+      <p>
+        <strong>Identity</strong> ERC-8004 names the issuer. Only the Gate decides
+        whether a mint may happen.
+      </p>
+      <p>
         <strong>Asset</strong> The PDF and institution are synthetic. No backing,
         custody or redemption is claimed.
       </p>
