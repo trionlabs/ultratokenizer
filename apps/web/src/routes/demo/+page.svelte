@@ -23,7 +23,11 @@
   // This page makes no chain call by design; /trust/ is where live state is
   // read. Every claim about chain state is therefore a reading taken at this
   // block, and says so, rather than asserting a present tense it cannot check.
-  const asOf = { date: '2026-09-13', block: '40456427' };
+  // Re-read from chain at this block: paused() false, totalSupply() 0,
+  // backingPools cap 11000 / pending 1000 / outstanding 0. The page states
+  // these in the past tense against the block because it makes no chain call
+  // of its own; /trust/ is what reads the present.
+  const asOf = { date: '2026-09-13', block: '40466590' };
 
   const steps = [
     {
@@ -239,12 +243,12 @@
   <section class="masthead" aria-label="Summary">
     <h1>How a signed gold document becomes a token on Hedera</h1>
     <p class="standing">
-      Deployed on Hedera testnet. <strong
-        >No token had been minted as of block {asOf.block}</strong
-      >
-      ({asOf.date}): the Groth16 proof has not returned and the Gate was paused.
-      This page makes no chain call — <a href="/trust/">Trust</a> reads live state.
-      The source document is synthetic, from no real bank.
+      Deployed on Hedera testnet, and the Gate was open at block {asOf.block}
+      ({asOf.date}) with 1000 mg reserved against it.
+      <strong>No token had been minted</strong>: the Groth16 proof has not
+      returned, and that proof is the one thing the Gate still needs. This page
+      makes no chain call — <a href="/trust/">Trust</a> reads live state. The source
+      document is synthetic, from no real bank.
     </p>
   </section>
 
@@ -428,9 +432,9 @@
       </div>
 
       {#if last}
-        <!-- The reason the Gate was paused is in the standing disclosure at
-             the top of the same screen; repeating it here was duplication,
-             not care. This keeps the flag and the pointer to live state. -->
+        <!-- The reason no mint has run is in the standing disclosure at the
+             top of the same screen; repeating it here was duplication, not
+             care. This keeps the flag and the pointer to live state. -->
         <p class="pending">
           <strong>Not live yet.</strong> No mint had run at block {asOf.block};
           read the current state on <a href="/trust/">Trust</a>.
