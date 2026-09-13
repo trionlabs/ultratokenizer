@@ -33,24 +33,24 @@
     {
       id: 'Prove',
       who: 'you',
-      line: 'The signature is checked inside a proof. What comes out is 224 bytes, not the document.',
-      why: 'The chain learns that a document signed by this key authorised exactly this request, and nothing else in it.',
+      line: 'The program checks the signed allocation and produces 224 bytes of public values, plus a proof.',
+      why: 'The Gate verifies the exact request. Its amount and recipient are public; the full document is not required on chain.',
       aside:
-        'zkPDF reads the signature. SP1 is the VM it runs in. The on-chain verifier at step three is a third thing. In this demo the prover runs in a local service, because a browser cannot run SP1.',
+        'This profile checks a synthetic PDF with a structured signed allocation inside SP1. The document service prepares the request for the prover network. Running the program and receiving its completed Groth16 proof are separate steps.',
       items: [
         {
           icon: 'lock' as const,
           label: 'Wallet bound',
           line: 'Your address sits inside the signed bytes.',
-          why: 'So a leaked document is worthless to anyone else.',
+          why: 'Copying the document does not let someone redirect the mint: the Gate also requires the designated holder’s signature.',
           visual: Step02Document,
           href: `${repo}proofs/claim-evidence/src/capsule.rs`,
         },
         {
           icon: 'eye' as const,
           label: 'What stays hidden',
-          line: 'Seven values are published. The rest of the document is not.',
-          why: 'The proof commits to profile version, request digest, signer fingerprint, source id, claim usage id, claim commitment and expiry. The claim id, issuer id, holder address, capacity and unit reach the chain only as one hash, and the claim usage id is a nullifier: the Gate can enforce single use without learning which claim it is. Amount and recipient are deliberately public, because the Gate has to account for them.',
+          line: 'The chain verifies seven public values without needing the PDF.',
+          why: 'Those values are the profile version, request digest, signer fingerprint, source id, claim usage id, claim commitment and expiry. The request also publishes the issuer, amount and recipient. The document service and prover process the PDF; a public-input demo also publishes its synthetic witness.',
           visual: Step03Zkpdf,
           href: `${repo}proofs/claim-evidence/src/lib.rs`,
         },
@@ -75,8 +75,8 @@
     {
       id: 'Authorise',
       who: 'the institution',
-      line: 'One gram is set aside on chain, then a permit that expires in minutes.',
-      why: 'Otherwise the issuer could mint any amount it liked and call it backed.',
+      line: 'The issuer reserves one gram of declared capacity on chain, then signs a short-lived permit.',
+      why: 'The Gate enforces the configured capacity. This accounting does not prove that physical gold exists or is held in custody.',
       aside: '',
       items: [
         {
@@ -254,15 +254,15 @@
 
   <section class="thesis" aria-label="What is different here">
     <p class="thesis-head">
-      Most systems answer all three with one trusted server.
+      Each check has a separate role in issuance.
     </p>
     <ol>
       <li>
-        <span class="q">Is the document real?</span>
+        <span class="q">Does the signed allocation match?</span>
         <span class="a">zkPDF, inside SP1</span>
       </li>
       <li>
-        <span class="q">Who is the issuer?</span>
+        <span class="q">Where is the issuer’s record?</span>
         <span class="a">ERC-8004 registry</span>
       </li>
       <li>
