@@ -6,6 +6,15 @@ Reviewing the project? Start with the [judge walkthrough](JUDGES.md), then open 
 
 For a fresh reviewer-led SP1 run, request a bounded synthetic test allocation and PROVE budget from [`@yamanc` on Telegram](https://t.me/yamanc). Share only the public EVM address that should receive the test token. Never send a private key or seed phrase. Funding a request permits proving; it does not establish that a proof, mint or transfer succeeded.
 
+[![Ultratokenizer proof-gated token engine on Hedera ATS](docs/assets/token-engine.png)](https://ultratokenizer.trionlabs.dev/)
+
+## Product tour
+
+| SP1 proof path                                                                                                                                 | Hedera ATS authority                                                                                                                      |
+| :--------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------- |
+| [![Signed document, SP1 guest, public values and Gate checks](docs/assets/proof-architecture.png)](https://ultratokenizer.trionlabs.dev/demo/) | [![Live Hedera testnet Gate, verifier and ATS deployment](docs/assets/hedera-ats-trust.png)](https://ultratokenizer.trionlabs.dev/trust/) |
+| Follow what the signed-document program proves and what remains outside the claim.                                                             | Inspect the deployed Gate, verifier, ATS token graph, source pins and ERC-8004 attribution.                                               |
+
 ## Why this stack
 
 | Layer    | What this project uses it for                                                                                        | Boundary                                                                               |

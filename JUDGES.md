@@ -4,6 +4,10 @@ Ultratokenizer is a proof-gated token engine deployed on Hedera testnet. The cur
 
 Start at [ultratokenizer.trionlabs.dev/judge](https://ultratokenizer.trionlabs.dev/judge/). The page has two review paths.
 
+[![Ultratokenizer self-guided judge walkthrough](docs/assets/judge-walkthrough.png)](https://ultratokenizer.trionlabs.dev/judge/)
+
+The service status in the screenshot is a point-in-time observation. The live page reads current readiness from `/api/config`.
+
 ## Inspect without a wallet
 
 1. Download the synthetic Demo 08 PDF from the judge page. The same page also

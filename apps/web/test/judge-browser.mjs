@@ -26,7 +26,7 @@ try {
     await page.setViewportSize({ width, height: 960 });
     await page.goto(new URL('judge/', base).href, { waitUntil: 'networkidle' });
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-      'Review the claim. Follow the proof. Check the chain.',
+      'No token mints without a proof of a signed document.',
     );
     await expect(
       page.getByRole('link', { name: 'Download Demo 08 PDF' }),
@@ -34,30 +34,28 @@ try {
     await expect(
       page.getByRole('link', { name: 'Download all 50 PDFs' }),
     ).toBeVisible();
-    const guideButton = page.getByRole('button', { name: 'Try it' });
-    await expect(guideButton).toBeVisible();
-    await expect(
-      page.getByRole('link', { name: 'Download sample' }),
-    ).toBeVisible();
     await expect(
       page.getByRole('link', { name: /Request proof budget/ }),
     ).toHaveAttribute('href', 'https://t.me/yamanc');
-    await guideButton.click();
-    await expect(
-      page.getByRole('link', { name: 'Download sample' }),
-    ).toBeHidden();
-    await page.reload({ waitUntil: 'networkidle' });
-    await expect(
-      page.getByRole('link', { name: 'Download sample' }),
-    ).toBeHidden();
     await expect(page.getByText('What the demo establishes')).toBeVisible();
+    // An unscoped `li` rule once reached every list on the page and squeezed
+    // each requirement heading into the 44px marker column of a grid it was
+    // never meant to join. Width is the cheapest thing that catches that.
+    const headingWidth = await page.evaluate(
+      () =>
+        document.querySelector('.track-list li h3')?.getBoundingClientRect()
+          .width ?? 0,
+    );
+    assert(
+      headingWidth > 200,
+      `qualification heading collapsed to ${headingWidth}px at ${width}px`,
+    );
     assert(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
       `judge page overflowed at ${width}px`,
     );
-    await page.evaluate(() => sessionStorage.clear());
   }
 
   const response = await page.request.get(

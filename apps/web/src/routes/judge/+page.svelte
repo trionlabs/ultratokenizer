@@ -44,40 +44,22 @@
   ];
 
   const beyondBaseline = [
-    'Compliance facets are deployed with the graph: a control list for transfer restrictions, a supply cap, and ERC-1400 partitions.',
-    'Scheduled-task libraries ship in the deployed topology for later vesting, coupon and maturity work.',
-    'A compliance control the Studio does not have today: issuance itself requires a zero-knowledge proof of an authenticated off-chain right, checked on chain before any supply moves.',
-    'Independent verification is a product surface, not a promise: a third party re-checks an exported receipt offline against a trust policy obtained separately.',
+    'Compliance facets ship with the graph: transfer control list, supply cap, ERC-1400 partitions.',
+    'Scheduled-task libraries are deployed for later vesting, coupon and maturity work.',
+    'One control the Studio does not have: issuance requires a zero-knowledge proof of an off-chain right, checked on chain before supply moves.',
+    'A third party re-checks an exported receipt offline, against a trust policy obtained separately.',
   ];
 
   const documentNumbers = Array.from({ length: 50 }, (_, index) =>
     String(index + 1).padStart(2, '0'),
   );
-  const guideDismissedKey = 'ultratokenizer.judge-guide.dismissed.v1';
 
   let service = $state<'checking' | 'ready' | 'busy' | 'unavailable'>(
     'checking',
   );
   let blocker = $state<string>();
-  let guideOpen = $state(false);
-
-  function toggleGuide() {
-    guideOpen = !guideOpen;
-    try {
-      if (!guideOpen) sessionStorage.setItem(guideDismissedKey, '1');
-    } catch {
-      // Storage can be unavailable in hardened browsers. The guide still works
-      // as a normal disclosure for the current page.
-    }
-  }
 
   onMount(() => {
-    try {
-      guideOpen = sessionStorage.getItem(guideDismissedKey) !== '1';
-    } catch {
-      guideOpen = true;
-    }
-
     const controller = new AbortController();
     void (async () => {
       try {
@@ -113,11 +95,11 @@
   <section class="hero">
     <div>
       <p class="eyebrow">Judge walkthrough · 5 minutes</p>
-      <h1>Review the claim. Follow the proof. Check the chain.</h1>
+      <h1>No token mints without a proof of a signed document.</h1>
       <p class="intro">
-        You can inspect the document, architecture and deployed contracts
-        yourself. The presenter controls the recipient wallet for the live proof
-        and mint.
+        Review the claim, follow the proof, check the chain. Every contract and
+        document here is inspectable without a wallet. The presenter controls
+        the recipient wallet for the live proof and mint.
       </p>
     </div>
     <aside class="live" aria-live="polite">
@@ -133,7 +115,7 @@
               ? 'Live service ready'
               : service === 'busy'
                 ? 'Live service busy'
-                : 'Live service unavailable'}</strong
+                : 'Live run is presenter-led'}</strong
         >
         <p>
           {service === 'ready'
@@ -141,7 +123,7 @@
             : service === 'busy'
               ? blocker
               : service === 'unavailable'
-                ? 'Use the architecture and chain links while the presenter restores it.'
+                ? 'The document service holds the issuer key and binds to loopback only. Everything else here reads from chain.'
                 : 'Reading the document and proof service.'}
         </p>
       </div>
@@ -153,9 +135,8 @@
       <p class="step">On your own</p>
       <h2>Inspect without a wallet</h2>
       <p>
-        Download the synthetic signed allocation, upload it unchanged, and
-        inspect the fixed amount and issuer. Uploading does not request a proof
-        or spend funds.
+        Download the signed allocation, upload it unchanged, and read back its
+        fixed amount and issuer. Uploading spends nothing.
       </p>
       <div class="actions">
         <a class="primary" href="/jury/08-gold.pdf" download
@@ -169,11 +150,11 @@
       <h2>Run proof and mint</h2>
       <p>
         The designated wallet signs the exact request, waits for SP1 proof
-        verification, then confirms a separate Hedera mint transaction.
+        verification, then confirms a separate Hedera mint.
       </p>
       <p class="funded-note">
-        Want to run it with your own wallet? Request a wallet-bound synthetic
-        allocation and bounded PROVE budget. Share only your public EVM address.
+        Want your own wallet in the run? Ask for a wallet-bound allocation and a
+        bounded PROVE budget. Send only your public EVM address.
       </p>
       <div class="actions">
         <a class="primary" href="/#engine">Start the live run</a>
@@ -190,9 +171,9 @@
       <p class="eyebrow">Signed test set</p>
       <h2 id="documents-title">Inspect 50 separate signed rights</h2>
       <p>
-        Every PDF is a distinct, CMS-signed synthetic 1.000 g right for the
-        presenter wallet. Their hashes and signatures form an offline inspection
-        corpus. The live token engine admits the canonical Demo 08 file.
+        Every PDF is a distinct CMS-signed synthetic 1.000 g right for the
+        presenter wallet. The live engine admits Demo 08; the other 49 are for
+        offline inspection and carry no proofs, permits, mints or keys.
       </p>
     </div>
     <div class="library-actions">
@@ -208,10 +189,6 @@
         </div>
       </details>
     </div>
-    <p class="boundary">
-      The other 49 files are not admitted or funded proof jobs. The set contains
-      no proofs, permits, mints, bank backing or wallet keys.
-    </p>
   </section>
 
   <section class="route" aria-labelledby="review-order">
@@ -324,109 +301,12 @@
       >Read the full judge report →</a
     >
   </section>
-
-  <aside class="try-guide">
-    <button
-      type="button"
-      aria-expanded={guideOpen}
-      aria-controls="judge-try-guide"
-      onclick={toggleGuide}
-    >
-      Try it <span aria-hidden="true">{guideOpen ? '−' : '+'}</span>
-    </button>
-    {#if guideOpen}
-      <div id="judge-try-guide">
-        <strong>Inspect a signed right</strong>
-        <ol>
-          <li>Download a sample PDF.</li>
-          <li>Upload it in Tokenize.</li>
-          <li>Check its issuer and fixed amount.</li>
-        </ol>
-        <p>
-          No wallet or PROVE is needed for inspection. Proof and mint are
-          presenter-led.
-        </p>
-        <p>
-          For your own live run, send only your public EVM address to
-          <a href="https://t.me/yamanc" target="_blank" rel="noreferrer"
-            >@yamanc</a
-          >. Never share wallet secrets.
-        </p>
-        <nav aria-label="Try the demo">
-          <a href="/jury/08-gold.pdf" download>Download sample</a>
-          <a href="/#engine">Open Tokenize</a>
-        </nav>
-      </div>
-    {/if}
-  </aside>
 </PortalShell>
 
 <style>
-  .try-guide {
-    position: fixed;
-    right: 22px;
-    bottom: 22px;
-    z-index: 20;
-    width: min(310px, calc(100vw - 32px));
-    border: 1px solid var(--p-line);
-    border-radius: 20px;
-    background: color-mix(in srgb, var(--p-paper) 96%, var(--p-iris));
-    box-shadow: 0 18px 55px rgb(58 50 70 / 12%);
-  }
-  .try-guide > button {
-    width: 100%;
-    border: 0;
-    background: transparent;
-    cursor: pointer;
-    padding: 13px 18px;
-    color: var(--p-accent);
-    font-size: 0.78rem;
-    font-weight: 700;
-    text-align: left;
-  }
-  .try-guide > button span {
-    float: right;
-    color: var(--p-iris);
-  }
-  .try-guide > div {
-    padding: 0 18px 18px;
-    border-top: 1px solid var(--p-line);
-  }
-  .try-guide strong {
-    display: block;
-    margin-top: 14px;
-    font-size: 0.86rem;
-  }
-  .try-guide ol {
-    margin: 9px 0 0;
-    padding-left: 18px;
-    border: 0;
-    color: var(--p-muted);
-    font-size: 0.74rem;
-  }
-  .try-guide li {
-    display: list-item;
-    padding: 2px 0;
-    border: 0;
-  }
-  .try-guide p {
-    margin-top: 10px;
-    color: var(--p-muted);
-    font-size: 0.7rem;
-  }
   .funded-note {
+    margin-top: 10px;
     font-size: 0.76rem;
-  }
-  .try-guide nav {
-    display: flex;
-    gap: 14px;
-    margin-top: 12px;
-  }
-  .try-guide a {
-    color: var(--p-accent);
-    font-size: 0.72rem;
-    font-weight: 650;
-    text-decoration: none;
   }
   .track {
     padding: 30px 0;
@@ -496,11 +376,6 @@
   .document-grid a:focus-visible {
     border-color: var(--p-iris);
     color: var(--p-accent);
-  }
-  .document-library .boundary {
-    grid-column: 1 / -1;
-    margin: -8px 0 0;
-    font-size: 0.72rem;
   }
   .track-list {
     display: grid;
@@ -677,13 +552,13 @@
   .section-head h2 {
     font-size: 1.7rem;
   }
-  ol {
+  .route ol {
     list-style: none;
     margin: 18px 0 0;
     padding: 0;
     border-top: 1px solid var(--p-line);
   }
-  li {
+  .route ol > li {
     display: grid;
     grid-template-columns: 44px minmax(0, 1fr) auto;
     gap: 16px;
@@ -691,20 +566,20 @@
     padding: 18px 4px;
     border-bottom: 1px solid var(--p-line);
   }
-  li > span {
+  .route ol > li > span {
     color: var(--p-iris);
     font-size: 0.7rem;
     font-weight: 700;
   }
-  li strong {
+  .route ol > li strong {
     font-size: 0.9rem;
   }
-  li p {
+  .route ol > li p {
     color: var(--p-muted);
     font-size: 0.78rem;
     margin-top: 2px;
   }
-  li a {
+  .route ol > li a {
     color: var(--p-accent);
     font-size: 0.74rem;
     font-weight: 650;
@@ -760,15 +635,11 @@
     .truth {
       padding: 20px;
     }
-    li {
+    .route ol > li {
       grid-template-columns: 32px minmax(0, 1fr);
     }
-    li a {
+    .route ol > li a {
       grid-column: 2;
-    }
-    .try-guide {
-      right: 12px;
-      bottom: 12px;
     }
   }
   @media (prefers-reduced-motion: reduce) {
