@@ -158,12 +158,15 @@
         <circle class="dot" cx="548" cy={y} r="4" />
       </g>
     {/each}
-    <!-- One label per pair of rungs, short enough to stay inside the box. -->
+    <!-- One label per pair of rungs, short enough to stay inside the box. The
+         last label sits on the last rung: five labels left the bottom two
+         dots bare and the ladder looked unfinished. -->
     <text class="micro" x="576" y="76">ISSUANCE IS OPEN</text>
     <text class="micro" x="576" y="107">NOT USED BEFORE</text>
     <text class="micro" x="576" y="137">BOTH SIDES SIGNED</text>
     <text class="micro" x="576" y="168">PROOF HOLDS</text>
-    <text class="micro" x="576" y="198">AMOUNT MATCHES</text>
+    <text class="micro" x="576" y="198">STILL IN TIME</text>
+    <text class="micro" x="576" y="229">AMOUNT MATCHES</text>
     <text class="micro" x="524" y="28"
       >{CHECKS} ORDERED CHECKS, ONE TRANSACTION</text
     >
@@ -187,7 +190,7 @@
     <rect class="soft-box" x="744" y="84" width="196" height="26" rx="8" />
     <text class="micro" x="756" y="101">20 CONTRACTS DEPLOYED</text>
     {#if asOf}
-      <text class="micro" x="940" y="128" text-anchor="end"
+      <text class="micro" x="940" y="14" text-anchor="end"
         >READ {asOf.toUpperCase()}</text
       >
     {/if}
