@@ -292,7 +292,7 @@ try {
     }),
   ).toBeVisible();
   await expect(
-    page.getByText('Configured authority is active', { exact: false }),
+    page.getByText('Authority is active at this block', { exact: false }),
   ).toBeVisible();
   values.backingPools = [1000n, 0n, 0n];
   validDiscovery = false;

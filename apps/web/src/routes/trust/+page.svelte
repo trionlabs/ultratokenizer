@@ -147,15 +147,32 @@
           >{/if}
       {:else}{address}{/if}
     {/snippet}
+    <section class="standing" aria-label="Backing at this block">
+      <div>
+        <span>Accepted cap</span>
+        <strong>{formatGrams(snapshot.pool.cap)} g</strong>
+      </div>
+      <div>
+        <span>Reserved</span>
+        <strong>{formatGrams(snapshot.pool.pending)} g</strong>
+      </div>
+      <div class="issued">
+        <span>Issued</span>
+        <strong>{formatGrams(snapshot.pool.outstanding)} g</strong>
+      </div>
+      <p class="standing-note">
+        {snapshot.active
+          ? 'Authority is active at this block. Each request still needs its own proof, permit and reservation.'
+          : 'Issuance is paused, expired, revoked, or a configured record does not match.'}
+        The cap is a governance assertion. It does not prove physical gold or a right
+        to redeem it.
+      </p>
+    </section>
+
     <div class="portal-grid">
       <div>
         <section class="portal-card">
           <h2>Issuance authority</h2>
-          <p class="muted">
-            {snapshot.active
-              ? 'Configured authority is active at this block. Each request still needs its own proof, permit and reservation.'
-              : 'Issuance is paused, expired, revoked, or a configured record does not match.'}
-          </p>
           {#if snapshot.active && snapshot.pool.available === '0'}
             <p class="muted">
               No capacity remains for new reservations. Existing reservations
@@ -222,27 +239,6 @@
             </div>
           </dl>
         </section>
-        <section class="portal-card">
-          <h2>Backing accounting</h2>
-          <dl>
-            <div>
-              <dt>Accepted cap</dt>
-              <dd>{formatGrams(snapshot.pool.cap)} g</dd>
-            </div>
-            <div>
-              <dt>Reserved / issued</dt>
-              <dd>
-                {formatGrams(snapshot.pool.pending)} g / {formatGrams(
-                  snapshot.pool.outstanding,
-                )} g
-              </dd>
-            </div>
-          </dl>
-          <p class="muted">
-            The cap is a governance assertion. It does not prove physical gold
-            or a right to redeem it.
-          </p>
-        </section>
       </div>
       <div>
         <section class="portal-card">
@@ -262,27 +258,34 @@
               </dd>
             </div>
             <div>
-              <dt>Program vkey</dt>
-              <dd class="mono">{snapshot.program.vkey}</dd>
-            </div>
-            <div>
               <dt>Verifier</dt>
               <dd class="mono">
                 {@render chainAddress(snapshot.program.verifier, 'contract')}
               </dd>
             </div>
-            <div>
-              <dt>Verifier runtime hash</dt>
-              <dd class="mono">{snapshot.program.codeHash}</dd>
-            </div>
-            <div>
-              <dt>Source ID · version {snapshot.source.version}</dt>
-              <dd class="mono">{snapshot.source.id}</dd>
-            </div>
-            <div>
-              <dt>Source signer fingerprint</dt>
-              <dd class="mono">{snapshot.source.fingerprint}</dd>
-            </div>
+          </dl>
+          <details>
+            <summary>Program and source hashes</summary>
+            <dl>
+              <div>
+                <dt>Program vkey</dt>
+                <dd class="mono">{snapshot.program.vkey}</dd>
+              </div>
+              <div>
+                <dt>Verifier runtime hash</dt>
+                <dd class="mono">{snapshot.program.codeHash}</dd>
+              </div>
+              <div>
+                <dt>Source ID · version {snapshot.source.version}</dt>
+                <dd class="mono">{snapshot.source.id}</dd>
+              </div>
+              <div>
+                <dt>Source signer fingerprint</dt>
+                <dd class="mono">{snapshot.source.fingerprint}</dd>
+              </div>
+            </dl>
+          </details>
+          <dl>
             <div>
               <dt>Source binding</dt>
               <dd>
@@ -471,6 +474,51 @@
 </PortalShell>
 
 <style>
+  /* Rank one. No card, no border: the figures carry themselves, and the space
+     around them is what says they matter. */
+  .standing {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+    gap: 4px 40px;
+    margin: 0 0 34px;
+    padding-bottom: 26px;
+    border-bottom: 1px solid var(--p-line);
+  }
+  .standing span {
+    display: block;
+    color: var(--p-muted);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .standing strong {
+    display: block;
+    margin-top: 6px;
+    font-size: 1.7rem;
+    font-weight: 400;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Nothing minted is the whole claim of the page, so it is the one figure
+     that takes the accent. */
+  .standing .issued strong {
+    color: var(--p-accent);
+  }
+  .standing-note {
+    grid-column: 1 / -1;
+    margin: 22px 0 0;
+    max-width: 68ch;
+    color: var(--p-muted);
+    font-size: 0.78rem;
+  }
+  @media (max-width: 640px) {
+    .standing {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
   .addr {
     color: inherit;
     text-decoration: none;

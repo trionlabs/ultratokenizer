@@ -404,8 +404,7 @@
     grid-template-columns: minmax(0, 1fr) 320px;
     gap: 52px;
     align-items: end;
-    padding: 34px 0 30px;
-    border-bottom: 1px solid var(--p-line);
+    padding: 34px 0 26px;
   }
   .hero h1 {
     max-width: 760px;
