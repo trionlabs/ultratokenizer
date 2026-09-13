@@ -210,7 +210,8 @@
     <div class="truth-grid">
       <p>
         <strong>Enforcement</strong> The checks are the proof, the holder signature,
-        the issuer permit, the reservation and a single-use claim.
+        the issuer permit, the reservation and a single-use claim. One failure reverts
+        the whole transaction.
       </p>
       <p>
         <strong>Identity</strong> An ERC-8004 record is attribution, never a licence
