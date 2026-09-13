@@ -53,13 +53,31 @@
   const documentNumbers = Array.from({ length: 50 }, (_, index) =>
     String(index + 1).padStart(2, '0'),
   );
+  const guideDismissedKey = 'ultratokenizer.judge-guide.dismissed.v1';
 
   let service = $state<'checking' | 'ready' | 'busy' | 'unavailable'>(
     'checking',
   );
   let blocker = $state<string>();
+  let guideOpen = $state(false);
+
+  function toggleGuide() {
+    guideOpen = !guideOpen;
+    try {
+      if (!guideOpen) sessionStorage.setItem(guideDismissedKey, '1');
+    } catch {
+      // Storage can be unavailable in hardened browsers. The guide still works
+      // as a normal disclosure for the current page.
+    }
+  }
 
   onMount(() => {
+    try {
+      guideOpen = sessionStorage.getItem(guideDismissedKey) !== '1';
+    } catch {
+      guideOpen = true;
+    }
+
     const controller = new AbortController();
     void (async () => {
       try {
@@ -300,25 +318,34 @@
     >
   </section>
 
-  <details class="try-guide">
-    <summary>Try it</summary>
-    <div>
-      <strong>Inspect a signed right</strong>
-      <ol>
-        <li>Download a sample PDF.</li>
-        <li>Upload it in Tokenize.</li>
-        <li>Check its issuer and fixed amount.</li>
-      </ol>
-      <p>
-        No wallet or PROVE is needed for inspection. Proof and mint are
-        presenter-led.
-      </p>
-      <nav aria-label="Try the demo">
-        <a href="/jury/08-gold.pdf" download>Download sample</a>
-        <a href="/#engine">Open Tokenize</a>
-      </nav>
-    </div>
-  </details>
+  <aside class="try-guide">
+    <button
+      type="button"
+      aria-expanded={guideOpen}
+      aria-controls="judge-try-guide"
+      onclick={toggleGuide}
+    >
+      Try it <span aria-hidden="true">{guideOpen ? '−' : '+'}</span>
+    </button>
+    {#if guideOpen}
+      <div id="judge-try-guide">
+        <strong>Inspect a signed right</strong>
+        <ol>
+          <li>Download a sample PDF.</li>
+          <li>Upload it in Tokenize.</li>
+          <li>Check its issuer and fixed amount.</li>
+        </ol>
+        <p>
+          No wallet or PROVE is needed for inspection. Proof and mint are
+          presenter-led.
+        </p>
+        <nav aria-label="Try the demo">
+          <a href="/jury/08-gold.pdf" download>Download sample</a>
+          <a href="/#engine">Open Tokenize</a>
+        </nav>
+      </div>
+    {/if}
+  </aside>
 </PortalShell>
 
 <style>
@@ -333,24 +360,20 @@
     background: color-mix(in srgb, var(--p-paper) 96%, var(--p-iris));
     box-shadow: 0 18px 55px rgb(58 50 70 / 12%);
   }
-  .try-guide summary {
+  .try-guide > button {
+    width: 100%;
+    border: 0;
+    background: transparent;
     cursor: pointer;
     padding: 13px 18px;
     color: var(--p-accent);
     font-size: 0.78rem;
     font-weight: 700;
-    list-style: none;
+    text-align: left;
   }
-  .try-guide summary::-webkit-details-marker {
-    display: none;
-  }
-  .try-guide summary::after {
-    content: '+';
+  .try-guide > button span {
     float: right;
     color: var(--p-iris);
-  }
-  .try-guide[open] summary::after {
-    content: '−';
   }
   .try-guide > div {
     padding: 0 18px 18px;

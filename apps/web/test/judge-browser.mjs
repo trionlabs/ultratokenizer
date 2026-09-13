@@ -34,12 +34,19 @@ try {
     await expect(
       page.getByRole('link', { name: 'Download all 50 PDFs' }),
     ).toBeVisible();
-    await expect(page.getByText('Try it', { exact: true })).toBeVisible();
-    await page.getByText('Try it', { exact: true }).click();
+    const guideButton = page.getByRole('button', { name: 'Try it' });
+    await expect(guideButton).toBeVisible();
     await expect(
       page.getByRole('link', { name: 'Download sample' }),
     ).toBeVisible();
-    await page.getByText('Try it', { exact: true }).click();
+    await guideButton.click();
+    await expect(
+      page.getByRole('link', { name: 'Download sample' }),
+    ).toBeHidden();
+    await page.reload({ waitUntil: 'networkidle' });
+    await expect(
+      page.getByRole('link', { name: 'Download sample' }),
+    ).toBeHidden();
     await expect(page.getByText('What the demo establishes')).toBeVisible();
     assert(
       await page.evaluate(
@@ -47,6 +54,7 @@ try {
       ),
       `judge page overflowed at ${width}px`,
     );
+    await page.evaluate(() => sessionStorage.clear());
   }
 
   const response = await page.request.get(
