@@ -4,7 +4,7 @@ A token engine connecting authenticated rights, holder consent and institution-a
 
 Reviewing the project? Start with the [judge walkthrough](JUDGES.md), then open the [live demo](https://ultratokenizer.trionlabs.dev/judge/). It separates what a reviewer can inspect alone from the wallet-controlled issuance run. Automated reviewers can begin with the public [`llms.txt`](https://ultratokenizer.trionlabs.dev/llms.txt); the walkthrough states exactly which checks are reproducible without signing keys and which still require a confirmed live issuance.
 
-For a fresh reviewer-led SP1 run, request a bounded synthetic test allocation and proof credit from [`@yamanc` on Telegram](https://t.me/yamanc). Share only the public EVM address that should receive the test token. Never send a private key or seed phrase. Funding a request permits proving; it does not establish that a proof, mint or transfer succeeded.
+For a fresh reviewer-led SP1 run, request a bounded synthetic test allocation and PROVE budget from [`@yamanc` on Telegram](https://t.me/yamanc). Share only the public EVM address that should receive the test token. Never send a private key or seed phrase. Funding a request permits proving; it does not establish that a proof, mint or transfer succeeded.
 
 ## Why this stack
 

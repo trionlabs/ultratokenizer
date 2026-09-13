@@ -217,7 +217,7 @@ The single most useful file for a language model is [llms-full.txt](${SITE_ORIGI
 
 An unauthorised agent can reproduce the repository tests, inspect deployment and discovery data, compare contract bytecode, and audit a published receipt. It cannot create a new live issuance from public files alone: Demo 08 is bound to the designated presenter wallet, issuer and wallet signing keys are not published, and remote proof fulfillment is an external dependency. Read ${SITE_ORIGIN}/api/config for current readiness; \`readiness.canStart\` is only permission to begin, never evidence of a completed proof or mint.
 
-For a fresh reviewer-led SP1 run, contact [\`@yamanc\` on Telegram](https://t.me/yamanc) and provide only the public EVM recipient address. The operator can prepare a new wallet-bound synthetic allocation and bounded proof credit when the prover is available. Never send a private key, seed phrase or wallet export. Proof credit permits proving; it does not prove completion.
+For a fresh reviewer-led SP1 run, contact [\`@yamanc\` on Telegram](https://t.me/yamanc) and provide only the public EVM recipient address. The operator can prepare a new wallet-bound synthetic allocation and bounded PROVE budget when the prover is available. Never send a private key, seed phrase or wallet export. Funding permits proving; it does not prove completion.
 
 ## Pages
 
@@ -363,7 +363,7 @@ readiness signal. A value of \`readiness.canStart: true\` permits a run to begin
 it does not prove completion.
 
 An automated reviewer with a transaction-signing wallet can request a fresh
-reviewer-bound synthetic allocation and bounded SP1 credit from
+reviewer-bound synthetic allocation and bounded PROVE budget for the SP1 job from
 [\`@yamanc\` on Telegram](https://t.me/yamanc). It should provide only its public
 EVM recipient address and must never transmit a private key, seed phrase or wallet
 export. The result is valid only after proof acceptance, the Hedera transaction

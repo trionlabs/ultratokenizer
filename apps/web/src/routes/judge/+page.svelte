@@ -173,15 +173,12 @@
       </p>
       <p class="funded-note">
         Want to run it with your own wallet? Request a wallet-bound synthetic
-        allocation and bounded proof credit. Share only your public EVM address.
+        allocation and bounded PROVE budget. Share only your public EVM address.
       </p>
       <div class="actions">
         <a class="primary" href="/#engine">Start the live run</a>
-        <a
-          href="https://t.me/yamanc"
-          target="_blank"
-          rel="noreferrer"
-          >Request SP1 credit · @yamanc</a
+        <a href="https://t.me/yamanc" target="_blank" rel="noreferrer"
+          >Request proof budget · @yamanc</a
         >
         <a href="/demo/">See the mechanism</a>
       </div>
