@@ -206,8 +206,8 @@ await test('right import rejects malformed private identities before any inserti
     holder,
     milligrams: '1000',
   };
-  const importUnknown: (value: unknown) => unknown =
-    ledger.importAvailableRights as (value: unknown) => unknown;
+  const importUnknown = (value: unknown) =>
+    (ledger.importAvailableRights as (value: unknown) => unknown)(value);
   for (const value of [
     null,
     [],
