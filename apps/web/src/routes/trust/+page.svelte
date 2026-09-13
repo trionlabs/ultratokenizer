@@ -299,9 +299,10 @@
         <section class="portal-card">
           <h2>What this establishes</h2>
           <p class="muted">
-            These are current contract reads through the configured RPC,
-            compared with this app's pins. They are not an independent trust
-            root or a reconstruction of past authority.
+            These are current reads through this app's own RPC, checked against
+            the pins this app ships. They are not an independent trust root, and
+            they do not reconstruct who held authority at a past block. Obtain
+            your own Gate and pins before treating a receipt as evidence.
           </p>
           <details>
             <summary>Terms and observation hashes</summary>
@@ -332,10 +333,6 @@
                 )}>Save app audit pins</button
             >
           </div>
-          <p class="muted">
-            Obtain your trusted Gate and pins independently before using an
-            audit report as evidence.
-          </p>
         </section>
       </div>
     </div>
@@ -464,10 +461,7 @@
         </div>
       {/if}
       <p class="muted">
-        This is current attribution under a configured RPC and reviewed index.
-        It does not bootstrap independent trust or reconstruct the identities at
-        a past mint. Registry outages and changes do not prevent issuance or
-        offline receipt checks.
+        A registry outage does not block issuance or offline receipt checks.
       </p>
     </section>
   {/if}

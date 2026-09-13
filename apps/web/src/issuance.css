@@ -124,6 +124,7 @@ strong {
   max-width: none;
   margin: 17px 0 12px;
   color: var(--p-ink);
+  font-weight: 600;
   font-family: 'Manrope', sans-serif;
   font-size: clamp(2rem, 3vw, 2.5rem);
   font-weight: 400;

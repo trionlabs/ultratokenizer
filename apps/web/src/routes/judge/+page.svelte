@@ -283,7 +283,7 @@
   .track-list li {
     padding: 20px;
     border: 1px solid var(--p-line);
-    border-radius: 18px;
+    border-radius: 20px;
     background: var(--p-paper);
   }
   .track-head {
@@ -417,7 +417,7 @@
     gap: 12px;
     padding: 18px;
     border: 1px solid var(--p-line);
-    border-radius: 18px;
+    border-radius: 20px;
     background: color-mix(in srgb, var(--p-paper) 92%, var(--p-iris));
   }
   .live > span {
