@@ -181,13 +181,15 @@
         </div>
       </li>
     </ol>
-    <p class="path-note">
-      The proof and the mint are presenter-led: one designated wallet signs the
-      exact request. Want your own wallet in a run?
-      <a href="https://t.me/yamanc" target="_blank" rel="noreferrer"
-        >Ask for a budget</a
-      >.
-    </p>
+    <div class="path-foot">
+      <p class="path-note">
+        The proof and the mint are presenter-led: one designated wallet signs
+        the exact request. Want your own wallet in a run?
+        <a href="https://t.me/yamanc" target="_blank" rel="noreferrer"
+          >Ask for a budget</a
+        >.
+      </p>
+    </div>
   </section>
 
   <section class="overview-section" aria-label="How issuance is gated">
@@ -361,10 +363,13 @@
     gap: 8px 16px;
     margin-top: 12px !important;
   }
-  .path-note {
-    margin: 26px 0 0;
+  .path-foot {
+    margin-top: 26px;
     padding-top: 18px;
     border-top: 1px solid var(--p-line);
+  }
+  .path-note {
+    margin: 0;
     color: var(--p-muted);
     font-size: 0.78rem;
     max-width: 68ch;

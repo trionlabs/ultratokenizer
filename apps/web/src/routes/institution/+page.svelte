@@ -617,6 +617,16 @@
         {/if}
       </div>
       <aside>
+        {#snippet account(address: string)}
+          {#if policy.chainId === '296'}
+            <a
+              class="addr"
+              href={`https://hashscan.io/testnet/account/${address}`}
+              target="_blank"
+              rel="noopener noreferrer">{address}</a
+            >
+          {:else}{address}{/if}
+        {/snippet}
         <section class="portal-card">
           <h2>On-chain roles</h2>
           <dl>
@@ -628,11 +638,15 @@
             </div>
             <div>
               <dt>Configured issuer</dt>
-              <dd class="mono">{policy.issuerAddress}</dd>
+              <dd class="mono">{@render account(policy.issuerAddress)}</dd>
             </div>
             <div>
               <dt>Gate governor</dt>
-              <dd class="mono">{snapshot?.governor ?? 'Not observed'}</dd>
+              <dd class="mono">
+                {#if snapshot?.governor}{@render account(
+                    snapshot.governor,
+                  )}{:else}Not observed{/if}
+              </dd>
             </div>
             <div>
               <dt>Your role</dt>
@@ -641,7 +655,7 @@
                   ? 'Issuer signer'
                   : isGovernor
                     ? 'Demo admission authority'
-                    : 'Read-only visitor'}
+                    : 'Connect a wallet to act'}
               </dd>
             </div>
           </dl>

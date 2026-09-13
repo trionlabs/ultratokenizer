@@ -132,20 +132,20 @@
     </p>{/if}
   {#if deployment && snapshot}
     {@const policy = deployment.auditPolicy}
-    {#snippet contractLinks(address: string)}
+    {#snippet chainAddress(address: string, kind: 'contract' | 'account')}
       {#if policy.chainId === '296'}
-        <br /><a
-          href={`https://hashscan.io/testnet/contract/${address}`}
-          target="_blank"
-          rel="noopener noreferrer">HashScan</a
-        >
-        ·
         <a
-          href={`https://repo.sourcify.dev/296/${address}`}
+          class="addr"
+          href={`https://hashscan.io/testnet/${kind}/${address}`}
           target="_blank"
-          rel="noopener noreferrer">View source</a
-        >
-      {/if}
+          rel="noopener noreferrer">{address}</a
+        >{#if kind === 'contract'}<a
+            class="src"
+            href={`https://repo.sourcify.dev/296/${address}`}
+            target="_blank"
+            rel="noopener noreferrer">source</a
+          >{/if}
+      {:else}{address}{/if}
     {/snippet}
     <div class="portal-grid">
       <div>
@@ -176,19 +176,19 @@
             <div>
               <dt>Gate</dt>
               <dd class="mono">
-                {policy.gate}{@render contractLinks(policy.gate)}
+                {@render chainAddress(policy.gate, 'contract')}
               </dd>
             </div>
             <div>
               <dt>Governor</dt>
-              <dd class="mono">{snapshot.governor}</dd>
+              <dd class="mono">
+                {@render chainAddress(snapshot.governor, 'account')}
+              </dd>
             </div>
             <div>
               <dt>Token</dt>
               <dd class="mono">
-                {snapshot.rights.token}{@render contractLinks(
-                  snapshot.rights.token,
-                )}
+                {@render chainAddress(snapshot.rights.token, 'contract')}
               </dd>
             </div>
             <div>
@@ -197,7 +197,9 @@
             </div>
             <div>
               <dt>Permit signer · version {policy.issuerKeyVersion}</dt>
-              <dd class="mono">{snapshot.issuer.signer}</dd>
+              <dd class="mono">
+                {@render chainAddress(snapshot.issuer.signer, 'account')}
+              </dd>
             </div>
             <div>
               <dt>Issuer binding</dt>
@@ -266,9 +268,7 @@
             <div>
               <dt>Verifier</dt>
               <dd class="mono">
-                {snapshot.program.verifier}{@render contractLinks(
-                  snapshot.program.verifier,
-                )}
+                {@render chainAddress(snapshot.program.verifier, 'contract')}
               </dd>
             </div>
             <div>
@@ -379,11 +379,15 @@
                 </div>
                 <div>
                   <dt>NFT owner</dt>
-                  <dd class="mono">{entry.owner}</dd>
+                  <dd class="mono">
+                    {@render chainAddress(entry.owner, 'account')}
+                  </dd>
                 </div>
                 <div>
                   <dt>Service wallet</dt>
-                  <dd class="mono">{entry.wallet}</dd>
+                  <dd class="mono">
+                    {@render chainAddress(entry.wallet, 'account')}
+                  </dd>
                 </div>
                 <div>
                   <dt>Declaration hash</dt>
@@ -422,7 +426,12 @@
           <dl>
             <div>
               <dt>Identity registry</dt>
-              <dd class="mono">{discovery.identityRegistry.address}</dd>
+              <dd class="mono">
+                {@render chainAddress(
+                  discovery.identityRegistry.address,
+                  'contract',
+                )}
+              </dd>
             </div>
             <div>
               <dt>Implementation / runtime hash</dt>
@@ -433,7 +442,12 @@
             </div>
             <div>
               <dt>Registry owner</dt>
-              <dd class="mono">{discovery.identityRegistry.owner}</dd>
+              <dd class="mono">
+                {@render chainAddress(
+                  discovery.identityRegistry.owner,
+                  'account',
+                )}
+              </dd>
             </div>
           </dl>
         </details>
@@ -457,6 +471,27 @@
 </PortalShell>
 
 <style>
+  .addr {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px solid var(--p-line);
+  }
+  .addr:hover,
+  .addr:focus-visible {
+    color: var(--p-accent);
+    border-bottom-color: currentColor;
+  }
+  .src {
+    margin-left: 10px;
+    color: var(--p-accent);
+    font-size: 0.7rem;
+    text-decoration: none;
+  }
+  .src:hover,
+  .src:focus-visible {
+    text-decoration: underline;
+  }
+
   .discovery-section {
     margin-top: 24px;
   }
