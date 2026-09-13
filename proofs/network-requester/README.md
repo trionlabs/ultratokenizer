@@ -3,7 +3,7 @@
 This standalone crate is the credential-bearing boundary for Succinct mainnet. Its dependency lock
 is separate from the evidence workspace, so enabling the SP1 network stack cannot silently change
 the reviewed guest build. It accepts the integrity-sealed embedded V2 fixture or a separately
-reviewed deployment request whose exact request-file SHA-256 and EIP-712 digest are pinned in the shared schema, alongside one allowlisted synthetic PDF. Neither path accepts an
+reviewed deployment request whose exact request-file SHA-256 and EIP-712 digest are pinned in the shared schema, alongside one allowlisted synthetic PDF. A separate version-2 input review admits ten exact synthetic PDF hashes and one fixed Gate/token pair for document-service jobs. No path accepts an
 arbitrary document or caller-supplied witness.
 
 The staging operations are:
@@ -17,7 +17,11 @@ The staging operations are:
 - `stage-reviewed-synthetic` applies the same one-attempt boundary to a schema-2 preparation. It
   rechecks the review-file integrity hash, the compiled request/PDF authorization pins, authenticated
   deployment and recipient bindings, public values and the complete witness before loading the requester key.
-  A caller-supplied review file and its hash cannot authorize a different request.
+  A version-1 review cannot authorize a different request. A version-2 demo-job review can bind fresh
+  nonces and expiry only for the compiled ten-PDF batch and fixed deployment; its full request-file
+  hash and digest are sealed into the preparation and rechecked during staging. The local service
+  verifies the holder's EIP-712 signature before dispatch. The CLI remains a trusted operator tool,
+  not a substitute for holder consent or an arbitrary-document upload endpoint.
 - `inspect-stage` validates a staging journal without credentials or network access and prints only
   public identifiers plus hashes of artifact URIs.
 
@@ -60,7 +64,7 @@ cargo run --manifest-path proofs/network-requester/Cargo.toml --locked -- \
 
 `PrivateStdin` keeps the artifact out of the ordinary public-input class. It is not a claim that the
 proving network cannot process or observe the witness. Only the embedded fixture and the separately
-reviewed allowlisted synthetic PDF have an upload path; real Enpara evidence must remain local until its separate disclosure and authority
+reviewed allowlisted synthetic PDFs have an upload path; real Enpara evidence must remain local until its separate disclosure and authority
 model is approved.
 
 The completed 2026-09-11 staging run is summarized in the tracked

@@ -29,6 +29,26 @@ pub const REVIEWED_SYNTHETIC_REQUEST_SHA256: &str =
 pub const REVIEWED_SYNTHETIC_REQUEST_DIGEST: &str =
     "0xb3b67a75f974e694aa08d76a4fa7b6627e6392b79946b60e2e41d3734a03a29e";
 
+/// Closed demo batch. Request nonces and expiries may vary only within this explicitly
+/// selected deployment. The service authenticates holder consent before side effects;
+/// preparation/staging independently verify the signed PDF and complete request binding.
+pub const DEMO_JOB_GATE: &str = "0xe1e3a133335dc0feeb20397163c16e69f74919e3";
+pub const DEMO_JOB_TOKEN: &str = "0xa77e8a964606ce6994bd8d876445218da3f9e64f";
+pub const DEMO_JOB_SIGNER: &str =
+    "563a7d6493ac97c193e8f2fec36006ac3c73e61ee51fab5a40d4e4ca293c0157";
+pub const DEMO_JOB_PDFS: [&str; 10] = [
+    "d347db1afccd252908ce07fe3e068a1d5c448ee578ab1606c55739ed32862616",
+    "bc0a401d156c3558634041558f23f8bf65f120a9e1bb1294a2e5ae7b634ef733",
+    "6bb6d5964b3be698b665c1f47a3817cc82fe52b449b12746f652b69782df5d3f",
+    "24819ae010a712d5d0548af9f2c3807d86446496327e386cc909a4eaa24ef00a",
+    "bc4bfbf34335b3b09bcd457d845acf3f73cdfddfe021249cd18843f2724847c2",
+    "6bb73fd6878800c9a4460fec5b9c4077e0824e7119567bdd84dc9a523205aa8a",
+    "992af1b6d369be71846eb8e00c9703835783443f358b940ced4699e5cd745c44",
+    "595483b171e2214304251ce54b07e540702f03d14ef6d3fdab6a833bffbc89de",
+    "9a261180c0124cde2e307a2236baebc0a6375a9c6ff40a719aba8e2d34bfa2a5",
+    "89d1387faf907afa86a83747d86958ec4c500272efade779cc56b86177182883",
+];
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ReviewedSynthetic {
@@ -52,8 +72,24 @@ pub struct ReviewedSynthetic {
 
 impl ReviewedSynthetic {
     pub fn validate(&self) -> Result<(), &'static str> {
-        if self.schema_version != 1
-            || self.purpose != "authorized-synthetic-testnet-proof"
+        let authorized_input = match self.schema_version {
+            1 => {
+                self.purpose == "authorized-synthetic-testnet-proof"
+                    && self.signer_fingerprint == REVIEWED_SYNTHETIC_SIGNER
+                    && self.pdf_sha256 == REVIEWED_SYNTHETIC_PDF_SHA256
+                    && self.request_json_sha256 == REVIEWED_SYNTHETIC_REQUEST_SHA256
+                    && self.request_digest == REVIEWED_SYNTHETIC_REQUEST_DIGEST
+            }
+            2 => {
+                self.purpose == "authorized-synthetic-demo-job-proof"
+                    && self.signer_fingerprint == DEMO_JOB_SIGNER
+                    && DEMO_JOB_PDFS.contains(&self.pdf_sha256.as_str())
+                    && self.gate == DEMO_JOB_GATE
+                    && self.token == DEMO_JOB_TOKEN
+            }
+            _ => false,
+        };
+        if !authorized_input
             || self.source_kind != "synthetic-signed-pdf-capsule"
             || !self.synthetic
             || self.production_approved
@@ -65,10 +101,8 @@ impl ReviewedSynthetic {
             || !is_lower_hex(&self.issuer_id, 32, true)
             || !is_lower_hex(&self.source_id, 32, true)
             || self.amount_milligrams != "1000"
-            || self.signer_fingerprint != REVIEWED_SYNTHETIC_SIGNER
-            || self.pdf_sha256 != REVIEWED_SYNTHETIC_PDF_SHA256
-            || self.request_json_sha256 != REVIEWED_SYNTHETIC_REQUEST_SHA256
-            || self.request_digest != REVIEWED_SYNTHETIC_REQUEST_DIGEST
+            || !is_lower_hex(&self.request_json_sha256, 32, false)
+            || !is_lower_hex(&self.request_digest, 32, true)
         {
             return Err("Review is not the authorized synthetic testnet input.");
         }
@@ -633,6 +667,42 @@ mod tests {
             value.review_manifest_sha256 = Some("88".repeat(32));
             value.reviewed_synthetic = Some(review);
             assert!(value.seal().validate_synthetic().is_err());
+        }
+    }
+
+    #[test]
+    fn demo_job_review_admits_only_ten_pinned_inputs_and_one_deployment() {
+        for pdf in DEMO_JOB_PDFS {
+            let mut input = reviewed();
+            input.schema_version = 2;
+            input.purpose = "authorized-synthetic-demo-job-proof".into();
+            input.gate = DEMO_JOB_GATE.into();
+            input.token = DEMO_JOB_TOKEN.into();
+            input.signer_fingerprint = DEMO_JOB_SIGNER.into();
+            input.pdf_sha256 = pdf.into();
+            input.request_json_sha256 = "ab".repeat(32);
+            input.request_digest = format!("0x{}", "cd".repeat(32));
+            assert!(input.validate().is_ok());
+            let original = input.commitment();
+            input.request_digest = format!("0x{}", "ef".repeat(32));
+            assert!(input.validate().is_ok());
+            assert_ne!(input.commitment(), original);
+            for mutation in 0..9 {
+                let mut changed = input.clone();
+                match mutation {
+                    0 => changed.pdf_sha256 = "99".repeat(32),
+                    1 => changed.pdf_sha256 = REVIEWED_SYNTHETIC_PDF_SHA256.into(),
+                    2 => changed.signer_fingerprint = REVIEWED_SYNTHETIC_SIGNER.into(),
+                    3 => changed.gate = format!("0x{}", "11".repeat(20)),
+                    4 => changed.token = format!("0x{}", "22".repeat(20)),
+                    5 => changed.schema_version = 1,
+                    6 => changed.schema_version = 3,
+                    7 => changed.purpose = "authorized-synthetic-testnet-proof".into(),
+                    _ => changed.amount_milligrams = "999".into(),
+                }
+                assert!(changed.validate().is_err());
+            }
+            assert!(input.validate_files(b"unapproved PDF", b"{}").is_err());
         }
     }
 
