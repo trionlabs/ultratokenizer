@@ -1,29 +1,37 @@
 <script lang="ts">
-  // One hash pins down thirteen separate fields at once. The fields fan into a
+  // One hash pins down fifteen separate fields at once. The fields fan into a
   // single point, and nothing about the fan implies an order between them.
+  // Chain and gate sit apart because they are EIP-712 domain members, not
+  // fields of the request: they bind the same digest to one chain and one
+  // contract without being hashed as part of the struct.
   type Side = 'left' | 'right';
 
   const leftEdge = 132;
   const rightEdge = 188;
   const chipHeight = 16;
-  const pill = { x: 116, y: 228, width: 88, height: 26 };
+  const pill = { x: 116, y: 206, width: 88, height: 26 };
+  const domain = { x: 90, y: 242, width: 140, height: 20 };
 
+  // The fifteen members of IssuanceRequest, in the order they are hashed.
+  // Pinned to packages/domain/src/request-digest.ts by demo-claims.test.mjs.
   const leftLabels = [
+    'SCHEMA VER',
+    'ACTION',
+    'REQUEST ID',
+    'TOKEN',
+    'RECIPIENT',
+    'AMOUNT',
+    'UNIT',
+    'ISSUER ID',
+  ];
+  const rightLabels = [
     'RESERVATION',
     'CLAIM COMMIT',
     'CLAIM USAGE',
     'POLICY VER',
     'RIGHTS VER',
-    'RECIPIENT',
-    'CHAIN ID',
-  ];
-  const rightLabels = [
-    'VALID UNTIL',
-    'ISSUER ID',
-    'AMOUNT',
-    'TOKEN',
     'NONCE',
-    'GATE',
+    'VALID UNTIL',
   ];
 
   function buildChip(label: string, side: Side, cy: number) {
@@ -39,10 +47,10 @@
 
   const chips = $derived([
     ...leftLabels.map((label, index) =>
-      buildChip(label, 'left', 26 + index * 25),
+      buildChip(label, 'left', 22 + index * 22),
     ),
     ...rightLabels.map((label, index) =>
-      buildChip(label, 'right', 38 + index * 25),
+      buildChip(label, 'right', 33 + index * 22),
     ),
   ]);
 
@@ -65,7 +73,7 @@
   aria-hidden="true"
   focusable="false"
 >
-  <!-- Pattern 1: all thirteen connectors start together, never staggered. -->
+  <!-- Pattern 1: all fifteen connectors start together, never staggered. -->
   <path class="connectors" d={connectors} stroke="var(--p-line)" />
 
   {#each chips as chip (chip.label)}
@@ -106,9 +114,30 @@
     font-family="ui-monospace, SFMono-Regular, Consolas, monospace"
     fill="var(--p-accent)">0xc591af7e</text
   >
+
+  <!-- Dashed, and outside the fan: the domain binds the digest without being
+       one of the hashed fields. -->
+  <rect
+    x={domain.x}
+    y={domain.y}
+    width={domain.width}
+    height={domain.height}
+    rx="8"
+    stroke="var(--p-line)"
+    stroke-dasharray="3 3"
+  />
+  <text
+    x={domain.x + domain.width / 2}
+    y={domain.y + 13}
+    text-anchor="middle"
+    font-size="9"
+    letter-spacing="0.08em"
+    fill="var(--p-muted)">DOMAIN · CHAIN · GATE</text
+  >
+
   <text
     x={pill.x + pill.width / 2}
-    y="272"
+    y="276"
     text-anchor="middle"
     font-size="9"
     letter-spacing="0.08em"
