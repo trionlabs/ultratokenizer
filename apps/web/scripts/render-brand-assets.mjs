@@ -36,19 +36,19 @@ const palette = {
 const stack =
   "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif";
 
-// The UT monogram, identical to static/favicon.svg: a T interlocked with a U
-// drawn as rectangles on one square field. Kept inline because the screenshot
-// needs real markup, not a file reference.
+// The UT monogram, traced pixel-exactly from the source artwork and identical
+// to static/favicon.svg and src/lib/components/BrandMark.svelte. Inline because
+// the screenshot needs real markup, not a file reference.
 const monogram = (
   size,
-) => `<svg width="${size}" height="${size}" viewBox="0 0 720 720" aria-hidden="true">
-    <rect width="720" height="720" fill="${palette.ink}"/>
+) => `<svg width="${size}" height="${size}" viewBox="0 0 512 512" aria-hidden="true">
+    <rect width="512" height="512" fill="${palette.ink}"/>
     <g fill="${palette.accentSoft}">
-      <rect x="72" y="96" width="576" height="120"/>
-      <rect x="300" y="216" width="120" height="227"/>
-      <rect x="72" y="276" width="120" height="347"/>
-      <rect x="528" y="276" width="120" height="347"/>
-      <rect x="72" y="503" width="576" height="120"/>
+      <rect x="112" y="120" width="288" height="60"/>
+      <rect x="226" y="180" width="60" height="116"/>
+      <rect x="112" y="210" width="60" height="174"/>
+      <rect x="340" y="210" width="60" height="174"/>
+      <rect x="112" y="324" width="288" height="60"/>
     </g>
   </svg>`;
 

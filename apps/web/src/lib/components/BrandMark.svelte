@@ -1,31 +1,33 @@
 <script lang="ts">
-  // The UT monogram: a T interlocked with a U on one square field. The same
-  // geometry is published as static/favicon.svg and rendered into the Open
-  // Graph card and the touch icon by scripts/render-brand-assets.mjs.
+  // The UT monogram, traced pixel-exactly from the source artwork: a T
+  // interlocked with a U on one square field. Stroke 60, mark 288 wide on a
+  // 512 field, sitting 8 units above centre — that offset is in the original,
+  // so it is kept rather than corrected.
   //
   // Drawn as rectangles rather than a letterform, so it is identical wherever
-  // it appears and does not depend on a font being available. The size is
-  // fixed in pixels: the mark is artwork, not text, and must not outgrow the
-  // header line when the reader scales text to 200%.
+  // it appears and never depends on a font. The size is fixed in pixels: the
+  // mark is artwork, not text, and must not outgrow the header line when the
+  // reader scales text to 200%.
   //
-  // The palette tokens live on `.live-shell`. The literal fallbacks keep the
-  // mark visible rather than black-on-black if it is ever rendered outside it.
-  let { size = 30 }: { size?: number } = $props();
+  // The source colours are exactly the palette tokens, so the mark tracks the
+  // theme. The literal fallbacks keep it visible rather than black-on-black if
+  // it is ever rendered outside `.live-shell`, where the tokens are defined.
+  let { size = 34 }: { size?: number } = $props();
 </script>
 
 <svg
   width={size}
   height={size}
-  viewBox="0 0 720 720"
+  viewBox="0 0 512 512"
   role="img"
   aria-label="Ultratokenizer"
 >
-  <rect width="720" height="720" fill="var(--p-ink, #302b38)" />
+  <rect width="512" height="512" fill="var(--p-ink, #302b38)" />
   <g fill="var(--p-accent-soft, #eeebf2)">
-    <rect x="72" y="96" width="576" height="120" />
-    <rect x="300" y="216" width="120" height="227" />
-    <rect x="72" y="276" width="120" height="347" />
-    <rect x="528" y="276" width="120" height="347" />
-    <rect x="72" y="503" width="576" height="120" />
+    <rect x="112" y="120" width="288" height="60" />
+    <rect x="226" y="180" width="60" height="116" />
+    <rect x="112" y="210" width="60" height="174" />
+    <rect x="340" y="210" width="60" height="174" />
+    <rect x="112" y="324" width="288" height="60" />
   </g>
 </svg>

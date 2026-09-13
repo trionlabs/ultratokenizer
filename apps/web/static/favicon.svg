@@ -1,15 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 720" role="img" aria-label="Ultratokenizer">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Ultratokenizer">
   <title>Ultratokenizer</title>
-  <!-- The UT monogram: a T interlocked with a U on one square field. Drawn as
-       rectangles, never as text, so it renders identically without a font. The
-       stroke is 120 and every gap is 60, which is what keeps it readable when
-       the tab shrinks it to 16px. -->
-  <rect width="720" height="720" fill="#302b38"/>
+  <!-- The UT monogram, traced pixel-exactly from the source artwork and kept in
+       sync with src/lib/components/BrandMark.svelte. Rectangles, never text, so
+       it renders identically without a font. -->
+  <rect width="512" height="512" fill="#302b38"/>
   <g fill="#eeebf2">
-    <rect x="72" y="96" width="576" height="120"/>
-    <rect x="300" y="216" width="120" height="227"/>
-    <rect x="72" y="276" width="120" height="347"/>
-    <rect x="528" y="276" width="120" height="347"/>
-    <rect x="72" y="503" width="576" height="120"/>
+    <rect x="112" y="120" width="288" height="60"/>
+    <rect x="226" y="180" width="60" height="116"/>
+    <rect x="112" y="210" width="60" height="174"/>
+    <rect x="340" y="210" width="60" height="174"/>
+    <rect x="112" y="324" width="288" height="60"/>
   </g>
 </svg>
