@@ -1,6 +1,6 @@
 # Ultratokenizer web
 
-A static SvelteKit token workspace and independent receipt verifier. The visual flow follows real session state; there are no runtime sample journeys or simulated completion states.
+A static SvelteKit token workspace, local signed-document journey and independent receipt verifier. The visual flow follows real session state; there are no runtime sample journeys or simulated completion states.
 
 Run from the repository root:
 
@@ -12,14 +12,14 @@ npm --prefix apps/web run dev
 
 ## Issuance
 
-The `/` route loads operator-provided deployment configuration from same-origin `/deployment.json` and imports a separate `ultratokenizer.issuance-bundle.v1` public bundle. Deployment v1 means native HTS; v2 explicitly selects native HTS or the complete admitted ATS profile. Their strict schemas and actual wallet/RPC implementation belong to [packages/issuance](../../packages/issuance/src/index.ts). Deployment files are bounded to 64 KiB while reading and imports alone do not call the configured RPC. No deployment, recipient, quantity, proof or successful outcome is supplied by default.
+The `/` route loads operator-provided deployment configuration from same-origin `/deployment.json`. Its document service authenticates an admitted signed PDF and prepares a request-bound public proof bundle; manual bundle import remains in the operator view. Deployment v1 means native HTS; v2 explicitly selects native HTS or the complete admitted ATS profile. Their strict schemas and actual wallet/RPC implementation belong to [packages/issuance](../../packages/issuance/src/index.ts). Deployment files are bounded to 64 KiB while reading and imports alone do not call the configured RPC. No deployment, recipient, quantity, proof or successful outcome is supplied by default.
 
 The amount is fixed by the canonical request, public values and permit bindings. There is no issuance amount editor: a complete 1 g claim issues exactly 1 g, once. The selected wallet must authorize that bound recipient. Every step is explicit: connect, validate the proof/permit and deployment pins, sign typed data, simulate current execution, submit the actual transaction, and reconcile its receipt and exact Gate event. Preflight success is never presented as a submitted or confirmed transaction.
 
 The product label is **zkPDF-backed token issuance**: the SP1 claim program verifies the sealed-PDF
 profile, not DKIM or email provenance. This does not add browser PDF parsing or accept arbitrary
-bank statements. The centered issuance view shows one current action and six steps: proof, wallet, verification,
-signing, mint and receipt. The app loads network configuration automatically before evidence input.
+bank statements. The centered issuance view has three steps: upload document, verify and mint,
+then review. Verification and minting have separate progress and wallet approvals within step two. The app loads network configuration automatically before evidence input.
 Normal holder views have no deployment-file upload or network-configuration step. Operators can
 open `/?operator=1` and select **Operator configuration** to import an independently reviewed
 deployment into the current tab. This opt-in exposes local tools only and grants no chain authority.
@@ -33,7 +33,7 @@ the shared client; only the package's matching recipient completes the wallet st
 stays in memory and is fetched again after a reload. Manual overrides are not persisted.
 
 The monochrome iris scene adapts the earlier document-to-coin design to actual session state.
-Loading a package shows its exact quantity without claiming verification. A seal appears after a
+Authenticated document intake shows its exact quantity without claiming a ZK proof exists. A seal appears after a
 successful proof check. The paper morphs into a coin only after receipt reconciliation; pending,
 unresolved and reverted transactions keep the mint step open. Pointer tilt, restrained motion and
 step transitions respect reduced-motion preferences. No animation advances the session.
@@ -50,11 +50,11 @@ view. Errors and recovery stay beside their action. The setup dialog supports Es
 feedback and focus return.
 Switching views does not create a transaction or change session state.
 
-The current accepted source is profile 2's synthetic signed capsule, restricted by the shared client to test deployments. Real cryptography does not make this real bank evidence, asset backing, custody or a redemption promise. This UI imports public proof artifacts; it neither reads private PDF/email evidence nor generates proofs. Actual local proof generation is a separate [proof runner workflow](../../proofs/README.md).
+The current accepted source is profile 2's synthetic signed capsule, restricted by the shared client to test deployments. Real cryptography does not make this real bank evidence, asset backing, custody or a redemption promise. The normal UI uploads one of the admitted synthetic signed PDFs to the same-origin local document service. That operator process runs native checks and coordinates the existing [proof runner workflow](../../proofs/README.md); the browser does not generate the SP1 proof. Arbitrary bank PDFs and email evidence remain unsupported.
 
-The full quantity, recipient and request data become public at onchain reservation/submission, even before successful issuance. Validation also sends the public proof to the explicitly configured RPC. The page never asks for a private document or private key.
+The full quantity, recipient and request data become public at onchain reservation/submission, even before successful issuance. Validation also sends the public proof to the explicitly configured RPC. The page accepts the admitted synthetic document and never asks for a private key. Uploading the PDF does not start paid work; the holder must authorize the exact request first.
 
-`src/lib/application/issuance-session.ts` owns presentation orchestration. Missing configuration/provider and rejected checks leave subsequent actions unavailable. Wallet account/network changes invalidate unsubmitted checks and signatures. Once a hash exists, its captured request/signature/client survive wallet changes; unresolved transactions block replacement and can be reconciled again. Session data is in memory: keep the page open for unresolved transactions, preserve the hash, and save confirmed receipts before leaving. A reload does not restore an unfinished session.
+`src/lib/application/issuance-session.ts` owns presentation orchestration. Missing configuration/provider and rejected checks leave subsequent actions unavailable. Wallet account/network changes invalidate unsubmitted checks and signatures. Once a hash exists, its captured request/signature/client survive wallet changes; unresolved transactions block replacement and can be reconciled again. The document journey retains its public job binding, signed request and any returned bundle/hash in session storage for read-only recovery. Restored data is untrusted and checked again. No PDF bytes or filename are stored there. Keep unresolved hashes and save confirmed receipts; clearing browser storage does not cancel a chain transaction or remote proof job.
 
 A transport error during a send can leave the broadcast outcome unknown even without a returned hash. The workspace blocks automatic retry. For issuance, a hash recovered from wallet activity can be checked against the captured request and exact Gate event. Starting again requires the user to inspect wallet activity and explicitly confirm that nothing was sent; this also clears preflight checks and the signature. Transfer and HTS association both retain the original client and frozen action, sender, token,
 chain, nonce and exact transfer fields before sending. Recovered hashes are checked against that
