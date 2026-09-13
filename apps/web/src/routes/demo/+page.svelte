@@ -22,6 +22,7 @@
       id: 'Prove',
       who: 'you',
       line: 'Your machine checks the signature and emits a small proof. The file never leaves.',
+      why: 'Otherwise you would upload a bank document to a server and have to trust whoever runs it.',
       aside:
         'zkPDF reads the signature. SP1 is the VM it runs in. The on-chain verifier is a third thing — step three.',
       items: [
@@ -29,6 +30,7 @@
           icon: 'lock' as const,
           label: 'Wallet bound',
           line: 'Your address sits inside the signed bytes.',
+          why: 'So a leaked document is worthless to anyone else.',
           visual: Step02Document,
           href: `${repo}proofs/claim-evidence/src/capsule.rs`,
         },
@@ -36,6 +38,7 @@
           icon: 'receipt' as const,
           label: 'One digest',
           line: 'Thirteen fields, one hash.',
+          why: 'So the proof cannot be replayed against another chain, contract or wallet.',
           visual: Step04Digest,
           href: `${repo}packages/domain/README.md#request-format-version-1`,
         },
@@ -43,6 +46,7 @@
           icon: 'shield' as const,
           label: 'Three languages',
           line: 'TypeScript, Rust and Solidity must agree.',
+          why: 'So a bug in one implementation cannot quietly change what gets minted.',
           visual: Step05Parity,
           href: `${repo}proofs/tools/check-request-parity.mjs`,
         },
@@ -52,12 +56,14 @@
       id: 'Authorise',
       who: 'the institution',
       line: 'One gram is set aside on chain, then a permit that expires in minutes.',
+      why: 'Otherwise the minter could issue any amount it liked and call it backed.',
       aside: '',
       items: [
         {
           icon: 'lock' as const,
           label: 'Reserved, not issued',
           line: 'Cap 1000, reserved 1000, issued 0.',
+          why: 'So the obligation is visible on chain before any token exists.',
           visual: Step07Reservation,
           href: `${repo}contracts/README.md#reservations-and-governance`,
         },
@@ -65,6 +71,7 @@
           icon: 'check' as const,
           label: 'All or nothing',
           line: 'Exactly 1.000 g, or no mint at all.',
+          why: 'So one right cannot be drained in slices across many mints.',
           visual: Step06Exact,
           href: `${repo}proofs/claim-evidence/src/lib.rs`,
         },
@@ -74,12 +81,14 @@
       id: 'Mint',
       who: 'the chain',
       line: 'Ten checks in one transaction. Any failure and nothing happens.',
+      why: 'Otherwise one operator could mint whatever they wanted and you would find out later.',
       aside: '',
       items: [
         {
           icon: 'shield' as const,
           label: 'One door',
           line: 'The adapter holds the only ISSUER role.',
+          why: 'So no admin key can inflate supply behind the Gate.',
           visual: Step09Ats,
           href: `${repo}contracts/ats/README.md#source-and-compiler-provenance`,
         },
@@ -87,6 +96,7 @@
           icon: 'close' as const,
           label: 'Fail-closed',
           line: 'A failed check reverts the whole transaction.',
+          why: 'So a partial failure can never leave a token minted without its accounting.',
           visual: Step08Gate,
           href: `${repo}contracts/src/IssuanceGate.sol`,
         },
@@ -96,12 +106,14 @@
       id: 'Evidence',
       who: 'anyone',
       line: 'All of it is deployed on Hedera testnet and checkable by anyone.',
+      why: 'Otherwise you would have to take our word for every claim on this page.',
       aside: '',
       items: [
         {
           icon: 'eye' as const,
           label: 'Registry',
           line: 'Three records, eight cross-checks each.',
+          why: 'So a reviewer resolves who the issuer is without asking us for the answer.',
           visual: Step10Registry,
           href: 'https://eips.ethereum.org/EIPS/eip-8004#registration-v1',
         },
@@ -232,6 +244,7 @@
         </div>
       </div>
       <p class="line">{current.line}</p>
+      <p class="why step-why"><span>Why</span>{current.why}</p>
       {#if current.aside}<p class="aside">{current.aside}</p>{/if}
 
       <ul class="items">
@@ -246,11 +259,13 @@
                   <strong>{item.label}</strong>
                   <small>{item.line}</small>
                 </span>
+                <span class="more">More</span>
               </summary>
               <div class="item-body">
+                <p class="why"><span>Why</span>{item.why}</p>
                 <div class="item-visual"><item.visual /></div>
                 <a href={item.href} target="_blank" rel="noopener noreferrer"
-                  >Source <Glyph name="arrow" size={12} /></a
+                  >Evidence <Glyph name="arrow" size={12} /></a
                 >
               </div>
             </details>
@@ -439,6 +454,31 @@
     font-size: 0.94rem;
     line-height: 1.5;
     max-width: 52ch;
+  }
+  .why {
+    margin: 0;
+    font-size: 0.79rem;
+    line-height: 1.5;
+    color: var(--p-muted);
+    max-width: 74ch;
+  }
+  .why span {
+    display: inline-block;
+    margin-right: 7px;
+    font-size: 0.6rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--p-accent);
+    font-weight: 700;
+  }
+  .step-why {
+    font-size: 0.85rem;
+  }
+  .more {
+    flex: none;
+    margin-left: auto;
+    font-size: 0.7rem;
+    color: var(--p-accent);
   }
   .aside {
     margin: 0;
