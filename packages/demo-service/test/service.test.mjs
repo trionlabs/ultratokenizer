@@ -646,3 +646,44 @@ await test('submitted-proof continuation observes the same job without credentia
   assert.equal(f.counts.reserve, 1);
   assert.equal(f.counts.prove, 1);
 });
+
+await test('terminal proof rejection retains the reservation and forbids restart or paid retry', async (t) => {
+  const f = await fixture(t, { failure: 'prove' });
+  const prepared = await f.prepare();
+  const approval = await f.sign(prepared);
+  await f.service.start(prepared.jobId, approval);
+  await f.settle();
+  const reservation = f.store.get(prepared.jobId).reservation;
+  let observations = 0;
+  f.runtime.checkSubmittedProofRecovery = async () => ({
+    journalHash: 'retained',
+  });
+  f.runtime.observeSubmittedProof = async () => {
+    observations++;
+    throw new ServiceError('proof_request_rejected');
+  };
+  await f.service.resumeSubmittedProof(prepared.jobId);
+  await f.settle();
+  const result = await f.service.status(prepared.jobId);
+  assert.equal(result.status, 'attention_required');
+  assert.equal(result.detailCode, 'proof_request_rejected');
+  assert.equal(result.canRetry, false);
+  assert.equal(result.bundleReady, false);
+  assert.deepEqual(f.store.get(prepared.jobId).reservation, reservation);
+  const repeats = await Promise.all(
+    Array.from({ length: 8 }, () => f.service.start(prepared.jobId, approval)),
+  );
+  assert.ok(
+    repeats.every((value) => value.detailCode === 'proof_request_rejected'),
+  );
+  await assert.rejects(f.service.resumeSubmittedProof(prepared.jobId), {
+    code: 'proof_request_uncertain',
+  });
+  await assert.rejects(f.service.resumePreparedProof(prepared.jobId), {
+    code: 'proof_request_uncertain',
+  });
+  assert.equal(observations, 1);
+  assert.equal(f.counts.reserve, 1);
+  assert.equal(f.counts.prove, 1);
+  assert.equal(f.counts.permit, 0);
+});

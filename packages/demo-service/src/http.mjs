@@ -26,6 +26,8 @@ const ERRORS = {
   reservation_uncertain:
     'The reservation needs reconciliation before another attempt.',
   proof_request_uncertain: 'The submitted proof request needs reconciliation.',
+  proof_request_rejected:
+    'The proof service rejected this request. Minting is unavailable and no automatic retry will occur.',
   proof_observation_unavailable:
     'Proof status is temporarily unavailable. The existing request is retained and will not be submitted again.',
   proof_deadline_elapsed:

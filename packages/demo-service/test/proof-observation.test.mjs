@@ -14,6 +14,7 @@ function reply(extra = {}) {
     proofAvailable: false,
     deadlinePassed: false,
     executionStatus: 2,
+    fulfillmentStatus: extra.proofAvailable ? 3 : 2,
     proofVerified: false,
     automaticRetryAllowed: false,
     ...extra,
@@ -71,6 +72,10 @@ await test('invalid journals and contradictory observations are never retried', 
     },
     async () => reply({ requestId: `0x${'ff'.repeat(32)}` }),
     async () => reply({ deadlineUnix: 201 }),
+    async () => reply({ fulfillmentStatus: 0 }),
+    async () => reply({ fulfillmentStatus: 7 }),
+    async () => reply({ fulfillmentStatus: '4' }),
+    async () => reply({ fulfillmentStatus: 4, proofAvailable: true }),
   ]) {
     let reads = 0;
     await assert.rejects(
@@ -83,6 +88,36 @@ await test('invalid journals and contradictory observations are never retried', 
       { code: 'proof_request_uncertain' },
     );
     assert.equal(reads, 1);
+  }
+});
+await test('terminal network outcomes stop immediately even after successful execution', async () => {
+  for (const fulfillmentStatus of [4, 5, 6]) {
+    let reads = 0,
+      sleeps = 0;
+    const updates = [];
+    await assert.rejects(
+      observeSubmittedRequest(
+        options(
+          async () => {
+            reads++;
+            return reply({ fulfillmentStatus });
+          },
+          {
+            sleep: async () => sleeps++,
+            update: async (...args) => updates.push(args),
+          },
+        ),
+      ),
+      {
+        code:
+          fulfillmentStatus === 6
+            ? 'proof_deadline_elapsed'
+            : 'proof_request_rejected',
+      },
+    );
+    assert.equal(reads, 1);
+    assert.equal(sleeps, 0);
+    assert.deepEqual(updates, []);
   }
 });
 await test('the exact request deadline ends observation without any replacement request', async () => {

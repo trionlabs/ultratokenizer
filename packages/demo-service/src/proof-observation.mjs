@@ -34,11 +34,22 @@ export async function observeSubmittedRequest({
         typeof observed.proofAvailable === 'boolean' &&
         typeof observed.deadlinePassed === 'boolean' &&
         Number.isInteger(observed.executionStatus) &&
+        Number.isInteger(observed.fulfillmentStatus) &&
+        observed.fulfillmentStatus >= 1 &&
+        observed.fulfillmentStatus <= 6 &&
+        (!observed.proofAvailable || observed.fulfillmentStatus === 3) &&
         observed.proofVerified === false &&
         observed.automaticRetryAllowed === false,
       'proof_request_uncertain',
     );
     failures = 0;
+    // Pinned Succinct fulfillment values: 4 unfulfillable, 5 reverted,
+    // 6 expired. Execution may have succeeded before a proof was rejected.
+    // These outcomes never authorize a replacement request or budget release.
+    if ([4, 5].includes(observed.fulfillmentStatus))
+      throw new ServiceError('proof_request_rejected');
+    if (observed.fulfillmentStatus === 6)
+      throw new ServiceError('proof_deadline_elapsed');
     if (observed.deadlinePassed || now() >= deadline)
       throw new ServiceError('proof_deadline_elapsed');
     if (observed.proofAvailable) return observed;
