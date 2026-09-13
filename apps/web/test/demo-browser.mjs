@@ -101,10 +101,12 @@ try {
     await expect(page.locator('.items > li')).toHaveCount(4);
     // The proof's disclosure boundary is stated, not implied by "never leaves".
     await expect(page.locator('.items')).toContainText('What stays hidden');
-    // The three names a reader would otherwise conflate are told apart.
+    // The two things a reader would otherwise conflate are told apart: the
+    // program running, and its completed Groth16 proof coming back.
     const aside = page.locator('.aside');
-    await expect(aside).toContainText('zkPDF reads the signature');
-    await expect(aside).toContainText('SP1 is the VM');
+    await expect(aside).toContainText('synthetic PDF');
+    await expect(aside).toContainText('inside SP1');
+    await expect(aside).toContainText('are separate steps');
     await page.locator('.items summary').first().click();
     await expect(page.locator('.items details[open]')).toHaveCount(1);
     await expect(page.locator('.items details[open] a')).toHaveAttribute(

@@ -97,6 +97,25 @@
           ? 'Checking signed request…'
           : 'Checking Hedera authorization…',
   );
+  // A disabled primary action has five independent causes here. Three of them
+  // print a notice further down the section and two printed nothing at all, so
+  // the hint under the button repeated "Sign to start verification" while the
+  // button could not be pressed. Name the actual cause instead.
+  let verifyBlocked = $derived(
+    unresolved
+      ? 'A previous wallet action is still unresolved. Finish or reconcile it before starting this request.'
+      : busy
+        ? 'Waiting for the current check to finish.'
+        : !snapshot.deployment
+          ? 'The testnet configuration has not loaded. Verification cannot start yet.'
+          : !flow.document?.readiness.canStart &&
+              !flow.document?.existingJobStatus
+            ? 'The document service cannot start a new verification right now. The reason is shown below.'
+            : !flow.reviewed
+              ? 'Read and tick the acknowledgement above to enable verification.'
+              : undefined,
+  );
+
   let connecting = $derived(
     snapshot.busy === 'connecting' ||
       snapshot.pendingOperation === 'connecting',
@@ -599,6 +618,8 @@
                 ? 'The existing proof request is retained. No new proof will be requested.'
                 : 'No SP1 proof request has been submitted yet.'}
             </p>
+          {:else if verifyBlocked}
+            <p class="field-hint" role="status">{verifyBlocked}</p>
           {:else}
             <p class="field-hint">
               {flow.document?.existingJobStatus
@@ -1027,7 +1048,9 @@
   .loaded .disclosure-control {
     width: 100%;
     margin: 0;
-    font-size: 10px;
+    /* This checkbox gates the primary action; it was set smaller than the
+       hint text beneath it, which read as a paragraph rather than a control. */
+    font-size: 0.72rem;
     line-height: 1.5;
   }
   .loaded .change-document {
