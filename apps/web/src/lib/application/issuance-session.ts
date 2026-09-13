@@ -553,6 +553,46 @@ export function createIssuanceSession(
           update({ bundle: accepted, sourceProof: 'accepted' });
       });
     },
+    /** Restore only an already-submitted public intent; historical reconciliation cannot enable a new mint. */
+    restoreIssuedBundle(
+      value: unknown,
+      holderSignature: Hex,
+      transactionHash: string,
+    ) {
+      canReplace();
+      const bundle = parseIssuanceBundle(value);
+      if (state.deployment) assertBundleDeployment(bundle, state.deployment);
+      const hash = parseTransactionHash(transactionHash);
+      if (
+        typeof holderSignature !== 'string' ||
+        !/^0x[0-9a-fA-F]{130}$/.test(holderSignature)
+      )
+        throw new IssuanceClientError('invalid_signature');
+      const signature = holderSignature.toLowerCase() as Hex;
+      return run('confirming', async () => {
+        const reader = requireClient();
+        resetChecks();
+        attempted = { client: reader, bundle, signature };
+        submitted = { ...attempted, hash };
+        update({ bundle, transaction: { hash, outcome: 'unresolved' } });
+        try {
+          const receipt = await reader.wait(bundle, signature, hash);
+          update({ transaction: { hash, outcome: 'confirmed' }, receipt });
+        } catch (error) {
+          update({
+            transaction: {
+              hash,
+              outcome:
+                error instanceof IssuanceClientError &&
+                error.code === 'transaction_reverted'
+                  ? 'reverted'
+                  : 'unresolved',
+            },
+          });
+          throw error;
+        }
+      });
+    },
     disclose(value: boolean) {
       if (!state.busy) update({ disclosed: value });
     },

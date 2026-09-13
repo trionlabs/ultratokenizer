@@ -1692,3 +1692,90 @@ test('untrusted persisted approval and wallet changes cannot restore an accepted
   assert.equal(delayed.session.read().signature, undefined);
   assert.equal(delayed.session.read().preparedRequest, undefined);
 });
+
+test('submitted bundle restoration confirms only the retained historical intent without new signing or proof acceptance', async () => {
+  const fixture = await createFixture();
+  const { session, calls } = harness(fixture, {
+    wait: async (bundle, signature, hash) => {
+      calls.push('historical-wait');
+      assert.deepEqual(bundle, fixture.bundle);
+      assert.equal(signature, fixture.holderSignature.toLowerCase());
+      assert.equal(hash, fixture.transactionHash);
+      return fixture.receipt;
+    },
+  });
+  await session.restoreIssuedBundle(
+    fixture.bundle,
+    fixture.holderSignature,
+    fixture.transactionHash,
+  );
+  assert.equal(session.read().transaction.outcome, 'confirmed');
+  assert.equal(session.read().receipt, fixture.receipt);
+  assert.equal(session.read().sourceProof, 'unchecked');
+  assert.equal(session.read().signature, undefined);
+  assert.equal(session.read().simulation, 'unchecked');
+  assert.deepEqual(calls, ['historical-wait']);
+  await session.submit();
+  assert.deepEqual(calls, ['historical-wait']);
+});
+
+test('a wrong restoration hash retains an unresolved intent and can recover without enabling another send', async () => {
+  const fixture = await createFixture();
+  const wrongHash = `0x${'98'.repeat(32)}`;
+  const { session, calls } = harness(fixture, {
+    wait: async (_bundle, _signature, hash) => {
+      calls.push('historical-wait');
+      if (hash === wrongHash)
+        throw new IssuanceClientError('issuance_mismatch');
+      return fixture.receipt;
+    },
+  });
+  await session.restoreIssuedBundle(
+    fixture.bundle,
+    fixture.holderSignature,
+    wrongHash,
+  );
+  assert.deepEqual(session.read().transaction, {
+    hash: wrongHash,
+    outcome: 'unresolved',
+  });
+  assert.equal(session.read().receipt, undefined);
+  assert.throws(() => session.clearPreparedRequest(), /Reconcile/);
+  await session.submit();
+  assert.deepEqual(calls, ['historical-wait']);
+  await session.recoverIssuanceHash(fixture.transactionHash);
+  assert.equal(session.read().transaction.outcome, 'confirmed');
+  assert.equal(session.read().transaction.hash, fixture.transactionHash);
+  assert.equal(session.read().sourceProof, 'unchecked');
+});
+
+test('submitted restoration rejects malformed public inputs before a historical RPC call', async () => {
+  const fixture = await createFixture();
+  const { session, calls } = harness(fixture);
+  for (const restore of [
+    () =>
+      session.restoreIssuedBundle(
+        {
+          ...fixture.bundle,
+          request: { ...fixture.bundle.request, amount: '1' },
+        },
+        fixture.holderSignature,
+        fixture.transactionHash,
+      ),
+    () =>
+      session.restoreIssuedBundle(
+        fixture.bundle,
+        '0x01',
+        fixture.transactionHash,
+      ),
+    () =>
+      session.restoreIssuedBundle(
+        fixture.bundle,
+        fixture.holderSignature,
+        '0x00',
+      ),
+  ])
+    assert.throws(restore, IssuanceClientError);
+  assert.deepEqual(calls, []);
+  assert.equal(session.read().transaction, undefined);
+});
