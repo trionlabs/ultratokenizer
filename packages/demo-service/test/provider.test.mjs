@@ -17,9 +17,12 @@ import {
   getIssuerPermitTypedData,
   parseIssuanceRequest,
 } from '../../../dist/domain/src/index.js';
-import { ISSUANCE_GATE_ABI } from '../../issuance/dist/index.js';
+import {
+  ISSUANCE_GATE_ABI,
+  IssuanceClientError,
+} from '../../issuance/dist/index.js';
 import { issuerProvider } from '../src/issuer-provider.mjs';
-import { RuntimeAdapter } from '../src/runtime.mjs';
+import { RuntimeAdapter, reservationFailure } from '../src/runtime.mjs';
 
 const testKey = `0x${'11'.repeat(32)}`;
 const issuer = privateKeyToAccount(testKey);
@@ -195,4 +198,26 @@ await test('terms are marked checked only against matching canonical Gate data',
   const bad = await r.configuration();
   assert.equal(bad.terms.checked, false);
   assert.equal(bad.readiness.canStart, false);
+});
+
+// A full backing pool is a read-only rejection: openPreparedReservation raises
+// it from its preflight, before signing or broadcasting. Latching the issuer's
+// nonce stream on it would make one oversized document stop reservations for
+// every later document until the process restarts.
+await test('a full backing pool does not latch the reservation lane', () => {
+  const adapter = new RuntimeAdapter('/nowhere', {});
+  assert.equal(adapter.reservationUncertain, false);
+  assert.equal(
+    reservationFailure(new IssuanceClientError('capacity_exceeded')),
+    'capacity_exceeded',
+  );
+});
+
+await test('any other reservation failure latches the nonce stream', () => {
+  for (const error of [
+    new IssuanceClientError('transaction_uncertain'),
+    new Error('socket hang up'),
+    undefined,
+  ])
+    assert.equal(reservationFailure(error), 'reservation_uncertain');
 });

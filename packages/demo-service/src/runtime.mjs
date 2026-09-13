@@ -39,6 +39,19 @@ import { credential, issuerProvider } from './issuer-provider.mjs';
 import { checkBudgetReview } from './budget.mjs';
 
 /** Concrete local adapter. Configuration is operator-owned; request bodies never choose tools or pins. */
+/**
+ * Classifies a failed reservation attempt. `capacity_exceeded` comes only from
+ * the read-only preflight inside `openPreparedReservation`, which runs before
+ * anything is signed or broadcast, so the issuer nonce is untouched and the
+ * next document may still reserve. Every other failure may have left a
+ * transaction in flight, and the caller must stop using that nonce stream.
+ */
+export function reservationFailure(error) {
+  return error?.code === 'capacity_exceeded'
+    ? 'capacity_exceeded'
+    : 'reservation_uncertain';
+}
+
 export class RuntimeAdapter {
   static async load(root, configPath) {
     const config = await readJson(configPath, 32 * 1024);
@@ -455,12 +468,9 @@ export class RuntimeAdapter {
       await writeNew(join(folder, 'reservation.json'), result);
       return result;
     } catch (error) {
-      this.reservationUncertain = true;
-      throw new ServiceError(
-        error?.code === 'capacity_exceeded'
-          ? 'capacity_exceeded'
-          : 'reservation_uncertain',
-      );
+      const code = reservationFailure(error);
+      if (code === 'reservation_uncertain') this.reservationUncertain = true;
+      throw new ServiceError(code);
     }
   }
   async prove(job, folder, update) {
