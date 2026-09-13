@@ -237,7 +237,6 @@
 
 <PortalShell current="demo">
   <section class="masthead" aria-label="Summary">
-    <p class="eyebrow">How it works</p>
     <h1>How a signed gold document becomes a token on Hedera</h1>
     <p class="standing">
       Deployed on Hedera testnet. <strong
@@ -250,7 +249,9 @@
   </section>
 
   <section class="thesis" aria-label="What is different here">
-    <p class="thesis-head">Three questions, three separate answers.</p>
+    <p class="thesis-head">
+      Most systems answer all three with one trusted server.
+    </p>
     <ol>
       <li>
         <span class="q">Is the document real?</span>
@@ -265,10 +266,6 @@
         <span class="a">the Gate, on Hedera</span>
       </li>
     </ol>
-    <p class="thesis-foot">
-      Most systems answer all three with one trusted server. Each answer here is
-      checkable on its own, by someone who does not trust us.
-    </p>
   </section>
 
   <!-- One column carries every way of moving: the four steps and the Back and
@@ -483,7 +480,7 @@
        diagram and the detail rows take the room. */
     .masthead h1,
     .standing,
-    .thesis-foot {
+    .thesis-head {
       max-width: 68ch;
     }
   }
@@ -497,8 +494,8 @@
   }
   .panel {
     grid-area: panel;
-    margin-top: 8px;
-    padding-top: 10px;
+    margin-top: 6px;
+    padding-top: 8px;
     border-top: 1px solid var(--p-line);
   }
   .panel-head {
@@ -607,9 +604,11 @@
     border-top: 1px solid var(--p-line);
   }
   .thesis-head {
-    margin: 0 0 6px;
-    font-size: 0.82rem;
-    font-weight: 500;
+    margin: 0 0 7px;
+    font-size: 0.78rem;
+    font-weight: 400;
+    line-height: 1.45;
+    color: var(--p-muted);
   }
   .thesis ol {
     display: grid;
@@ -640,16 +639,9 @@
     font-weight: 600;
     color: var(--p-accent);
   }
-  .thesis-foot {
-    margin: 6px 0 0;
-    font-size: 0.75rem;
-    line-height: 1.45;
-    color: var(--p-muted);
-    max-width: 124ch;
-  }
   .standing {
     margin: 7px 0 0;
-    padding: 9px 12px;
+    padding: 7px 12px;
     border-radius: 10px;
     background: #f6e9e6;
     color: #8b3f3f;
