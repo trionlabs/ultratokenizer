@@ -1425,6 +1425,32 @@ await test('issuance receipt export binds the actual call bytes and canonical lo
   );
 });
 
+await test('issuance receipt recovery accepts uppercase signature hex as the same canonical bytes', async (t) => {
+  const { state, client, hash, holderSignature } = await rpcFixture(t);
+  state.receiptTo = request.gate;
+  const uppercase = `0x${holderSignature.slice(2).toUpperCase()}` as Hex;
+  assert.notEqual(uppercase, holderSignature);
+  const receipt = await client.wait(bundle, uppercase, hash);
+  assert.equal(receipt.transaction?.hash, hash);
+  assert.equal(receipt.holderSignature, holderSignature.toLowerCase());
+  assert.equal(state.sends, 0);
+  assert.equal(state.signs, 0);
+});
+
+await test('issuance receipt recovery rejects malformed holder signatures before RPC', async (t) => {
+  const { state, client, hash, holderSignature } = await rpcFixture(t);
+  let reads = 0;
+  state.onRpcRequest = () => reads++;
+  for (const value of [
+    '0x',
+    '0x' + 'ab'.repeat(64),
+    holderSignature + '00',
+    '0x' + 'zz'.repeat(65),
+  ])
+    await assert.rejects(client.wait(bundle, value as Hex, hash));
+  assert.equal(reads, 0);
+});
+
 const proofExport = {
   status: 'verified_groth16_export',
   proofMode: 'groth16',

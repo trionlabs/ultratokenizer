@@ -283,6 +283,7 @@ export function createIssuanceClient(input: {
     ): Promise<IssuanceReceipt> {
       const bundle = bundleForDeployment(value);
       const hash = parseTransactionHash(transactionHash);
+      const signature = bytes(holderSignature, 65, 65);
       // Historical reconciliation does not require a live permit or the currently selected wallet.
       const receipt = await canonicalReceipt(hash);
       let transaction;
@@ -319,7 +320,7 @@ export function createIssuanceClient(input: {
           encodeFunctionData({
             abi: ISSUANCE_GATE_ABI,
             functionName: 'issue',
-            args: toIssueArgs(bundle, holderSignature),
+            args: toIssueArgs(bundle, signature),
           })
       )
         throw new IssuanceClientError('issuance_mismatch');
@@ -372,7 +373,7 @@ export function createIssuanceClient(input: {
           format: RECEIPT_FORMAT,
           request: bundle.request,
           requestDigest: digest,
-          holderSignature,
+          holderSignature: signature,
           permit: bundle.permit,
           issuerSignature: bundle.issuerSignature,
           publicValues: bundle.publicValues,
