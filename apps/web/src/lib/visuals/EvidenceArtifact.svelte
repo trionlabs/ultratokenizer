@@ -250,7 +250,7 @@
     color: var(--p-accent);
   }
   .sheet-top > span {
-    font-size: 8px;
+    font-size: 0.62rem;
     letter-spacing: 1px;
   }
   .proof-sheet > strong {
