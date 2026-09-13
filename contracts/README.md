@@ -43,6 +43,20 @@ The actual broadcaster must equal `INITIALIZER`. If it also equals `GOVERNOR`, t
 
 No live deployment or transaction is part of the test commands. Script tests use the actual direct verifier with a local HTS model, so they demonstrate configuration and caller handling, not native fees or token creation. Real execution requires a correctly funded signer, target relay and network-valid token expiry/renewal settings.
 
+The HTS script supplies `Expiry(TOKEN_EXPIRY_SECOND, address(0), 0)`: it does not configure an
+auto-renew payer or period. Its adapter creates only a supply key and exposes no expiry-maintenance
+method. These are native HTS provisioning limitations; they do not describe the ATS backend.
+Missing an admin key does **not** make the expiry impossible to extend: Hedera's
+[TokenUpdate reference](https://docs.hedera.com/reference/protobuf/token/tokenupdate) permits
+expiry-only updates without that key, and its
+[TokenCreate reference](https://docs.hedera.com/reference/protobuf/token/tokencreate) allows a
+payer to extend an immutable token's expiry. This repository has no automated renewal operation.
+The [SDK update documentation](https://docs.hedera.com/native/tokens/update) currently says token
+rent is not enforced; a configured timestamp alone therefore does not establish an imminent token
+shutdown. A long-lived native HTS deployment still needs an owner, funding and a tested native
+expiry-update procedure. Recheck the target network's rules before deployment; this note does not
+claim that renewal was executed on a live token.
+
 ## Modules
 
 - `RequestHash.sol`: exact version-one EIP-712 request and issuer-permit digests.
@@ -104,6 +118,23 @@ The reservation fixes all those values permanently. Issuance must match recipien
 `backingPools(issuerId, token)` exposes `(cap, pending, outstanding)`. Only governance may set a cap through `setBackingCap(issuerId, token, cap)`, and it cannot reduce the cap below pending plus outstanding. An unconfigured pool has zero capacity. Opening a reservation adds its full amount to pending; a successful issue moves the same amount from pending to outstanding. Mint or transfer failure reverts every change. Expired pending reservations remain counted until `expireReservation` or revocation releases them.
 
 A live issuer key or the governor can permanently revoke a reservation. Anyone may call `expireReservation(issuerId, reservationId)` at or after its expiry. Either releases unused pending exposure at most once. Neither can release consumed exposure or clear a used claim. This package has no burn/redemption settlement path, so outstanding is cumulative and never decremented. Permit or reservation expiry cannot extinguish minted liability. Caps are separately governed per issuer/token; a shared physical pool across issuers or tokens requires separate exclusive allocation and reconciliation.
+
+Issuer-key revocation is narrower than reservation cancellation. A reservation records its opening
+key version in `ReservationOpened`, but does not retain that version in its storage tuple.
+`revokeIssuerKey(issuerId, 1)` rejects later permits and new reservations using version 1; it neither
+revokes earlier reservations nor releases their pending exposure. An active version 2 key may sign
+a fresh permit for the same request and existing reservation, subject to every other issuance
+check. Client deployment pins must also admit the new issuer version. This supports continuity
+across key rotation, but is not issuer-wide incident containment: stop issuance with the applicable
+Gate pause or policy/rights revocation when needed, then review and explicitly revoke affected
+reservations through the governor or an active issuer key. The revoked key cannot cancel them.
+
+An authorized issuer can open multiple pending reservations carrying the same supplied digest,
+because `openReservation` accepts that digest rather than reconstructing a complete request.
+That is capacity occupancy, not a route to two successful mints: `reservationId` is inside the
+holder-signed request digest, so changing it changes the digest. Only the reservation named by
+that request can match it, and the consumed digest and claim checks reject subsequent issuance.
+Extraneous reservations continue to occupy pending capacity until explicitly revoked or expired.
 
 The governor address is immutable. A reviewed multisignature account can implement that authority; membership changes happen in that account. Governance can append issuer-key, source-key, program, policy and rights versions, permanently revoke them, set backing caps, and pause or resume issuance. Existing version contents cannot be rewritten or reactivated. Registration and revocation emit inspectable records. Source-key expiry is not modeled in the current source registry; source revocation and signed claim expiry are separate checks.
 
