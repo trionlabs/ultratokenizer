@@ -7,6 +7,7 @@ it does not assert that a remote CI run passed.
 | Packages                                                      | Local gate                                                                                                    | CI job                                 | Boundary                                                                                                            |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | Root application; domain, audit, issuance, institution        | `npm run check`                                                                                               | `validate`                             | Type/lint/build and local unit/integration checks                                                                   |
+| Local document demo service                                   | `npm run check:demo-service` (included in `check`)                                                            | `validate`                             | HTTP, durable jobs, holder authorization and injected proof/chain transports; no paid requests or live mint         |
 | Web                                                           | `npm run check:web`, `npm run build:web`; `test:browser`, `test:browser:backends`, `test:browser:institution` | `validate`, `browser-verification`     | Static application, holder, institution and trust browser flows with synthetic transports                           |
 | Observation worker                                            | `npm run check:workers`, `npm run build:workers`                                                              | `validate`                             | Actual local workerd; dry-run build, no deployment                                                                  |
 | Hedera provisioning (separate npm lock)                       | `npm run check:hedera-provisioning`, `npm run check:ats:hfs`                                                  | `validate`, `ats-acceptance`           | Offline SDK transport, exact constructor sizing, graph ordering and local EVM runtime preparation; no live HFS send |
@@ -26,3 +27,9 @@ for this job. Native dependency fetching is distinct from an operational proof/n
 
 Live proof acceptance, Hedera provisioning, funded wallet flows, source authority and physical
 fulfillment require separately recorded evidence. Passing these gates does not close those exits.
+
+The document browser checks use synthetic API, proof and wallet responses against the production
+UI. They cover the three-step journey, receipt recovery and first-screen controls at desktop
+viewport sizes. They do not establish that a remote prover fulfilled a request. The local demo
+service is an operator process with issuer capabilities; it is separate from the observation-only
+edge worker and is never deployed by these checks.

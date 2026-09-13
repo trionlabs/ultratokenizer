@@ -1,0 +1,13 @@
+{
+  "name": "@ultratokenizer/demo-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "start": "node src/main.mjs"
+  }
+}

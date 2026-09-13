@@ -28,13 +28,15 @@
     "check:evidence": "cargo test --manifest-path proofs/Cargo.toml --locked -p ultratokenizer-pdf-evidence -p ultratokenizer-claim-evidence -p ultratokenizer-claim-runner -p ultratokenizer-pdf-runner -p ultratokenizer-network-request-schema --all-targets && cargo clippy --manifest-path proofs/Cargo.toml --locked -p ultratokenizer-pdf-evidence -p ultratokenizer-claim-evidence -p ultratokenizer-claim-runner -p ultratokenizer-pdf-runner -p ultratokenizer-network-request-schema --all-targets -- -D warnings && npm run check:enpara",
     "check:parity": "cargo +1.96.0 build --manifest-path proofs/Cargo.toml --locked -p ultratokenizer-claim-runner && npm --prefix packages/domain run build && node proofs/tools/check-request-parity.mjs",
     "build:workers": "npm --prefix workers/issuance run build",
-    "check": "npm run check:blueprint && npm run check:domain && npm run check:audit && npm run check:issuance && npm run check:institution && npm run check:web && npm run check:workers && npm run check:hedera-provisioning",
+    "check": "npm run check:blueprint && npm run check:domain && npm run check:audit && npm run check:issuance && npm run check:institution && npm run check:demo-service && npm run check:web && npm run check:workers && npm run check:hedera-provisioning",
     "check:institution": "npm --prefix packages/institution test",
     "check:enpara": "cargo fmt --manifest-path proofs/enpara-evidence/Cargo.toml -- --check && cargo test --manifest-path proofs/enpara-evidence/Cargo.toml --locked --all-targets && cargo clippy --manifest-path proofs/enpara-evidence/Cargo.toml --locked --all-targets -- -D warnings",
     "check:hedera-provisioning": "npm --prefix packages/hedera-provisioning test",
     "check:ats:hfs": "ULTRATOKENIZER_ATS_LOCAL_ARTIFACTS=contracts/ats/build node --test packages/hedera-provisioning/test/ats-input.test.mjs packages/hedera-provisioning/test/ats-graph.test.mjs packages/hedera-provisioning/test/ats-preparation.test.mjs",
     "check:network-requester": "cargo +1.96.0 fmt --manifest-path proofs/network-requester/Cargo.toml -- --check && cargo +1.96.0 test --manifest-path proofs/network-requester/Cargo.toml --locked --all-targets && cargo +1.96.0 clippy --manifest-path proofs/network-requester/Cargo.toml --locked --all-targets -- -D warnings",
-    "prepare:web": "npm --prefix packages/issuance run build && node scripts/prepare-web-config.mjs"
+    "prepare:web": "npm --prefix packages/issuance run build && node scripts/prepare-web-config.mjs",
+    "check:demo-service": "npm --prefix packages/domain run build && npm --prefix packages/issuance run build && npm --prefix packages/institution run build && npm --prefix packages/demo-service test",
+    "demo": "npm run prepare:web && npm run build:web && node scripts/start-document-demo.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
