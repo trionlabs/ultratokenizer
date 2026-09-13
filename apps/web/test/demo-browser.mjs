@@ -52,7 +52,9 @@ try {
     for (const width of [1440, 768, 390, 320]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto(demo, { waitUntil: 'networkidle' });
-      await expect(page.locator('.rail button')).toHaveCount(steps.length);
+      await expect(page.locator('.rail button.rail-step')).toHaveCount(
+        steps.length,
+      );
       // The wide diagram sets 9-unit type; under 760px the same progression
       // is carried by the text list instead, and exactly one of them shows.
       const narrow = width <= 760;
@@ -179,7 +181,7 @@ try {
     await isolate(page, external, published);
     await page.setViewportSize({ width: 1440, height: 950 });
     const current = () =>
-      page.locator('.rail button[aria-current="step"]').innerText();
+      page.locator('.rail button.rail-step[aria-current="step"]').innerText();
 
     for (let index = 0; index < steps.length; index += 1) {
       await page.goto(`${demo}?step=${index + 1}`, {

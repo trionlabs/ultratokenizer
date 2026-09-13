@@ -255,10 +255,9 @@
     </p>
   </section>
 
-  <section class="stage-wrap" aria-label="The engine">
-    <EngineStage {step} />
-  </section>
-
+  <!-- One column carries every way of moving: the four steps and the Back and
+       Next controls under them. The stage and the step's own copy then share
+       the wide column, so the page has no empty gutter. -->
   <div class="reader">
     <nav class="rail" aria-label="Steps">
       {#each steps as item, index}
@@ -271,38 +270,36 @@
           onclick={() => go(index)}><span>{index + 1}</span>{item.id}</button
         >
       {/each}
+      <div class="nav">
+        <button
+          class="move"
+          type="button"
+          disabled={step === 0}
+          onclick={() => go(step - 1)}
+          aria-label="Previous step"><Glyph name="back" size={15} /></button
+        >
+        {#if last}
+          <a class="move primary" href="/trust/"
+            >See it on chain <Glyph name="arrow" size={15} /></a
+          >
+        {:else}
+          <button
+            class="move primary"
+            type="button"
+            onclick={() => go(step + 1)}
+            >Next <Glyph name="arrow" size={15} /></button
+          >
+        {/if}
+      </div>
     </nav>
 
+    <section class="stage-wrap" aria-label="The engine">
+      <EngineStage {step} />
+    </section>
+
     <section class="panel" aria-label={current.id}>
-      <!-- Navigation rides with the heading so Next never falls below the
-           fold, however long the detail under a step gets. -->
-      <div class="panel-head">
-        <div>
-          <p class="who">{current.who}</p>
-          <h2>{current.id}</h2>
-        </div>
-        <div class="nav">
-          <button
-            class="move"
-            type="button"
-            disabled={step === 0}
-            onclick={() => go(step - 1)}
-            aria-label="Previous step"><Glyph name="back" size={15} /></button
-          >
-          {#if last}
-            <a class="move primary" href="/trust/"
-              >See it on chain <Glyph name="arrow" size={15} /></a
-            >
-          {:else}
-            <button
-              class="move primary"
-              type="button"
-              onclick={() => go(step + 1)}
-              >Next <Glyph name="arrow" size={15} /></button
-            >
-          {/if}
-        </div>
-      </div>
+      <p class="who">{current.who}</p>
+      <h2>{current.id}</h2>
       <p class="line">{current.line}</p>
       <p class="why step-why"><span>Why</span>{current.why}</p>
       {#if current.aside}<p class="aside">{current.aside}</p>{/if}
@@ -384,6 +381,7 @@
                     >One met, one deployed, two partly. Nothing hidden.</small
                   >
                 </span>
+                <span class="more" aria-hidden="true"></span>
               </summary>
               <div class="item-body">
                 <ul class="criteria">
@@ -426,25 +424,42 @@
     gap: 2px;
   }
   :global(.portal-shell .masthead h1) {
-    font-size: clamp(1.5rem, 3vw, 2.15rem);
-    letter-spacing: -0.04em;
-    margin: 0;
-  }
-
-  .stage-wrap {
-    margin: 6px 0 0;
+    font-size: clamp(1.35rem, 2.3vw, 1.72rem);
+    font-weight: 450;
+    letter-spacing: -0.025em;
+    line-height: 1.2;
+    margin: 1px 0 0;
   }
 
   .reader {
     display: grid;
-    grid-template-columns: 190px minmax(0, 1fr);
-    gap: 0 40px;
+    grid-template-columns: 172px minmax(0, 1fr);
+    grid-template-areas:
+      'rail stage'
+      'panel panel'
+      'tail tail';
+    column-gap: 32px;
     align-items: start;
     border-top: 1px solid var(--p-line);
-    padding-top: 12px;
+    padding-top: 11px;
+  }
+
+  .stage-wrap {
+    grid-area: stage;
+    min-width: 0;
+  }
+  .stage-wrap :global(.stage) {
+    max-width: min(772px, 80vh);
+  }
+  .panel {
+    grid-area: panel;
+    margin-top: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--p-line);
   }
 
   .rail {
+    grid-area: rail;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -493,7 +508,7 @@
   .panel {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     min-width: 0;
   }
   .who {
@@ -506,26 +521,26 @@
   }
   :global(.portal-shell .panel h2) {
     margin: 0;
-    font-size: clamp(1.4rem, 2.6vw, 1.85rem);
-    font-weight: 650;
-    letter-spacing: -0.035em;
-    line-height: 1;
+    font-size: clamp(1.2rem, 2vw, 1.46rem);
+    font-weight: 450;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
   }
   .line {
     margin: 0;
-    font-size: 0.94rem;
-    line-height: 1.5;
-    max-width: 52ch;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    max-width: 76ch;
   }
   .thesis {
-    margin-top: 16px;
-    padding: 14px 0 12px;
+    margin-top: 13px;
+    padding: 12px 0 10px;
     border-top: 1px solid var(--p-line);
   }
   .thesis-head {
-    margin: 0 0 9px;
-    font-size: 0.86rem;
-    font-weight: 650;
+    margin: 0 0 8px;
+    font-size: 0.83rem;
+    font-weight: 550;
   }
   .thesis ol {
     display: grid;
@@ -538,10 +553,10 @@
   .thesis li {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
     min-width: 0;
-    padding: 10px 13px;
-    border-radius: 11px;
+    padding: 9px 12px;
+    border-radius: 10px;
     background: var(--p-accent-soft);
   }
   .thesis .q {
@@ -554,28 +569,28 @@
     color: var(--p-accent);
   }
   .thesis-foot {
-    margin: 9px 0 0;
+    margin: 7px 0 0;
     font-size: 0.75rem;
-    line-height: 1.55;
+    line-height: 1.45;
     color: var(--p-muted);
-    max-width: 78ch;
+    max-width: 124ch;
   }
   .standing {
-    margin: 8px 0 0;
-    padding: 10px 13px;
+    margin: 7px 0 0;
+    padding: 9px 12px;
     border-radius: 10px;
     background: #f6e9e6;
     color: #8b3f3f;
     font-size: 0.78rem;
-    line-height: 1.5;
-    max-width: 78ch;
+    line-height: 1.45;
+    max-width: 118ch;
   }
   .why {
     margin: 0;
     font-size: 0.79rem;
     line-height: 1.5;
     color: var(--p-muted);
-    max-width: 74ch;
+    max-width: 104ch;
   }
   .why span {
     display: inline-block;
@@ -608,12 +623,12 @@
     font-size: 0.76rem;
     line-height: 1.5;
     color: var(--p-muted);
-    max-width: 80ch;
+    max-width: 108ch;
   }
 
   .items {
     list-style: none;
-    margin: 4px 0 0;
+    margin: 2px 0 0;
     padding: 0;
     display: flex;
     flex-direction: column;
@@ -625,11 +640,11 @@
   .items summary {
     display: flex;
     align-items: center;
-    gap: 11px;
-    padding: 7px 2px;
+    gap: 10px;
+    padding: 4px 2px;
     cursor: pointer;
     list-style: none;
-    min-height: 42px;
+    min-height: 34px;
   }
   .items summary::-webkit-details-marker {
     display: none;
@@ -638,9 +653,9 @@
     flex: none;
     display: grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
+    width: 25px;
+    height: 25px;
+    border-radius: 7px;
     background: var(--p-accent-soft);
     color: var(--p-accent);
   }
@@ -745,21 +760,20 @@
     max-width: 62ch;
   }
 
-  .panel-head {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 14px;
-  }
+  /* Back and the forward control share a row while the forward label is
+     short; the last step's longer label takes a row of its own. */
   .nav {
     display: flex;
-    gap: 7px;
-    flex: none;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--p-line);
   }
   .tail {
-    grid-column: 1 / -1;
-    margin: 14px 0 0;
-    padding-top: 12px;
+    grid-area: tail;
+    margin: 10px 0 0;
+    padding-top: 9px;
     border-top: 1px solid var(--p-line);
     font-size: 0.76rem;
   }
@@ -769,19 +783,28 @@
     gap: 5px;
     color: var(--p-accent);
   }
-  button.move {
+  button.move,
+  .nav :global(a.move) {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    min-height: 42px;
-    padding: 9px 18px;
+    justify-content: center;
+    gap: 7px;
+    min-height: 38px;
+    padding: 8px 14px;
     border-radius: 999px;
     border: 1px solid var(--p-line);
     background: var(--p-paper);
     color: var(--p-ink);
-    font-size: 0.84rem;
+    font-size: 0.8rem;
+    text-decoration: none;
   }
-  button.move.primary {
+  button.move.primary,
+  .nav :global(a.move.primary) {
+    flex: 1 1 auto;
+    /* Never shrink below the label: a wide one wraps to its own row instead
+       of breaking across two lines inside the pill. */
+    min-width: max-content;
+    white-space: nowrap;
     background: var(--p-accent);
     border-color: var(--p-accent);
     color: white;
@@ -790,20 +813,53 @@
     opacity: 0.32;
   }
 
-  @media (max-width: 820px) {
+  @media (max-width: 880px) {
     .reader {
-      grid-template-columns: 1fr;
-      gap: 16px;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas:
+        'rail'
+        'stage'
+        'panel'
+        'tail';
+      row-gap: 14px;
     }
     .rail {
       flex-direction: row;
       flex-wrap: wrap;
+      align-items: center;
     }
     button.rail-step {
       width: auto;
     }
+    .nav {
+      margin: 0 0 0 auto;
+      padding: 0;
+      border-top: 0;
+    }
+    .panel {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+    }
+    button.move.primary,
+    .nav :global(a.move.primary) {
+      flex: none;
+    }
     .item-body {
       padding-left: 0;
+    }
+  }
+
+  /* Three questions side by side need about 170px each to stay readable. */
+  @media (max-width: 560px) {
+    .thesis ol {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .thesis li {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 3px 8px;
     }
   }
 </style>
