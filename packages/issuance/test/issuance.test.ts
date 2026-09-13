@@ -2165,7 +2165,10 @@ await test('prepared signing freshly rejects authority, replay and expiry change
         if (change === 'issuer') state.issuerRevoked = true;
         if (change === 'used') state.used = true;
         if (change === 'cap') state.cap = 0n;
-        if (change === 'reservation') state.reservationExists = true;
+        if (change === 'reservation') {
+          state.reservationExists = true;
+          state.reservedClaim = word('ab');
+        }
         if (change === 'expiry')
           state.timestamp = `0x${BigInt(request.validUntil).toString(16)}`;
         if (change === 'chain') state.walletChain = '0x1';
@@ -2452,6 +2455,22 @@ await test('public job approval restores an exact reserved or unreserved request
       assert.equal(state.sends, 0);
       assert.equal(state.proofReads, 0);
     });
+});
+
+await test('holder can re-sign the exact reserved request without another transaction or proof', async (t) => {
+  const { state, client, holderSignature } = await rpcFixture(t);
+  state.reservationExists = true;
+  state.pending = BigInt(request.amount);
+  assert.equal(await client.signRequest(preparedRequest), holderSignature);
+  assert.equal(state.signs, 1);
+  assert.equal(state.sends, 0);
+  assert.equal(state.proofReads, 0);
+  state.reservedClaim = word('ab');
+  await assert.rejects(
+    client.signRequest(preparedRequest),
+    hasCode('reservation_mismatch'),
+  );
+  assert.equal(state.signs, 1);
 });
 
 await test('restored approval rejects changed requests, wallets, signatures and other reservations', async (t) => {

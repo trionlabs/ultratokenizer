@@ -118,7 +118,7 @@ export function createIssuanceClient(input: {
     return signature;
   }
   async function preparedWallet(prepared: PreparedIssuanceRequest) {
-    const snapshot = await verifyPrepared(prepared);
+    const snapshot = await verifyPrepared(prepared, 'resumable');
     // Authority was admitted at this snapshot. Read the wallet directly and
     // recheck that block, without repeating the complete ATS graph admission.
     const [addresses, walletChain] = await Promise.all([
