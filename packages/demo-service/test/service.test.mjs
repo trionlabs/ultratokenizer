@@ -485,7 +485,7 @@ await test('concurrent distinct documents acquire only one dispatch slot before 
       f.service.start(second.jobId, signatures[1]),
     ]);
     assert.equal(results[1].status, 'blocked');
-    assert.equal(results[1].detailCode, 'proof_budget_unavailable');
+    assert.equal(results[1].detailCode, 'verification_in_progress');
     assert.equal(f.counts.reserve, 1);
     assert.equal(f.store.get(second.jobId).holderSignature, undefined);
   } finally {
@@ -508,7 +508,7 @@ await test('a durable interrupted dispatch blocks a new document after process r
     const restarted = new DemoService(f.runtime, reopened);
     const ready = await restarted.config();
     assert.equal(ready.readiness.canStart, false);
-    assert.equal(ready.readiness.blocker, 'proof_budget_unavailable');
+    assert.equal(ready.readiness.blocker, 'proof_request_uncertain');
     assert.equal(
       (await restarted.status(first.jobId)).status,
       'attention_required',
@@ -669,6 +669,10 @@ await test('terminal proof rejection retains the reservation and forbids restart
   assert.equal(result.detailCode, 'proof_request_rejected');
   assert.equal(result.canRetry, false);
   assert.equal(result.bundleReady, false);
+  assert.equal(
+    (await f.service.config()).readiness.blocker,
+    'proof_request_rejected',
+  );
   assert.deepEqual(f.store.get(prepared.jobId).reservation, reservation);
   const repeats = await Promise.all(
     Array.from({ length: 8 }, () => f.service.start(prepared.jobId, approval)),
@@ -686,4 +690,19 @@ await test('terminal proof rejection retains the reservation and forbids restart
   assert.equal(f.counts.reserve, 1);
   assert.equal(f.counts.prove, 1);
   assert.equal(f.counts.permit, 0);
+});
+
+await test('actual budget denial is preserved when no signed work occupies the service', async (t) => {
+  const f = await fixture(t);
+  const original = f.runtime.configuration;
+  f.runtime.configuration = async () => ({
+    ...(await original()),
+    readiness: { canStart: false, blocker: 'proof_budget_unavailable' },
+  });
+  assert.deepEqual((await f.service.config()).readiness, {
+    canStart: false,
+    blocker: 'proof_budget_unavailable',
+  });
+  assert.equal(f.counts.reserve, 0);
+  assert.equal(f.counts.prove, 0);
 });

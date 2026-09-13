@@ -16,7 +16,9 @@ const ERRORS = {
   proof_provider_unresolved:
     'The earlier proof request still needs provider reconciliation.',
   proof_budget_unavailable:
-    'The current proof run must finish or receive budget approval before another can start.',
+    'The approved proof budget is unavailable. An operator must review the budget before another request can start.',
+  verification_in_progress:
+    'An existing verification is still running. New requests wait until it is resolved.',
   operations_disabled: 'The operator has not enabled this proof run.',
   source_not_admitted:
     'This document signer is not admitted for this deployment.',

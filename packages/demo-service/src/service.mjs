@@ -52,16 +52,25 @@ export class DemoService {
         readiness: { canStart: false, blocker: 'reservation_uncertain' },
       };
     }
-    if (
-      this.running.size > 0 ||
-      [...this.store.jobs.values()].some(
-        (job) => job.holderSignature && !job.proof,
-      )
-    ) {
+    const retained = [...this.store.jobs.values()].find(
+      (job) => job.holderSignature && !job.proof,
+    );
+    if (this.running.size > 0 || (retained && ACTIVE.has(retained.status))) {
       return {
         ...config,
-        readiness: { canStart: false, blocker: 'proof_budget_unavailable' },
+        readiness: { canStart: false, blocker: 'verification_in_progress' },
       };
+    }
+    if (retained) {
+      const blocker = [
+        'proof_request_rejected',
+        'proof_deadline_elapsed',
+        'proof_observation_unavailable',
+        'proof_request_uncertain',
+      ].includes(retained.detailCode)
+        ? retained.detailCode
+        : 'proof_request_uncertain';
+      return { ...config, readiness: { canStart: false, blocker } };
     }
     return config;
   }
