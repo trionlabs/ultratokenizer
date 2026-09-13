@@ -11,7 +11,9 @@
   import { documentBlocker } from '../application/document-client';
   import { formatGrams, saveJson } from '../issuance';
   import Glyph from '../visuals/Glyph.svelte';
-  import EvidenceArtifact from '../visuals/EvidenceArtifact.svelte';
+  import EvidenceArtifact, {
+    type ProofStage,
+  } from '../visuals/EvidenceArtifact.svelte';
   import DocumentUpload from './DocumentUpload.svelte';
 
   let {
@@ -37,6 +39,25 @@
   let recoveryHash = $state('');
   let detailOpen = $state(false);
   const short = (value: string) => `${value.slice(0, 6)}…${value.slice(-4)}`;
+  // Every service status reaches the artifact. Only `queued` and `proving` used
+  // to, so the picture sat on "Ready to verify" for most of a run while the
+  // phase text beside it kept changing.
+  const artifactStage: Record<
+    NonNullable<typeof flow.status>['status'],
+    ProofStage
+  > = {
+    awaiting_signature: 'waiting',
+    blocked: 'attention',
+    reserving: 'preparing',
+    preparing_proof: 'preparing',
+    staging: 'preparing',
+    queued: 'queued',
+    proving: 'proving',
+    proof_ready: 'checking',
+    authorizing: 'authorizing',
+    ready_to_mint: 'ready',
+    attention_required: 'attention',
+  };
   let document = $derived(
     flow.document?.document ??
       (flow.job
@@ -120,7 +141,7 @@
       Document → token <span>{currentStep + 1} / 3</span>
     </p>
     <h1 id="issuance-title" tabindex="-1">
-      Your document. <em>Tokenized.</em>
+      Ownership Docs. <em>Verifiably tokenized.</em>
     </h1>
     <p>
       {snapshot.receipt
@@ -142,10 +163,7 @@
       outcome={snapshot.transaction?.outcome ??
         (snapshot.unknownSubmission === 'issuance' ? 'unresolved' : undefined)}
       emptyCaption="Waiting for your document"
-      proofStage={flow.status?.status === 'queued' ||
-      flow.status?.status === 'proving'
-        ? flow.status.status
-        : undefined}
+      proofStage={flow.status ? artifactStage[flow.status.status] : undefined}
       compact
     />
 
@@ -728,6 +746,7 @@
   }
   .document-phases > div:not(:last-child)::after {
     content: '';
+    transition: background 300ms;
     position: absolute;
     left: 13px;
     top: 30px;
@@ -738,6 +757,10 @@
   .document-phases > div > span {
     position: relative;
     z-index: 1;
+    transition:
+      color 300ms,
+      background 300ms,
+      border-color 300ms;
     width: 26px;
     height: 26px;
     display: grid;

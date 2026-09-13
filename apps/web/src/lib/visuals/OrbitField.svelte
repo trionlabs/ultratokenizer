@@ -59,6 +59,12 @@
   [data-phase='review'] .outer {
     transform: rotate(-15deg);
   }
+  [data-phase='authorization'] .outer {
+    transform: rotate(-2deg);
+  }
+  [data-phase='authorization'] .inner {
+    transform: rotate(58deg);
+  }
   [data-phase='proof'] .outer,
   [data-phase='mint'] .outer {
     transform: rotate(10deg);

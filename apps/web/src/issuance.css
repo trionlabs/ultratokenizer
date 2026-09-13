@@ -932,11 +932,21 @@
 .stage-action > :first-child {
   animation: action-enter 350ms ease-out;
 }
+/* The whole rail moves together. Without `color` here the numeral turned
+   white while the circle was still the page ground, so it vanished for the
+   length of the fade; the label and the connector stayed behind as well. */
 .flow-rail li > span {
   transition:
+    color 300ms,
     background 300ms,
     border-color 300ms,
     box-shadow 300ms;
+}
+.flow-rail li {
+  transition: color 300ms;
+}
+.flow-rail li::after {
+  transition: background 300ms;
 }
 @keyframes action-enter {
   from {

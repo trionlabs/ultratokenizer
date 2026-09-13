@@ -1,3 +1,54 @@
+<script module lang="ts">
+  /**
+   * The artifact's own vocabulary for a verification run. Callers map their
+   * backend statuses onto it, so the visual never has to know them.
+   */
+  export type ProofStage =
+    | 'waiting'
+    | 'preparing'
+    | 'queued'
+    | 'proving'
+    | 'checking'
+    | 'authorizing'
+    | 'ready'
+    | 'attention';
+
+  const stageCaption: Record<ProofStage, string> = {
+    waiting: 'Awaiting your approval',
+    preparing: 'Preparing the request',
+    queued: 'Waiting for SP1',
+    proving: 'SP1 proof in progress',
+    checking: 'Checking the returned proof',
+    authorizing: 'Requesting issuer approval',
+    ready: 'Ready to mint',
+    attention: 'Needs attention',
+  };
+
+  // Which stages are the service working, rather than waiting on a person.
+  const stageWorking: Record<ProofStage, boolean> = {
+    waiting: false,
+    preparing: true,
+    queued: true,
+    proving: true,
+    checking: true,
+    authorizing: true,
+    ready: false,
+    attention: false,
+  };
+
+  // The orbit advances with the run instead of sitting still for all of it.
+  const stageOrbit: Record<ProofStage, 'review' | 'proof' | 'authorization'> = {
+    waiting: 'review',
+    preparing: 'review',
+    queued: 'proof',
+    proving: 'proof',
+    checking: 'proof',
+    authorizing: 'authorization',
+    ready: 'authorization',
+    attention: 'review',
+  };
+</script>
+
 <script lang="ts">
   import { Spring, prefersReducedMotion } from 'svelte/motion';
   import Glyph from './Glyph.svelte';
@@ -18,10 +69,19 @@
     minted: boolean;
     outcome?: string;
     emptyCaption?: string;
-    proofStage?: 'queued' | 'proving';
+    proofStage?: ProofStage;
     compact?: boolean;
   } = $props();
   const tilt = new Spring({ x: 0, y: 0 }, { stiffness: 0.1, damping: 0.75 });
+  // A run the service is working shows as `working`, so the artifact keeps
+  // moving through the long middle of the flow instead of resting on `loaded`.
+  let working = $derived(
+    !minted &&
+      !outcome &&
+      !verified &&
+      !!proofStage &&
+      stageWorking[proofStage],
+  );
   let state = $derived(
     minted
       ? 'minted'
@@ -29,9 +89,11 @@
         ? outcome
         : verified
           ? 'verified'
-          : amount
-            ? 'loaded'
-            : 'empty',
+          : working
+            ? 'working'
+            : amount
+              ? 'loaded'
+              : 'empty',
   );
   let caption = $derived(
     minted
@@ -44,15 +106,13 @@
             ? 'Awaiting confirmation'
             : verified
               ? 'Proof verified'
-              : proofStage === 'queued'
-                ? 'Waiting for SP1'
-                : proofStage === 'proving'
-                  ? 'SP1 proof in progress'
-                  : amount
-                    ? 'Ready to verify'
-                    : configured
-                      ? (emptyCaption ?? 'Waiting for proof package')
-                      : 'Proof becomes token',
+              : proofStage
+                ? stageCaption[proofStage]
+                : amount
+                  ? 'Ready to verify'
+                  : configured
+                    ? (emptyCaption ?? 'Waiting for proof package')
+                    : 'Proof becomes token',
   );
   function move(event: PointerEvent) {
     if (prefersReducedMotion.current || event.pointerType !== 'mouse') return;
@@ -82,9 +142,11 @@
         ? 'mint'
         : verified
           ? 'proof'
-          : amount
-            ? 'review'
-            : 'document'}
+          : proofStage
+            ? stageOrbit[proofStage]
+            : amount
+              ? 'review'
+              : 'document'}
   />
   <div class="artifact-lift">
     <div class="artifact-body" class:is-coin={minted}>
@@ -350,8 +412,43 @@
     background: var(--p-accent);
     border-color: var(--p-accent);
   }
-  [data-state='pending'] .artifact-caption i {
+  [data-state='pending'] .artifact-caption i,
+  [data-state='working'] .artifact-caption i {
     animation: pulse 1.5s ease-in-out infinite;
+  }
+  /* While the service is working, one hairline sweeps the sheet. It is the
+     only motion that says "still running" without inventing progress. */
+  .proof-sheet::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--p-accent),
+      transparent
+    );
+    opacity: 0;
+  }
+  [data-state='working'] .proof-sheet::after {
+    animation: sweep 2.4s ease-in-out infinite;
+  }
+  @keyframes sweep {
+    0%,
+    100% {
+      opacity: 0;
+      transform: translateY(28px);
+    }
+    18%,
+    82% {
+      opacity: 0.55;
+    }
+    50% {
+      transform: translateY(228px);
+    }
   }
   [data-state='reverted'] .artifact-lift,
   [data-state='unresolved'] .artifact-lift {
@@ -380,7 +477,8 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .artifact-lift,
-    .artifact-caption i {
+    .artifact-caption i,
+    .proof-sheet::after {
       animation: none;
     }
     .artifact-body,
