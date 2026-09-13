@@ -135,6 +135,35 @@ test('a checkout without operator deployment files still builds a corpus', () =>
   strictEqual(bareFull.includes(deployment.auditPolicy.gate), false);
   strictEqual(bare['llms.txt'].includes(deployment.auditPolicy.gate), false);
   for (const page of SITE_PAGES) {
-    strictEqual(bare[page.markdown.slice(1)], assets[page.markdown.slice(1)]);
+    const mirror = bare[page.markdown.slice(1)];
+    // The Trust mirror carries the pinned contract set; the rest do not depend
+    // on the operator files at all and must be byte-identical either way.
+    if (page.route === '/trust/') {
+      strictEqual(mirror.includes(deployment.auditPolicy.gate), false);
+      ok(assets[page.markdown.slice(1)].includes(deployment.auditPolicy.gate));
+    } else {
+      strictEqual(mirror, assets[page.markdown.slice(1)]);
+    }
   }
+});
+
+test('the social card and icons are published and referenced', async () => {
+  // These are committed rasters, not build output: social platforms and iOS
+  // reject the site's SVG mark, so a missing file degrades silently.
+  // Prettier wraps long tags across lines, so match on collapsed whitespace
+  // rather than on the exact source formatting.
+  const head = (
+    await readFile(new URL('../src/app.html', import.meta.url), 'utf8')
+  ).replace(/\s+/g, ' ');
+  for (const asset of ['og.png', 'apple-touch-icon.png', 'favicon.svg']) {
+    const file = new URL(`../static/${asset}`, import.meta.url);
+    ok((await readFile(file)).byteLength > 0, `${asset} is empty or missing`);
+    ok(head.includes(asset), `${asset} is not referenced from app.html`);
+  }
+  // A large card needs the matching Twitter card type or it renders as a thumb.
+  ok(head.includes('twitter:card" content="summary_large_image"'));
+  ok(head.includes(`og:image" content="${SITE_ORIGIN}/og.png"`));
+  ok(head.includes('og:image:width" content="1200"'));
+  ok(head.includes('og:image:height" content="630"'));
+  ok(head.includes('og:image:alt"'), 'the card needs alternative text');
 });

@@ -279,7 +279,7 @@ function buildLlmsFull(deployment, discovery) {
 
   return `# ${SITE_NAME} — full corpus
 
-> ${SITE_TAGLINE}. This file is the complete, canonical description of the project for language models and automated reviewers. Every address and version below is generated from the same deployment configuration the live application loads.
+> ${SITE_TAGLINE}. This file is the complete, canonical description of the project for language models and automated reviewers.${pinned ? ' Every address and version below is generated from the same deployment configuration the live application loads.' : ''}
 
 Canonical site: ${SITE_ORIGIN}/
 Chain: ${SITE_CHAIN.name}, chain ID ${SITE_CHAIN.id}
@@ -363,8 +363,29 @@ ${claimsBoundary()}
 `;
 }
 
-/** @param {import('../src/lib/site-meta.js').SitePage} page */
-function buildPageMarkdown(page) {
+/**
+ * The Trust page's entire body is chain state fetched after hydration, so a
+ * crawler reading its HTML sees headings and nothing else. Its mirror carries
+ * the pinned set instead, which is what a reviewer actually came for.
+ *
+ * @param {import('../src/lib/site-meta.js').SitePage} page
+ * @param {Record<string, any> | null} deployment
+ * @param {Record<string, any> | null} discovery
+ */
+function pinnedAppendix(page, deployment, discovery) {
+  if (page.route !== '/trust/' || !deployment || !discovery) return '';
+  return `\n## Deployed contracts this page reads from chain\n\n${deployedAddresses(
+    deployment,
+    discovery,
+  )}\n\nThe complete set, including every runtime code hash, is served as JSON at ${SITE_ORIGIN}/deployment.json and ${SITE_ORIGIN}/discovery.json.\n`;
+}
+
+/**
+ * @param {import('../src/lib/site-meta.js').SitePage} page
+ * @param {Record<string, any> | null} deployment
+ * @param {Record<string, any> | null} discovery
+ */
+function buildPageMarkdown(page, deployment, discovery) {
   return `# ${page.title.split(/[—·]/)[0].trim()}
 
 > ${page.description}
@@ -373,7 +394,7 @@ Canonical page: ${SITE_ORIGIN}${page.route}
 Project: ${SITE_NAME} — ${SITE_TAGLINE}, ${SITE_CHAIN.name} chain ID ${SITE_CHAIN.id}.
 
 ${page.facts.map((fact) => `- ${fact}`).join('\n')}
-
+${pinnedAppendix(page, deployment, discovery)}
 ## Elsewhere
 
 ${SITE_PAGES.filter((other) => other.route !== page.route)
@@ -411,7 +432,8 @@ export function buildLlmAssets(deployment, discovery) {
   for (const page of SITE_PAGES) {
     assets[page.markdown.replace(/^\//, '')] = buildPageMarkdown(
       page,
-      deployment,
+      pinned?.deployment ?? null,
+      pinned?.discovery ?? null,
     );
   }
   return assets;

@@ -1,1 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#194e3d"/><text x="24" y="34" text-anchor="middle" font-family="Arial,sans-serif" font-size="38" font-weight="700" fill="#fff">u</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Ultratokenizer">
+  <title>Ultratokenizer</title>
+  <!-- The header brand mark: a tile rounded harder at the base than the top. -->
+  <path d="M14 2h20a10 10 0 0 1 10 10v15a17 17 0 0 1-17 17h-6A17 17 0 0 1 4 27V12A10 10 0 0 1 14 2z" fill="#75628f"/>
+  <text x="24" y="34.5" text-anchor="middle" fill="#fdfcfe"
+        font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif"
+        font-size="30" font-weight="650">u</text>
+</svg>

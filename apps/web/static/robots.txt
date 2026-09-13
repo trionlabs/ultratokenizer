@@ -5,54 +5,12 @@
 User-agent: *
 Allow: /
 
-# Documentation and research agents are explicitly welcome. The site is a
-# static, prerendered build with no user data and no authenticated surface.
-User-agent: ClaudeBot
-Allow: /
-
-User-agent: Claude-User
-Allow: /
-
-User-agent: Claude-SearchBot
-Allow: /
-
-User-agent: GPTBot
-Allow: /
-
-User-agent: OAI-SearchBot
-Allow: /
-
-User-agent: ChatGPT-User
-Allow: /
-
-User-agent: PerplexityBot
-Allow: /
-
-User-agent: Perplexity-User
-Allow: /
-
+# Google and Apple honour these separately from the rule above: they control
+# AI training and answer use, not crawling. Both are deliberately allowed.
 User-agent: Google-Extended
 Allow: /
 
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Applebot
-Allow: /
-
 User-agent: Applebot-Extended
-Allow: /
-
-User-agent: meta-externalagent
-Allow: /
-
-User-agent: Bytespider
-Allow: /
-
-User-agent: cohere-ai
 Allow: /
 
 Sitemap: https://ultratokenizer.trionlabs.dev/sitemap.xml

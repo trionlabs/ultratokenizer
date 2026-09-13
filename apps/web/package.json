@@ -17,7 +17,8 @@
     "test:browser:backends": "node test/backend-browser.mjs",
     "test:browser:institution": "node test/institution-browser.mjs",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "brand:render": "node scripts/render-brand-assets.mjs"
   },
   "dependencies": {
     "viem": "2.56.3"

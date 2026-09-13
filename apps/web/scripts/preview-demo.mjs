@@ -126,7 +126,9 @@ async function main() {
   if (!policy.startsWith('/*\n')) {
     throw new Error('Preview expects one global /* block in static/_headers.');
   }
-  for (const line of policy.split('\n').slice(1).filter(Boolean)) {
+  for (const line of policy.split('\n').slice(1)) {
+    if (line.startsWith('/')) break;
+    if (!line.trim() || line.trimStart().startsWith('#')) continue;
     const header = /^\s+([^:\s]+):\s*(.+)$/.exec(line);
     if (!header) throw new Error(`Unsupported static/_headers rule: ${line}`);
     headers[header[1]] = header[2];
