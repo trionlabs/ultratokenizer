@@ -48,13 +48,16 @@
 <style>
   .app-header {
     width: min(100% - 40px, 1400px);
-    min-height: 88px;
+    /* The brand lockup is 52px; this leaves it room and nothing spare. The
+       header test pins the box to be identical across routes, not to a
+       number, so the bar's height is a design choice made in one place. */
+    min-height: 72px;
     margin: 0 auto;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 12px 20px;
-    padding-block: 14px;
+    padding-block: 10px;
     border-bottom: 1px solid var(--p-line);
   }
   .brand-block {
