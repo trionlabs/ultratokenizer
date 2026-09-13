@@ -218,6 +218,28 @@ confirm the original transfer or HTS association with one send. This complements
 backend import checks above. It does not establish live RPC behavior or durable recovery across a
 page reload.
 
+### Cloudflare Pages
+
+`npm run deploy:web` prepares the public configuration, builds, and uploads
+`apps/web/build` with `wrangler pages deploy`. Set `CF_PAGES_PROJECT` to the
+project name; wrangler resolves its own credentials. Pages serves `_headers`
+verbatim, so the deployed site carries the same framing, MIME, referrer,
+permissions, opener and transport policy that `test:browser` asserts locally.
+
+The build runs where the private deployment record lives. `prepare:web` reads
+it from the Git-ignored `work/` tree and admits only the documented public
+Hedera testnet endpoint, so a hosted build environment would need that record
+copied into it; uploading the finished static output avoids that. Nothing in
+the repository names the project or the domain.
+
+The document journey on `/` calls same-origin `/api/*`, which is the local
+preparation service in `packages/demo-service`. That service binds `127.0.0.1`
+and holds the issuer credential, the institution ledger and the source
+documents, so it is not part of a public deployment and must not be exposed.
+On a hosted build those calls return 404 and the upload step reports that the
+document service is unavailable; every other route is self-contained. `/demo/`
+makes no chain call at all and is the entry point to link publicly.
+
 ## Institution and Trust workspaces
 
 `/demo/` teaches the protocol in four steps — Prove, Authorise, Mint, Evidence — named after who

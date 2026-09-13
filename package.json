@@ -37,7 +37,8 @@
     "prepare:web": "npm --prefix packages/issuance run build && node scripts/prepare-web-config.mjs",
     "check:demo-service": "npm --prefix packages/domain run build && npm --prefix packages/issuance run build && npm --prefix packages/institution run build && npm --prefix packages/demo-service test",
     "demo": "npm run prepare:web && npm run build:web && node scripts/start-document-demo.mjs",
-    "check:fixture-tools": "python3 proofs/tools/test_generate_fixture.py"
+    "check:fixture-tools": "python3 proofs/tools/test_generate_fixture.py",
+    "deploy:web": "npm run prepare:web && npm run build:web && node scripts/deploy-pages.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
