@@ -106,10 +106,10 @@
 
 <PortalShell current="trust">
   <p class="eyebrow">Deployment provenance</p>
-  <h1>Follow the authority.</h1>
+  <h1>Every address this app trusts, read from chain.</h1>
   <p class="intro">
-    Inspect the contracts, signing roles and source profile behind this
-    deployment. The Gate decides whether a token can be issued.
+    Contracts, signing roles and the source profile behind this deployment. The
+    Gate decides whether a token can be issued.
   </p>
   <div class="status-line">
     <p class="muted">
@@ -246,9 +246,8 @@
         <section class="portal-card">
           <h2>Proof and source</h2>
           <p class="muted">
-            zkPDF · SP1 Groth16. This profile authenticates a sealed synthetic
-            PDF, its embedded capsule and the exact quantity. It does not
-            extract arbitrary bank statements or implement zkEmail.
+            zkPDF · SP1 Groth16. The profile authenticates one sealed synthetic
+            PDF, its embedded capsule and the exact quantity. Nothing else.
           </p>
           <dl>
             <div>

@@ -284,15 +284,11 @@
     >
   {/snippet}
   <p class="eyebrow">Institution console</p>
-  <h1>Review. Authorize. Issue.</h1>
+  <h1>Reserve the allocation, then sign its permit.</h1>
   <p class="intro">
-    The issuer reserves an allocation and signs its permit. The demo authority
-    admits the configured signer and manages the Gate.
-  </p>
-  <p class="muted">
-    Signed source documents and proof preparation happen outside this browser.
-    This console starts with a public claim-proof export. Follow the
-    <a href="/demo/">demo institution workflow</a> from source to permit.
+    Source documents and proof preparation happen outside this browser; this
+    console starts with a public claim-proof export. See the
+    <a href="/demo/">full workflow</a>.
   </p>
   <div class="status-line">
     <div class="actions" role="group" aria-label="Institution role">
@@ -686,10 +682,7 @@
         <section class="portal-card">
           <h2>Evidence and authority</h2>
           <p class="muted">
-            This zkPDF profile authenticates a sealed synthetic PDF, its
-            embedded capsule and the complete quantity. It does not extract
-            arbitrary bank statements or authenticate email. Issuer authority
-            and physical custody are separate claims.
+            Issuer authority and physical custody are separate claims.
           </p>
           <p class="muted">
             ERC-8004 may index issuer and audit references. Registry records

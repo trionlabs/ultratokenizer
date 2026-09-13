@@ -261,7 +261,9 @@ try {
     ),
   ).toBeHidden();
   await expect(
-    page.getByRole('heading', { name: 'Follow the authority.' }),
+    page.getByRole('heading', {
+      name: 'Every address this app trusts, read from chain.',
+    }),
   ).toBeVisible();
   await expect(
     page.getByText('Observed at block 100', { exact: true }),
@@ -303,7 +305,9 @@ try {
   ).toBeVisible();
   await page.goto(new URL('institution/', base).href);
   await expect(
-    page.getByRole('heading', { name: 'Review. Authorize. Issue.' }),
+    page.getByRole('heading', {
+      name: 'Reserve the allocation, then sign its permit.',
+    }),
   ).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Connect wallet', exact: true }),

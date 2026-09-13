@@ -75,6 +75,7 @@
     margin-top: 20px;
   }
   :global(.portal-shell .muted) {
+    max-width: 68ch;
     color: var(--p-muted);
     font-size: 0.84rem;
   }
@@ -164,6 +165,7 @@
     margin-top: 4px;
   }
   :global(.portal-shell .notice) {
+    max-width: 68ch;
     padding: 16px 18px;
     border-radius: 12px;
     background: var(--p-accent-soft);
