@@ -603,7 +603,7 @@
             <p class="field-hint">
               {flow.document?.existingJobStatus
                 ? 'Sign the same request to resume its current status. This does not submit or pay for another proof.'
-                : 'First sign the exact request. After proof verification, confirm a separate mint transaction.'}
+                : 'Sign to start verification. When the proof is ready, confirm minting in your wallet.'}
             </p>
           {/if}
         {/if}
