@@ -36,7 +36,8 @@
     "check:network-requester": "cargo +1.96.0 fmt --manifest-path proofs/network-requester/Cargo.toml -- --check && cargo +1.96.0 test --manifest-path proofs/network-requester/Cargo.toml --locked --all-targets && cargo +1.96.0 clippy --manifest-path proofs/network-requester/Cargo.toml --locked --all-targets -- -D warnings",
     "prepare:web": "npm --prefix packages/issuance run build && node scripts/prepare-web-config.mjs",
     "check:demo-service": "npm --prefix packages/domain run build && npm --prefix packages/issuance run build && npm --prefix packages/institution run build && npm --prefix packages/demo-service test",
-    "demo": "npm run prepare:web && npm run build:web && node scripts/start-document-demo.mjs",
+    "build:demo-runtime": "npm --prefix packages/domain run build && npm --prefix packages/issuance run build && npm --prefix packages/institution run build",
+    "demo": "npm run build:demo-runtime && npm run prepare:web -- --input work/runtime/hedera-testnet/document-flow/deployment.json && npm run build:web && node scripts/start-document-demo.mjs",
     "check:fixture-tools": "python3 proofs/tools/test_generate_fixture.py",
     "deploy:web": "npm run prepare:web && npm run build:web && node scripts/deploy-pages.mjs"
   },

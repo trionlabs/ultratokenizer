@@ -1,14 +1,23 @@
 import { open, rename, rm, mkdir } from 'node:fs/promises';
+import { parseArgs } from 'node:util';
+import { isAbsolute, resolve, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   MAX_DEPLOYMENT_BYTES,
   parseDeploymentConfig,
 } from '../packages/issuance/dist/index.js';
 
 // Run through `npm run prepare:web` so the shared schema is freshly compiled.
-const input = new URL(
-  '../work/runtime/hedera-testnet/deployment.json',
-  import.meta.url,
-);
+const root = fileURLToPath(new URL('../', import.meta.url));
+const { values } = parseArgs({
+  options: {
+    input: {
+      type: 'string',
+      default: 'work/runtime/hedera-testnet/deployment.json',
+    },
+  },
+});
+const input = resolve(root, values.input);
 const output = new URL('../apps/web/static/deployment.json', import.meta.url);
 let ownsPending = false;
 const pending = new URL(
@@ -16,6 +25,8 @@ const pending = new URL(
   import.meta.url,
 );
 try {
+  if (isAbsolute(values.input) || relative(root, input).startsWith('..'))
+    throw new Error('Input must be inside the repository');
   const file = await open(input, 'r');
   let config;
   try {
@@ -67,7 +78,7 @@ try {
   console.log('Schema validation does not establish live contract admission.');
 } catch {
   console.error(
-    'Preparation failed; any previous public configuration is unchanged. Check work/runtime/hedera-testnet/deployment.json and use the documented public Hedera testnet endpoint.',
+    'Preparation failed; any previous public configuration is unchanged. Check the selected deployment file and use the documented public Hedera testnet endpoint.',
   );
   process.exitCode = 1;
 } finally {
