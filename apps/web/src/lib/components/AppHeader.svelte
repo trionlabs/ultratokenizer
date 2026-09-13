@@ -48,12 +48,7 @@
     {/each}
   </nav>
   <div class="header-actions">
-    {#if actions}{@render actions()}
-    {:else}<span class="read-mode"
-        >{current === 'demo' || current === 'judge'
-          ? 'Guide'
-          : 'Read-only'}</span
-      >{/if}
+    {#if actions}{@render actions()}{/if}
   </div>
 </header>
 
@@ -87,7 +82,7 @@
     align-items: center;
     gap: 8px;
     color: var(--p-ink);
-    font-size: 1.08rem;
+    font-size: 1rem;
     font-weight: 700;
     letter-spacing: -0.04em;
     text-decoration: none;
@@ -105,7 +100,7 @@
     padding-left: 10px;
     border-left: 1px solid var(--p-line);
     color: var(--p-muted);
-    font-size: 0.68rem;
+    font-size: 0.7rem;
     white-space: nowrap;
   }
   nav {
@@ -128,8 +123,8 @@
     border-radius: 24px;
     color: var(--p-muted);
     text-decoration: none;
-    font-size: 0.79rem;
-    font-weight: 550;
+    font-size: 0.78rem;
+    font-weight: 600;
   }
   nav a:hover,
   nav a[aria-current] {
@@ -146,11 +141,6 @@
     flex: 0 0 160px;
     min-height: 36px;
   }
-  .read-mode {
-    color: var(--p-muted);
-    font-size: 0.75rem;
-    padding: 8px 12px;
-  }
   .header-actions :global(.header-wallet) {
     display: inline-flex;
     align-items: center;
@@ -162,8 +152,8 @@
     border: 1px solid var(--p-accent);
     background: var(--p-accent);
     color: white;
-    font-size: 0.79rem;
-    font-weight: 650;
+    font-size: 0.78rem;
+    font-weight: 600;
   }
   .header-actions :global(.header-wallet:disabled) {
     color: var(--p-muted);
@@ -184,7 +174,7 @@
       padding-block: 12px;
     }
     .live-brand {
-      font-size: 0.94rem;
+      font-size: 0.88rem;
     }
     .engine-label {
       display: none;
@@ -195,7 +185,7 @@
     }
     .header-actions :global(.header-wallet) {
       padding: 8px 10px;
-      font-size: 0.72rem;
+      font-size: 0.7rem;
     }
     nav a {
       padding: 6px 9px;

@@ -26,6 +26,6 @@
 <style>
   .audit-context {
     margin-top: 12px;
-    font-size: 0.85rem;
+    font-size: 0.88rem;
   }
 </style>

@@ -415,7 +415,7 @@
   }
   .micro {
     font-size: 9px;
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: 0.09em;
     fill: var(--p-muted);
   }

@@ -257,7 +257,7 @@
     margin: 26px 0 21px;
     font-size: 27px;
     line-height: 1.12;
-    font-weight: 550;
+    font-weight: 600;
     letter-spacing: -1.1px;
   }
   .sheet-lines {

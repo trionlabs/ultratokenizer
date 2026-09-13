@@ -789,7 +789,7 @@
     margin: 10px 0 8px;
   }
   .document-heading > p:last-child {
-    font-size: 0.84rem;
+    font-size: 0.88rem;
     line-height: 1.5;
   }
   .document-heading .scene-kicker {
@@ -833,7 +833,7 @@
     font-size: 0.7rem;
   }
   .document-summary strong {
-    font-size: 0.86rem;
+    font-size: 0.88rem;
     overflow-wrap: anywhere;
   }
   .fixed-amount {
@@ -842,7 +842,7 @@
   }
   .fixed-amount strong {
     font-size: 25px;
-    font-weight: 550;
+    font-weight: 600;
     letter-spacing: -0.7px;
   }
   .fixed-amount span {
@@ -869,10 +869,10 @@
     flex-shrink: 0;
   }
   .issuer-card strong {
-    font-size: 0.86rem;
+    font-size: 0.88rem;
   }
   .issuer-context {
-    font-size: 0.69rem;
+    font-size: 0.7rem;
     color: var(--p-muted);
   }
   .issuer-card button {
@@ -928,7 +928,7 @@
     grid-column: 2;
     grid-row: 1;
     color: var(--p-muted);
-    font-size: 0.61rem;
+    font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.08em;
   }
@@ -940,20 +940,20 @@
     display: block;
     margin-bottom: 6px;
     color: var(--p-muted);
-    font-size: 0.61rem;
-    font-weight: 750;
+    font-size: 0.7rem;
+    font-weight: 700;
     letter-spacing: 0.13em;
   }
   .document-phases strong {
     display: block;
-    font-size: 0.82rem;
-    font-weight: 650;
+    font-size: 0.88rem;
+    font-weight: 600;
     line-height: 1.3;
   }
   .document-phases p {
     margin: 6px 0 0;
     color: var(--p-muted);
-    font-size: 0.69rem;
+    font-size: 0.7rem;
     line-height: 1.45;
   }
   .phase-done > span,
@@ -1000,7 +1000,7 @@
     max-width: 350px;
     margin: -3px 0 0;
     text-align: center;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     color: var(--p-muted);
     line-height: 1.6;
   }
@@ -1023,12 +1023,12 @@
   .loaded .document-summary strong {
     font-size: 14px;
     line-height: 1.4;
-    font-weight: 650;
+    font-weight: 600;
   }
   .loaded .fixed-amount strong {
     font-size: 28px;
     line-height: 1.15;
-    font-weight: 550;
+    font-weight: 600;
   }
   .loaded .issuer-card {
     padding: 0 0 14px;
@@ -1062,7 +1062,7 @@
     margin: 0;
     /* This checkbox gates the primary action; it was set smaller than the
        hint text beneath it, which read as a paragraph rather than a control. */
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     line-height: 1.5;
   }
   .loaded .change-document {

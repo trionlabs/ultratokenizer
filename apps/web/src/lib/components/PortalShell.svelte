@@ -34,7 +34,7 @@
     margin: auto;
     padding: 12px 0;
     color: var(--p-muted);
-    font-size: 0.75rem;
+    font-size: 0.78rem;
     border-top: 1px solid var(--p-line);
   }
   :global(.portal-shell h1) {
@@ -44,12 +44,12 @@
     margin: 9px 0 14px;
   }
   :global(.portal-shell h2) {
-    font-size: 1.14rem;
+    font-size: 1.15rem;
     letter-spacing: -0.025em;
     margin-bottom: 14px;
   }
   :global(.portal-shell h3) {
-    font-size: 0.91rem;
+    font-size: 0.88rem;
     margin-bottom: 12px;
   }
   :global(.portal-shell .intro) {
@@ -77,7 +77,7 @@
   :global(.portal-shell .muted) {
     max-width: 68ch;
     color: var(--p-muted);
-    font-size: 0.84rem;
+    font-size: 0.88rem;
   }
   :global(.portal-shell .eyebrow) {
     color: var(--p-accent);
@@ -93,17 +93,17 @@
     border-bottom: 0;
   }
   :global(.portal-shell dt) {
-    font-size: 0.75rem;
+    font-size: 0.78rem;
     color: var(--p-muted);
     margin-bottom: 5px;
   }
   :global(.portal-shell dd) {
     margin: 0;
     overflow-wrap: anywhere;
-    font-size: 0.86rem;
+    font-size: 0.88rem;
   }
   :global(.portal-shell .mono) {
-    font-size: 0.75rem;
+    font-size: 0.78rem;
   }
   :global(.portal-shell main button),
   :global(.portal-shell .portal-button) {
@@ -115,7 +115,7 @@
     border-radius: 24px;
     color: white;
     background: var(--p-accent);
-    font-size: 0.83rem;
+    font-size: 0.88rem;
     text-decoration: none;
   }
   :global(.portal-shell button.secondary),
@@ -132,7 +132,7 @@
   }
   :global(.portal-shell label) {
     display: block;
-    font-size: 0.82rem;
+    font-size: 0.88rem;
     margin: 18px 0 7px;
   }
   :global(.portal-shell input:not([type='checkbox'])) {
@@ -145,7 +145,7 @@
     color: var(--p-ink);
   }
   :global(.portal-shell input[type='file']) {
-    font-size: 0.8rem;
+    font-size: 0.78rem;
   }
   :global(.portal-shell input::file-selector-button) {
     background: var(--p-accent-soft);
@@ -170,7 +170,7 @@
     border-radius: 12px;
     background: var(--p-accent-soft);
     color: var(--p-ink);
-    font-size: 0.84rem;
+    font-size: 0.88rem;
     margin: 18px 0;
     overflow-wrap: anywhere;
   }
@@ -179,7 +179,7 @@
   }
   :global(.portal-shell summary) {
     cursor: pointer;
-    font-size: 0.83rem;
+    font-size: 0.88rem;
     color: var(--p-accent);
   }
   :global(.portal-shell .status-line) {

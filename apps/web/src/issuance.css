@@ -17,12 +17,12 @@
 .live-shell {
   --p-canvas: #f7f6f9;
   --p-paper: #fdfcfe;
-  --p-ink: #302b38;
-  --p-muted: #736c7e;
+  --p-ink: #26262b;
+  --p-muted: #5e5e66;
   --p-line: #e4e0e9;
-  --p-accent: #75628f;
+  --p-accent: #6a5685;
   --p-accent-soft: #eeebf2;
-  --p-iris: #88769f;
+  --p-iris: #6a6a73;
   --p-iris-soft: #eeebf2;
   min-height: 100svh;
   color: var(--p-ink);
@@ -38,8 +38,8 @@
   border-radius: 999px;
   color: var(--p-muted);
   background: transparent;
-  font-size: 0.79rem;
-  font-weight: 650;
+  font-size: 0.78rem;
+  font-weight: 600;
   text-decoration: none;
 }
 
@@ -47,7 +47,7 @@
   width: min(100% - 48px, 1400px);
   margin: 10px auto 0;
   color: var(--p-muted);
-  font-size: 0.82rem;
+  font-size: 0.88rem;
   text-align: right;
 }
 
@@ -103,7 +103,7 @@
 .scene-kicker,
 .overline {
   color: var(--p-accent);
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -120,9 +120,9 @@
   margin: 17px 0 12px;
   color: var(--p-ink);
   font-family: 'Manrope', sans-serif;
-  font-size: clamp(2.8rem, 4.2vw, 3.65rem);
-  font-weight: 480;
-  letter-spacing: -0.065em;
+  font-size: clamp(2rem, 3vw, 2.5rem);
+  font-weight: 400;
+  letter-spacing: -0.03em;
   line-height: 0.98;
 }
 
@@ -170,8 +170,8 @@
   color: var(--p-accent);
   background: var(--p-accent-soft);
   border-radius: 50%;
-  font-size: 0.66rem;
-  font-weight: 750;
+  font-size: 0.7rem;
+  font-weight: 700;
 }
 
 .action-copy h2,
@@ -182,7 +182,7 @@
   color: var(--p-ink);
   font-family: 'Manrope', sans-serif;
   font-size: 1rem;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.025em;
 }
 
@@ -190,7 +190,7 @@
 .transaction-card p {
   margin-top: 2px;
   color: var(--p-muted);
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   line-height: 1.45;
 }
 
@@ -253,7 +253,7 @@
 .rail-hint,
 .status-line {
   color: var(--p-muted);
-  font-size: 0.69rem;
+  font-size: 0.7rem;
   line-height: 1.5;
 }
 
@@ -277,7 +277,7 @@
   justify-items: center;
   gap: 6px;
   color: #80798a;
-  font-size: 0.65rem;
+  font-size: 0.7rem;
 }
 
 .flow-rail li::after {
@@ -305,7 +305,7 @@
   background: var(--p-canvas);
   border: 1px solid #ded8e7;
   border-radius: 50%;
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   font-weight: 700;
 }
 
@@ -355,7 +355,7 @@
   border-radius: 999px;
   color: var(--p-accent);
   background: color-mix(in srgb, var(--p-paper) 72%, transparent);
-  font-size: 0.58rem;
+  font-size: 0.62rem;
   letter-spacing: 0.06em;
   overflow-wrap: anywhere;
 }
@@ -386,7 +386,7 @@
 .backend-title small {
   margin-top: 3px;
   color: var(--p-muted);
-  font-size: 0.65rem;
+  font-size: 0.7rem;
 }
 
 .ats-monogram {
@@ -401,8 +401,8 @@
   background:
     radial-gradient(circle at 36% 28%, #fff 0 7%, transparent 8%),
     var(--p-accent-soft);
-  font-size: 0.62rem;
-  font-weight: 800;
+  font-size: 0.7rem;
+  font-weight: 700;
   letter-spacing: 0.04em;
   box-shadow: 0 8px 22px #5147650d;
 }
@@ -444,8 +444,8 @@
   border-radius: 50%;
   color: var(--p-muted);
   background: var(--p-canvas);
-  font-size: 0.55rem;
-  font-weight: 750;
+  font-size: 0.62rem;
+  font-weight: 700;
 }
 
 .stack-path strong,
@@ -454,14 +454,14 @@
 }
 
 .stack-path strong {
-  font-size: 0.73rem;
+  font-size: 0.78rem;
   line-height: 1.2;
 }
 
 .stack-path small {
   margin-top: 2px;
   color: var(--p-muted);
-  font-size: 0.62rem;
+  font-size: 0.7rem;
 }
 
 .stack-path li[data-state='done'] > span {
@@ -492,7 +492,7 @@
 .stack-facts dt,
 .stack-facts dd {
   margin: 0;
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   line-height: 1.4;
 }
 
@@ -517,7 +517,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 0.67rem;
+  font-size: 0.7rem;
   font-weight: 700;
 }
 
@@ -541,8 +541,8 @@
   flex-wrap: wrap;
   gap: 8px;
   color: var(--p-muted);
-  font-size: 0.66rem;
-  font-weight: 750;
+  font-size: 0.7rem;
+  font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -569,7 +569,7 @@
 .session-list dt,
 .data-list dt {
   color: var(--p-muted);
-  font-size: 0.68rem;
+  font-size: 0.7rem;
 }
 
 .session-list dd,
@@ -577,13 +577,13 @@
   min-width: 0;
   margin: 0;
   color: var(--p-ink);
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   overflow-wrap: anywhere;
 }
 
 .empty-activity {
   color: var(--p-muted);
-  font-size: 0.74rem;
+  font-size: 0.78rem;
 }
 
 .activity-item {
@@ -594,12 +594,12 @@
 
 .activity-item span,
 .activity-item strong {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
 }
 
 .activity-item strong {
   color: var(--p-accent);
-  font-weight: 650;
+  font-weight: 600;
   text-transform: capitalize;
 }
 
@@ -609,7 +609,7 @@
   grid-column: 1 / -1;
   display: block;
   color: var(--p-muted);
-  font-size: 0.63rem;
+  font-size: 0.7rem;
   overflow-wrap: anywhere;
 }
 
@@ -620,7 +620,7 @@
   color: var(--p-muted);
   background: var(--p-iris-soft);
   border-radius: 10px;
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   overflow-wrap: anywhere;
 }
 
@@ -631,8 +631,8 @@
 .technical-details > summary,
 .audit-check-details > summary {
   color: var(--p-muted);
-  font-size: 0.72rem;
-  font-weight: 650;
+  font-size: 0.7rem;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -653,8 +653,8 @@
   color: var(--p-accent);
   background: var(--p-accent-soft);
   border-radius: 999px;
-  font-size: 0.66rem;
-  font-weight: 650;
+  font-size: 0.7rem;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -663,7 +663,7 @@
   display: grid;
   gap: 7px;
   color: var(--p-muted);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 600;
   text-align: left;
 }
@@ -709,7 +709,7 @@
   color: var(--p-iris);
   background: var(--p-iris-soft);
   border-radius: 999px;
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   font-weight: 700;
   line-height: 1.2;
   text-transform: capitalize;
@@ -726,18 +726,18 @@
 
 .claim-review > span {
   color: var(--p-muted);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
 }
 
 .claim-quantity {
   font-family: 'Manrope', sans-serif;
-  font-size: 1.55rem;
-  font-weight: 550;
+  font-size: 1.4rem;
+  font-weight: 600;
   letter-spacing: -0.05em;
 }
 
 .claim-quantity small {
-  font-size: 0.75rem;
+  font-size: 0.78rem;
 }
 
 .disclosure-control {
@@ -746,7 +746,7 @@
   gap: 10px;
   align-items: start;
   color: var(--p-muted);
-  font-size: 0.69rem;
+  font-size: 0.7rem;
   line-height: 1.45;
   text-align: left;
 }
@@ -791,12 +791,12 @@
   color: var(--p-accent);
   background: var(--p-accent-soft);
   border-radius: 50%;
-  font-size: 0.62rem;
+  font-size: 0.7rem;
 }
 
 .action-list strong,
 .action-list small {
-  font-size: 0.69rem;
+  font-size: 0.7rem;
 }
 
 .action-list small {
@@ -810,7 +810,7 @@
   background: #f8eaea;
   border: 1px solid #ecd0d0;
   border-radius: 9px;
-  font-size: 0.71rem;
+  font-size: 0.7rem;
   line-height: 1.45;
   text-align: left;
 }
@@ -852,13 +852,13 @@
 
 .token-balance span {
   color: var(--p-muted);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
 }
 
 .token-balance strong {
   margin-left: auto;
   font-family: 'Manrope', sans-serif;
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   font-weight: 600;
 }
 
@@ -881,7 +881,7 @@
   gap: 8px;
   color: var(--p-muted);
   border-top: 1px solid var(--p-line);
-  font-size: 0.68rem;
+  font-size: 0.7rem;
 }
 
 .verifier-main {
@@ -900,7 +900,7 @@
 
 .verifier-intro h1 {
   margin-top: 14px;
-  font-size: clamp(2.7rem, 5vw, 4.5rem);
+  font-size: clamp(1.9rem, 3.4vw, 2.8rem);
 }
 
 .audit-controls,
@@ -940,25 +940,25 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.76rem;
-  font-weight: 650;
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 
 .file-control b {
   color: var(--p-accent);
-  font-size: 0.64rem;
+  font-size: 0.7rem;
 }
 
 .file-control small {
   color: var(--p-muted);
-  font-size: 0.67rem;
+  font-size: 0.7rem;
   overflow-wrap: anywhere;
 }
 
 .file-control input {
   max-width: 100%;
   color: var(--p-muted);
-  font-size: 0.66rem;
+  font-size: 0.7rem;
 }
 
 .audit-check-summary {
@@ -1016,7 +1016,7 @@
   display: grid;
   gap: 12px;
   color: var(--p-muted);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
 }
 
 .network-link {
@@ -1024,7 +1024,7 @@
   padding: 2px 0;
   background: transparent;
   color: var(--p-accent);
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -1044,13 +1044,13 @@
 }
 .empty-activity small {
   max-width: 170px;
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   line-height: 1.6;
 }
 .upload-help {
   max-width: 340px;
   color: var(--p-muted);
-  font-size: 0.69rem;
+  font-size: 0.7rem;
 }
 .upload-help summary {
   cursor: pointer;
@@ -1095,14 +1095,14 @@
   line-height: 1;
 }
 .setup-dialog h2 {
-  font-size: 1.6rem;
+  font-size: 1.7rem;
   letter-spacing: -0.04em;
-  font-weight: 550;
+  font-weight: 600;
   margin-bottom: 10px;
 }
 .setup-dialog > p {
   color: var(--p-muted);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
 }
 .setup-dialog .upload-button {
   width: 100%;
@@ -1202,7 +1202,7 @@
 
   .stage-copy h1,
   .verifier-intro h1 {
-    font-size: clamp(2rem, 11vw, 3.2rem);
+    font-size: clamp(1.75rem, 8vw, 2.25rem);
   }
 
   .engine-stage .stage-copy > p:last-child {
@@ -1231,7 +1231,7 @@
   }
 
   .flow-rail li small {
-    font-size: 0.57rem;
+    font-size: 0.62rem;
   }
 
   .flow-rail li > span {

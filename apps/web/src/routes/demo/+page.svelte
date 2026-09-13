@@ -538,7 +538,7 @@
     border-radius: 999px;
     background: transparent;
     color: var(--p-muted);
-    font-size: 0.82rem;
+    font-size: 0.88rem;
     justify-content: flex-start;
   }
   button.rail-step span {
@@ -550,7 +550,7 @@
     border-radius: 50%;
     background: var(--p-accent-soft);
     color: var(--p-accent);
-    font-size: 0.68rem;
+    font-size: 0.7rem;
     font-weight: 700;
   }
   button.rail-step[data-done='true'] span {
@@ -576,7 +576,7 @@
   }
   .who {
     margin: 0;
-    font-size: 0.63rem;
+    font-size: 0.7rem;
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--p-accent);
@@ -591,7 +591,7 @@
   }
   .line {
     margin: 0;
-    font-size: 0.92rem;
+    font-size: 0.88rem;
     line-height: 1.45;
     max-width: 76ch;
   }
@@ -632,7 +632,7 @@
     color: var(--p-ink);
   }
   .thesis .a {
-    font-size: 0.82rem;
+    font-size: 0.88rem;
     font-weight: 600;
     color: var(--p-accent);
   }
@@ -648,7 +648,7 @@
   }
   .why {
     margin: 0;
-    font-size: 0.79rem;
+    font-size: 0.78rem;
     line-height: 1.5;
     color: var(--p-muted);
     max-width: 104ch;
@@ -656,14 +656,14 @@
   .why span {
     display: inline-block;
     margin-right: 7px;
-    font-size: 0.6rem;
+    font-size: 0.62rem;
     letter-spacing: 0.13em;
     text-transform: uppercase;
     color: var(--p-accent);
     font-weight: 600;
   }
   .step-why {
-    font-size: 0.85rem;
+    font-size: 0.88rem;
   }
   .more {
     flex: none;
@@ -681,7 +681,7 @@
     margin: 0;
     padding-left: 12px;
     border-left: 2px solid var(--p-accent);
-    font-size: 0.76rem;
+    font-size: 0.78rem;
     line-height: 1.5;
     color: var(--p-muted);
     max-width: 108ch;
@@ -733,11 +733,11 @@
     min-width: 0;
   }
   .item-copy strong {
-    font-size: 0.84rem;
-    font-weight: 650;
+    font-size: 0.88rem;
+    font-weight: 600;
   }
   .item-copy small {
-    font-size: 0.76rem;
+    font-size: 0.78rem;
     color: var(--p-muted);
   }
   .item-body {
@@ -757,7 +757,7 @@
     align-items: center;
     gap: 5px;
     color: var(--p-accent);
-    font-size: 0.74rem;
+    font-size: 0.78rem;
   }
 
   .chips {
@@ -777,7 +777,7 @@
     border: 1px solid var(--p-line);
     background: var(--p-paper);
     color: var(--p-ink);
-    font-size: 0.74rem;
+    font-size: 0.78rem;
   }
   a.chip .mono {
     color: var(--p-muted);
@@ -785,7 +785,7 @@
   }
   .small {
     margin: 0;
-    font-size: 0.76rem;
+    font-size: 0.78rem;
     color: var(--p-muted);
   }
   .criteria {
@@ -805,7 +805,7 @@
   .criteria span {
     flex: none;
     width: 78px;
-    font-size: 0.64rem;
+    font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -845,7 +845,7 @@
     border: 1px solid var(--p-line);
     background: var(--p-paper);
     color: var(--p-ink);
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     text-decoration: none;
   }
   button.move.primary,

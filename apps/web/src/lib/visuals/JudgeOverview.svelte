@@ -268,19 +268,19 @@
   }
   .stages li > span {
     color: var(--p-accent);
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     font-weight: 700;
     padding-top: 2px;
   }
   .stages strong {
     display: block;
-    font-size: 0.9rem;
+    font-size: 0.88rem;
   }
   .stages small {
     display: block;
     margin-top: 3px;
     color: var(--p-muted);
-    font-size: 0.79rem;
+    font-size: 0.78rem;
     line-height: 1.45;
   }
 
@@ -289,8 +289,8 @@
   }
   figcaption a {
     color: var(--p-accent);
-    font-size: 0.8rem;
-    font-weight: 650;
+    font-size: 0.78rem;
+    font-weight: 600;
     text-decoration: none;
   }
   figcaption a:hover {
