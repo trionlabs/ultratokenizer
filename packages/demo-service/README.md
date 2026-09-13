@@ -71,6 +71,11 @@ Origin. Responses are uncached and contain a bounded error code/message, never r
 signed issuer transactions, credentials, source paths or artifact URIs. A status `transactionHash`
 identifies the reservation, not a mint.
 
+Uploading the same document again reports its existing signed job status. While that request is
+valid, preparation returns it unchanged, even when the budget blocks new proofs. The holder signs
+the same request to resume; the authenticated start returns its current status without reserving,
+dispatching or paying again. Proof and receipt acceptance still require their normal verification.
+
 ## Real execution and recovery boundaries
 
 1. Authenticate the allowlisted PDF; preserve its opaque claim identity and exact amount. Prepare

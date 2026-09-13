@@ -109,7 +109,10 @@
   );
   let blocker = $derived(
     documentBlocker(
-      flow.status?.detailCode ?? flow.document?.readiness.blocker,
+      flow.status?.detailCode ??
+        (flow.document?.existingJobStatus
+          ? undefined
+          : flow.document?.readiness.blocker),
     ),
   );
   let hasOutcome = $derived(
@@ -496,7 +499,9 @@
                   ? 'Proof and issuer approval verified.'
                   : flow.status
                     ? documentStatusLabel[flow.status.status]
-                    : 'Approve the request, then generate and check its proof.'}
+                    : flow.document?.existingJobStatus
+                      ? documentStatusLabel[flow.document.existingJobStatus]
+                      : 'Approve the request, then generate and check its proof.'}
               </p>
             </div>
           </div>
@@ -576,20 +581,29 @@
               busy ||
               unresolved ||
               !snapshot.deployment ||
-              !flow.document?.readiness.canStart}
+              (!flow.document?.readiness.canStart &&
+                !flow.document?.existingJobStatus)}
             aria-busy={preparingApproval}
             onclick={() => journey.verifyAndMint()}
-            >{preparingApproval ? requestSigningLabel : 'Verify & mint'}
+            >{preparingApproval
+              ? requestSigningLabel
+              : flow.document?.existingJobStatus
+                ? 'Sign to resume verification'
+                : 'Verify & mint'}
             <Glyph name="arrow" size={15} /></button
           >
           {#if preparingApproval}
             <p class="field-hint request-signing-status" role="status">
-              {requestSigningLabel} No SP1 proof request has been submitted yet.
+              {requestSigningLabel}
+              {flow.document?.existingJobStatus
+                ? 'The existing proof request is retained. No new proof will be requested.'
+                : 'No SP1 proof request has been submitted yet.'}
             </p>
           {:else}
             <p class="field-hint">
-              First sign the exact request. After proof verification, confirm a
-              separate mint transaction.
+              {flow.document?.existingJobStatus
+                ? 'Sign the same request to resume its current status. This does not submit or pay for another proof.'
+                : 'First sign the exact request. After proof verification, confirm a separate mint transaction.'}
             </p>
           {/if}
         {/if}

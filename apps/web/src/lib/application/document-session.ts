@@ -286,7 +286,11 @@ export function createDocumentSession(
           throw new DocumentClientError('deployment_unavailable');
         if (!document.terms.checked)
           throw new DocumentClientError('deployment_unavailable');
-        if (!state.started && !document.readiness.canStart)
+        if (
+          !state.started &&
+          !document.readiness.canStart &&
+          !document.existingJobStatus
+        )
           throw new DocumentClientError(
             document.readiness.blocker ?? 'operations_disabled',
           );
@@ -294,7 +298,11 @@ export function createDocumentSession(
           state.job ?? (await api.prepare(document, wallet.address, signal));
         if (!current()) return;
         update({ job });
-        if (!state.started && !job.readiness.canStart)
+        if (
+          !state.started &&
+          !job.readiness.canStart &&
+          ['awaiting_signature', 'blocked'].includes(job.status)
+        )
           throw new DocumentClientError(
             job.readiness.blocker ?? 'operations_disabled',
           );

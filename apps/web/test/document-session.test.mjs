@@ -188,6 +188,35 @@ async function completedDocument(outcome = 'confirmed') {
   return { ...h, values, failRemoval: () => (failRemoval = true) };
 }
 
+test('a reuploaded active document signs the same request and resumes with new-proof budget closed', async () => {
+  const h = await harness();
+  try {
+    h.document.readiness = {
+      canStart: false,
+      blocker: 'proof_budget_unavailable',
+    };
+    h.document.existingJobStatus = 'proving';
+    h.job.status = 'proving';
+    h.job.readiness = h.document.readiness;
+    await h.session.upload(file());
+    h.session.disclose(true);
+    await h.session.verifyAndMint();
+    assert.equal(h.session.read().error, undefined);
+    assert.equal(h.session.read().started, true);
+    assert.equal(h.session.read().status.status, 'proving');
+    assert.equal(h.session.read().job.requestDigest, h.job.requestDigest);
+    assert.equal(
+      h.holder.read().preparedRequest.request.requestId,
+      h.prepared.request.requestId,
+    );
+    assert.deepEqual(h.calls, ['upload', 'prepare-api', 'sign', 'start']);
+    assert.equal(h.calls.includes('bundle'), false);
+  } finally {
+    h.session.dispose();
+    h.holder.dispose();
+  }
+});
+
 test('a confirmed document can finish and accept a new PDF without reusing approval or proof', async () => {
   const h = await completedDocument();
   try {

@@ -24,6 +24,13 @@ const ACTIVE = new Set([
   'proof_ready',
   'authorizing',
 ]);
+function resumable(job) {
+  return !!(
+    job?.holderSignature &&
+    (ACTIVE.has(job.status) ||
+      ['ready_to_mint', 'attention_required'].includes(job.status))
+  );
+}
 
 /** Durable document-to-bundle orchestration; wallet minting stays in the browser. */
 export class DemoService {
@@ -73,7 +80,15 @@ export class DemoService {
     );
     const documentId = sha256(bytes);
     const document = await this.runtime.inspect(documentId, bytes);
-    return { documentId, document, ...(await this.config()) };
+    const job = this.store.forDocument(documentId);
+    return {
+      documentId,
+      document,
+      ...(await this.config()),
+      ...(resumable(job) && BigInt(job.request.validUntil) > BigInt(this.now())
+        ? { existingJobStatus: job.status }
+        : {}),
+    };
   }
   async prepare(input) {
     exact(input, ['documentId', 'recipient']);
@@ -134,7 +149,8 @@ export class DemoService {
         'job_conflict',
       );
       check(
-        ['awaiting_signature', 'blocked'].includes(job.status),
+        ['awaiting_signature', 'blocked'].includes(job.status) ||
+          resumable(job),
         'job_conflict',
         409,
       );

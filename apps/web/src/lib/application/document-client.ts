@@ -190,13 +190,16 @@ function configuration(value: unknown) {
 }
 export type DocumentConfiguration = ReturnType<typeof configuration>;
 function document(value: unknown) {
-  const v = record(value, [
-    'documentId',
-    'document',
-    'issuer',
-    'terms',
-    'readiness',
-  ]);
+  const v = record(
+    value,
+    ['documentId', 'document', 'issuer', 'terms', 'readiness'],
+    ['existingJobStatus'],
+  );
+  if (
+    v.existingJobStatus !== undefined &&
+    !resumableStatuses.includes(v.existingJobStatus as ResumableStatus)
+  )
+    invalid();
   const c = configuration({
     issuer: v.issuer,
     terms: v.terms,
@@ -219,6 +222,7 @@ function document(value: unknown) {
     invalid();
   return Object.freeze({
     ...c,
+    existingJobStatus: v.existingJobStatus as ResumableStatus | undefined,
     documentId: identifier(v.documentId),
     document: Object.freeze({
       name: text(d.name, 120),
@@ -238,7 +242,7 @@ export type PreparedDocumentJob = Readonly<{
   documentId: string;
   requestDigest: Hex;
   prepared: PreparedIssuanceRequest;
-  status: 'awaiting_signature';
+  status: Status;
   readiness: ReturnType<typeof readiness>;
 }>;
 function preparedJob(
@@ -264,7 +268,7 @@ function preparedJob(
   const r = prepared.request;
   const digest = hash(v.requestDigest);
   if (
-    v.status !== 'awaiting_signature' ||
+    !statuses.includes(v.status as Status) ||
     v.documentId !== uploaded.documentId ||
     getIssuanceRequestDigest(r) !== digest ||
     getIssuanceRequestDigest(
@@ -285,7 +289,7 @@ function preparedJob(
     documentId: uploaded.documentId,
     requestDigest: digest,
     prepared,
-    status: 'awaiting_signature',
+    status: v.status as Status,
     readiness: readiness(v.readiness),
   });
 }
@@ -303,6 +307,18 @@ const statuses = [
   'attention_required',
 ] as const;
 type Status = (typeof statuses)[number];
+const resumableStatuses = [
+  'reserving',
+  'preparing_proof',
+  'staging',
+  'queued',
+  'proving',
+  'proof_ready',
+  'authorizing',
+  'ready_to_mint',
+  'attention_required',
+] as const;
+type ResumableStatus = (typeof resumableStatuses)[number];
 type JobBinding = Pick<
   PreparedDocumentJob,
   'jobId' | 'documentId' | 'requestDigest'

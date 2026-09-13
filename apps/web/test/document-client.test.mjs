@@ -147,6 +147,78 @@ test('an unavailable proof budget blocks new verification while document upload 
   assert.equal(document.readiness.blocker, 'proof_budget_unavailable');
 });
 
+test('document reupload preserves a known existing job status without claiming new-proof readiness', async () => {
+  const file = new File(['%PDF-1.7\nexample\n%%EOF'], 'gold.pdf');
+  const value = { ...uploaded(), existingJobStatus: 'proving' };
+  const result = await createDocumentClient(async () => json(value)).upload(
+    file,
+    signal(),
+  );
+  assert.equal(result.existingJobStatus, 'proving');
+  assert.equal(result.readiness.canStart, false);
+  for (const status of ['minted', 'awaiting_signature', true]) {
+    await assert.rejects(
+      createDocumentClient(async () =>
+        json({ ...value, existingJobStatus: status }),
+      ).upload(file, signal()),
+    );
+  }
+});
+
+test('prepare accepts the actual existing status only with the same document and request binding', async () => {
+  const { createFixture } = await loadModule('./fixtures/issuance.ts');
+  const fixture = await createFixture();
+  const request = fixture.bundle.request;
+  const value = uploaded();
+  value.issuer.issuerId = request.issuerId;
+  Object.assign(value.document, {
+    issuerId: request.issuerId,
+    recipient: request.recipient,
+    amountMilligrams: request.amount,
+    sourceId: fixture.deployment.auditPolicy.sourceId,
+    sourceSignerFingerprint:
+      fixture.deployment.auditPolicy.sourceSignerFingerprint,
+  });
+  const prepared = {
+    request,
+    sourceId: value.document.sourceId,
+    signerFingerprint: value.document.sourceSignerFingerprint,
+    policyTermsHash: value.terms.policy.hash,
+    rightsTermsHash: value.terms.rights.hash,
+  };
+  const job = {
+    jobId: 'existing_job',
+    documentId: value.documentId,
+    requestDigest: fixture.receipt.requestDigest,
+    request,
+    prepared,
+    readiness: value.readiness,
+    status: 'proving',
+  };
+  const parsed = await createDocumentClient(async () => json(job)).prepare(
+    value,
+    request.recipient,
+    signal(),
+  );
+  assert.equal(parsed.status, 'proving');
+  assert.equal(parsed.readiness.canStart, false);
+  assert.deepEqual(parsed.prepared.request, request);
+  for (const patch of [
+    { status: 'minted' },
+    { documentId: 'another_document' },
+    { requestDigest: hash },
+    { request: { ...request, amount: '999' } },
+  ]) {
+    await assert.rejects(
+      createDocumentClient(async () => json({ ...job, ...patch })).prepare(
+        value,
+        request.recipient,
+        signal(),
+      ),
+    );
+  }
+});
+
 test('status cannot claim mint readiness without a bundle or switch job binding', async () => {
   const job = { jobId: 'job_123', documentId: 'doc_123', requestDigest: hash };
   const state = {

@@ -137,6 +137,48 @@ await test('concurrent prepare deduplicates one immutable canonical job', async 
   );
 });
 
+await test('reupload and prepare resume signed active jobs without changing or dispatching them', async (t) => {
+  for (const status of ['proving', 'ready_to_mint', 'attention_required']) {
+    await t.test(status, async (subtest) => {
+      const f = await fixture(subtest, { enabled: false });
+      const initial = await f.prepare();
+      const approval = await f.sign(initial);
+      const job = f.store.get(initial.jobId);
+      await f.store.update(job, {
+        status,
+        holderSignature: approval.holderSignature,
+        reservation: { transactionHash: hash },
+        ...(status === 'ready_to_mint'
+          ? { proof: {}, bundle: { permit: { validUntil: '1800000600' } } }
+          : {}),
+      });
+      const before = JSON.stringify(job);
+      const inspected = await f.service.document(pdf);
+      assert.equal(inspected.existingJobStatus, status);
+      assert.equal(inspected.readiness.canStart, false);
+      const resumed = await f.prepare();
+      assert.equal(resumed.status, status);
+      assert.deepEqual(resumed.request, initial.request);
+      assert.equal(resumed.requestDigest, initial.requestDigest);
+      await assert.rejects(
+        f.service.start(resumed.jobId, await f.sign(resumed, other)),
+        { code: 'invalid_signature' },
+      );
+      assert.equal(
+        (await f.service.start(resumed.jobId, approval)).status,
+        status,
+      );
+      assert.equal(JSON.stringify(job), before);
+      assert.deepEqual(f.counts, {
+        reserve: 0,
+        prove: 0,
+        permit: 0,
+        verify: 1,
+      });
+    });
+  }
+});
+
 await test('wrong wallet and unknown preparation fields fail closed', async (t) => {
   const f = await fixture(t);
   await assert.rejects(
@@ -306,7 +348,13 @@ await test('repeated start never duplicates reservation or proof dispatch', asyn
   assert.equal(f.counts.permit, 1);
   assert.equal(Object.hasOwn(status, 'holderSignature'), false);
   assert.equal((await f.service.bundle(job.jobId)).testOnly, true);
-  await assert.rejects(f.prepare(), { code: 'job_conflict' });
+  const resumed = await f.prepare();
+  assert.equal(resumed.jobId, job.jobId);
+  assert.equal(resumed.status, 'ready_to_mint');
+  await f.service.start(resumed.jobId, signature);
+  assert.equal(f.counts.reserve, 1);
+  assert.equal(f.counts.prove, 1);
+  assert.equal(f.counts.permit, 1);
 });
 
 for (const failure of ['reserve', 'prove'])
