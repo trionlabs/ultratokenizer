@@ -1,4 +1,4 @@
-# Ultratokenizer — zkPDF-backed token issuance on Hedera testnet.
+# Ultratokenizer · zkPDF-backed token issuance on Hedera testnet.
 # Everything published here is meant to be read, quoted and re-checked.
 # Start with /llms.txt, or /llms-full.txt for the complete corpus.
 

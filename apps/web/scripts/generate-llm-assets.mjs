@@ -116,7 +116,7 @@ function extraCredit(deployment) {
       `Scheduled-transaction plumbing is deployed with the graph: \`ScheduledTasksOps\` at ${backend.libraries.ScheduledTasksOps.address} and \`ScheduledTasksDispatchOps\` at ${backend.libraries.ScheduledTasksDispatchOps.address}.`,
       `A compliance control the Studio does not have today: issuance itself is gated by a zero-knowledge proof of an authenticated off-chain right. \`IssuanceGate\` re-derives the EIP-712 request digest in Solidity and refuses to mint unless an SP1 Groth16 proof, the holder signature, the issuer permit, the registry versions, the reserved capacity and a single-use claim id all agree in one atomic transaction.`,
       `Independent verifiability as a first-class feature: every issuance emits a receipt that a third party can re-check offline at /verify/ against a trust policy obtained separately, in an isolated Web Worker, with an optional online SP1 proof check against an RPC endpoint the reviewer chooses.`,
-      `The same canonical request digest is computed independently in three languages — TypeScript, Rust and Solidity — and a cross-language parity gate runs on adversarial inputs in CI.`,
+      `The same canonical request digest is computed independently in three languages (TypeScript, Rust and Solidity), and a cross-language parity gate runs on adversarial inputs in CI.`,
     ],
     notClaimed: [
       'Operational KYC onboarding, freeze administration, redemption and physical custody are not claimed. The control-list and cap facets are deployed; this profile does not present a staffed compliance operation.',
@@ -138,7 +138,7 @@ function architectureSection(deployment, discovery) {
 
 The canonical **issuance request** is the spine. Everything else binds to its EIP-712 digest.
 
-1. **Domain.** A versioned issuance request and a distinct issuer permit are normalised — checksummed addresses, lowercase bytes32, integer-only quantities — and reduced to an EIP-712 digest plus a derived single-use \`claimUsageId\`.
+1. **Domain.** A versioned issuance request and a distinct issuer permit are normalised (checksummed addresses, lowercase bytes32, integer-only quantities) and reduced to an EIP-712 digest plus a derived single-use \`claimUsageId\`.
 2. **Proof.** An SP1 guest program authenticates the signed document capsule, recomputes the same request digest **independently in Rust**, requires the full exact quantity and commits 224 bytes of ABI-encoded public values. Proof system \`${policy.proofSystem}\`, outer version \`${policy.outerVersion}\`, program verification key \`${policy.programVKey}\`.
 3. **Gate.** \`IssuanceGate\` at ${policy.gate} re-derives the same digests in Solidity and is the only authority. It checks the SP1 proof against the verifier at ${policy.verifierAddress}, the holder signature, the issuer permit, registry versions, reservation capacity and the single-use \`claimUsageId\`, then mints atomically through the registered adapter.
 4. **ATS backend.** \`AtsGateMintAdapter\` at ${backend.adapter.address} mints through the admitted ATS token graph at ${policy.token} (resolver ${backend.resolver.address}, configuration \`${backend.configuration.id}\` version ${backend.configuration.version}). Every facet and library address carries a pinned runtime code hash.
@@ -172,7 +172,7 @@ function deployedAddresses(deployment, discovery) {
   return [...rows, ...facets]
     .map(
       ([label, address]) =>
-        `- ${label}: \`${address}\` — ${contractLink(address)}`,
+        `- ${label}: \`${address}\` · ${contractLink(address)}`,
     )
     .join('\n');
 }
@@ -225,7 +225,7 @@ ${pages}
 
 ## Machine-readable deployment data
 
-- [deployment.json](${SITE_ORIGIN}/deployment.json): the exact deployment the application loads — chain, RPC, Gate, verifier, program key, ATS facet graph, and a pinned runtime code hash for every address.
+- [deployment.json](${SITE_ORIGIN}/deployment.json): the exact deployment the application loads: chain, RPC, Gate, verifier, program key, ATS facet graph, and a pinned runtime code hash for every address.
 - [discovery.json](${SITE_ORIGIN}/discovery.json): ERC-8004 Identity registry and the issuer, deployment and auditor records.
 - [sitemap.xml](${SITE_ORIGIN}/sitemap.xml): canonical URL set.
 
@@ -233,11 +233,11 @@ ${
   policy
     ? `## Live contracts on ${SITE_CHAIN.name}
 
-- IssuanceGate: \`${policy.gate}\` — ${contractLink(policy.gate)}
-- ATS token: \`${policy.token}\` — ${contractLink(policy.token)}
-- SP1 Groth16 verifier: \`${policy.verifierAddress}\` — ${contractLink(policy.verifierAddress)}
-- ATS mint adapter: \`${deployment.backend.adapter.address}\` — ${contractLink(deployment.backend.adapter.address)}
-- ERC-8004 Identity registry: \`${discovery.identityRegistry.address}\` — ${contractLink(discovery.identityRegistry.address)}`
+- IssuanceGate: \`${policy.gate}\` · ${contractLink(policy.gate)}
+- ATS token: \`${policy.token}\` · ${contractLink(policy.token)}
+- SP1 Groth16 verifier: \`${policy.verifierAddress}\` · ${contractLink(policy.verifierAddress)}
+- ATS mint adapter: \`${deployment.backend.adapter.address}\` · ${contractLink(deployment.backend.adapter.address)}
+- ERC-8004 Identity registry: \`${discovery.identityRegistry.address}\` · ${contractLink(discovery.identityRegistry.address)}`
     : `## Live contracts
 
 This build carries no deployment configuration, so no address is asserted here. The published site serves the pinned set at ${SITE_ORIGIN}/deployment.json and ${SITE_ORIGIN}/discovery.json.`
@@ -245,7 +245,7 @@ This build carries no deployment configuration, so no address is asserted here. 
 
 ## Source
 
-${SITE_REPOSITORIES.map((url) => `- [${url.replace('https://github.com/', '')}](${url}): public repository, polyglot monorepo — Solidity contracts, Rust SP1 programs, TypeScript domain and audit packages, SvelteKit application.`).join('\n')}${
+${SITE_REPOSITORIES.map((url) => `- [${url.replace('https://github.com/', '')}](${url}): public repository, polyglot monorepo: Solidity contracts, Rust SP1 programs, TypeScript domain and audit packages, SvelteKit application.`).join('\n')}${
     policy
       ? `
 - [Gate source record](${sourceLink(policy.gate)}): exact runtime source match in Sourcify.
@@ -282,10 +282,10 @@ function buildLlmsFull(deployment, discovery) {
 
   const pageText = SITE_PAGES.map(
     (page) =>
-      `### ${page.title.split(/[—·]/)[0].trim()} — ${SITE_ORIGIN}${page.route}\n\n${page.description}\n\n${page.facts.map((fact) => `- ${fact}`).join('\n')}`,
+      `### ${page.title.split(/[—·]/)[0].trim()} · ${SITE_ORIGIN}${page.route}\n\n${page.description}\n\n${page.facts.map((fact) => `- ${fact}`).join('\n')}`,
   ).join('\n\n');
 
-  return `# ${SITE_NAME} — full corpus
+  return `# ${SITE_NAME} · full corpus
 
 > ${SITE_TAGLINE}. This file is the complete, canonical description of the project for language models and automated reviewers.${pinned ? ' Every address and version below is generated from the same deployment configuration the live application loads.' : ''}
 
@@ -297,15 +297,15 @@ Repositories: ${SITE_REPOSITORIES.join(' , ')}
 
 Ultratokenizer is a proof-gated token engine. It connects private, authenticated document evidence to institution-authorized token issuance and to receipts anyone can inspect independently.
 
-A holder brings a signed gold-right document. The document is authenticated off chain and reduced to a canonical issuance request. An SP1 zero-knowledge program recomputes that request independently in Rust and produces a Groth16 proof committing 224 bytes of public values. The institution reserves the exact declared allocation on chain and signs a short-lived permit. The holder signs the exact request off chain. Only then does \`IssuanceGate\` on Hedera re-derive the same digest in Solidity and mint — through the Asset Tokenization Studio token graph — if and only if the proof, the holder signature, the issuer permit, the registry versions, the reserved capacity and a single-use claim identifier all agree in one atomic transaction.
+A holder brings a signed gold-right document. The document is authenticated off chain and reduced to a canonical issuance request. An SP1 zero-knowledge program recomputes that request independently in Rust and produces a Groth16 proof committing 224 bytes of public values. The institution reserves the exact declared allocation on chain and signs a short-lived permit. The holder signs the exact request off chain. Only then does \`IssuanceGate\` on Hedera re-derive the same digest in Solidity and mint, through the Asset Tokenization Studio token graph, if and only if the proof, the holder signature, the issuer permit, the registry versions, the reserved capacity and a single-use claim identifier all agree in one atomic transaction.
 
-The amount is all or nothing. A 1.000 g allocation issues exactly 1.000 g, once, or issues nothing. There is no amount editor, because the amount is not an input — it is a consequence of the authenticated document.
+The amount is all or nothing. A 1.000 g allocation issues exactly 1.000 g, once, or issues nothing. There is no amount editor, because the amount is not an input; it is a consequence of the authenticated document.
 
 ## Why it is built this way
 
-Institutional tokenisation fails on the evidence leg, not the token leg. Minting a token is easy; showing an auditor, months later, exactly which authenticated right produced exactly which supply — and letting them re-check it without trusting the issuer's own dashboard — is the hard part. Ultratokenizer puts that check in the contract and then hands out a receipt that a third party can replay offline.
+Institutional tokenisation fails on the evidence leg, not the token leg. Minting a token is easy; showing an auditor, months later, exactly which authenticated right produced exactly which supply, and letting them re-check it without trusting the issuer's own dashboard, is the hard part. Ultratokenizer puts that check in the contract and then hands out a receipt that a third party can replay offline.
 
-## Hedera "Tokenization of Anything" — qualification requirements
+## Hedera "Tokenization of Anything" qualification requirements
 
 ${matrixText}
 
@@ -336,7 +336,7 @@ Pinned protocol values:
 - ATS admission: \`${deployment.backend.admission.kind}\`, block ${deployment.backend.admission.blockNumber}, transaction \`${deployment.backend.admission.transactionHash}\``
     : `## Deployed addresses
 
-This build carries no deployment configuration. The published site serves the complete pinned set — Gate, SP1 verifier, ATS facet graph, adapter and ERC-8004 registry, each with a runtime code hash — at ${SITE_ORIGIN}/deployment.json and ${SITE_ORIGIN}/discovery.json.`
+This build carries no deployment configuration. The published site serves the complete pinned set (Gate, SP1 verifier, ATS facet graph, adapter and ERC-8004 registry, each with a runtime code hash) at ${SITE_ORIGIN}/deployment.json and ${SITE_ORIGIN}/discovery.json.`
 }
 
 ## Pages
@@ -383,7 +383,7 @@ and receipt reconciliation all agree.
 
 **Why are there two wallet prompts?** The first is an off-chain signature approving the exact request, which starts verification. The second submits the on-chain Hedera mint after the proof is ready.
 
-**What should a reviewer trust?** The deployed code, the contract state, the proof result, the transaction and the receipt — each checked separately. The application and the ERC-8004 records are navigation and attribution layers; neither can bypass the Gate.
+**What should a reviewer trust?** The deployed code, the contract state, the proof result, the transaction and the receipt, each checked separately. The application and the ERC-8004 records are navigation and attribution layers; neither can bypass the Gate.
 
 ${claimsBoundary()}
 `;
@@ -417,7 +417,7 @@ function buildPageMarkdown(page, deployment, discovery) {
 > ${page.description}
 
 Canonical page: ${SITE_ORIGIN}${page.route}
-Project: ${SITE_NAME} — ${SITE_TAGLINE}, ${SITE_CHAIN.name} chain ID ${SITE_CHAIN.id}.
+Project: ${SITE_NAME} · ${SITE_TAGLINE}, ${SITE_CHAIN.name} chain ID ${SITE_CHAIN.id}.
 
 ${page.facts.map((fact) => `- ${fact}`).join('\n')}
 ${pinnedAppendix(page, deployment, discovery)}

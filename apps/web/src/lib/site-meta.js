@@ -34,7 +34,7 @@ export const SITE_PAGES = [
   {
     route: '/',
     markdown: '/index.md',
-    title: 'Provable tokenization — Ultratokenizer',
+    title: 'Provable tokenization · Ultratokenizer',
     description:
       'Issue the exact approved gold quantity with proof verification, issuer authorization, wallet consent, and a receipt you can inspect independently.',
     priority: '1.0',
@@ -54,11 +54,11 @@ export const SITE_PAGES = [
       'How a signed gold document becomes a token on Hedera: prove it, authorise the amount, mint on chain, then check the result.',
     priority: '0.9',
     facts: [
-      'Step 1 — Authenticate: the document service checks the signed allocation and prepares a request-bound public bundle.',
-      'Step 2 — Prove: SP1 recomputes the canonical request digest in Rust and commits 224 bytes of ABI-encoded public values with a Groth16 proof.',
-      'Step 3 — Authorize: the institution reserves the exact declared capacity on chain and signs a short-lived issuer permit.',
-      'Step 4 — Mint: IssuanceGate re-derives the same digest in Solidity and checks proof, holder signature, permit, registry versions, reservation capacity and single-use claim id atomically.',
-      'Step 5 — Review: the receipt is reconciled against the confirmed transaction and the exact Gate event.',
+      'Step 1, authenticate: the document service checks the signed allocation and prepares a request-bound public bundle.',
+      'Step 2, prove: SP1 recomputes the canonical request digest in Rust and commits 224 bytes of ABI-encoded public values with a Groth16 proof.',
+      'Step 3, authorize: the institution reserves the exact declared capacity on chain and signs a short-lived issuer permit.',
+      'Step 4, mint: IssuanceGate re-derives the same digest in Solidity and checks proof, holder signature, permit, registry versions, reservation capacity and single-use claim id atomically.',
+      'Step 5, review: the receipt is reconciled against the confirmed transaction and the exact Gate event.',
       'The same digest is computed independently in TypeScript, Rust and Solidity. A cross-language parity gate runs on adversarial inputs.',
     ],
   },
@@ -81,7 +81,7 @@ export const SITE_PAGES = [
   {
     route: '/trust/',
     markdown: '/trust.md',
-    title: 'Trust and provenance — Ultratokenizer',
+    title: 'Trust and provenance · Ultratokenizer',
     description:
       'Inspect the Gate, SP1 verifier, ATS token graph, issuer roles and ERC-8004 identity records behind this Hedera testnet deployment.',
     priority: '0.8',
@@ -95,7 +95,7 @@ export const SITE_PAGES = [
   {
     route: '/verify/',
     markdown: '/verify.md',
-    title: 'Independent receipt verifier — Ultratokenizer',
+    title: 'Independent receipt verifier · Ultratokenizer',
     description:
       'Check an issuance receipt against a trust policy obtained separately. Verify local signatures and bindings in a Web Worker, with an optional online SP1 proof check.',
     priority: '0.8',
@@ -110,7 +110,7 @@ export const SITE_PAGES = [
   {
     route: '/institution/',
     markdown: '/institution.md',
-    title: 'Institution console — Ultratokenizer',
+    title: 'Institution console · Ultratokenizer',
     description:
       'Review a test issuance, reserve a complete allocation and authorize its mint with an institution wallet.',
     priority: '0.7',
