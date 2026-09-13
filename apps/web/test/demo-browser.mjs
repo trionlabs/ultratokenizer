@@ -38,6 +38,8 @@ function isolate(page, external, config) {
 }
 
 const onStage = (page) => page.locator('.stage .part[data-state="on"]').count();
+const onList = (page) =>
+  page.locator('.stage-list li[data-state="on"]').count();
 
 try {
   // The four steps advance one shared picture and never scroll sideways.
@@ -51,7 +53,13 @@ try {
       await page.setViewportSize({ width, height: 900 });
       await page.goto(demo, { waitUntil: 'networkidle' });
       await expect(page.locator('.rail button')).toHaveCount(steps.length);
-      await expect(page.locator('.stage')).toBeVisible();
+      // The wide diagram sets 9-unit type; under 760px the same progression
+      // is carried by the text list instead, and exactly one of them shows.
+      const narrow = width <= 760;
+      await expect(page.locator('.stage')).toBeVisible({ visible: !narrow });
+      await expect(page.locator('.stage-list')).toBeVisible({
+        visible: narrow,
+      });
       await expect(page.locator('.header-wallet')).toHaveCount(0);
       for (let index = 0; index < steps.length; index += 1) {
         if (index > 0) await page.getByRole('button', { name: 'Next' }).click();
@@ -59,6 +67,7 @@ try {
           page.locator(`main section[aria-label="${steps[index]}"]`),
         ).toBeVisible();
         await expect.poll(() => onStage(page)).toBe(lit[index]);
+        await expect.poll(() => onList(page)).toBe(lit[index]);
         assert(
           await page.evaluate(
             () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -114,7 +123,9 @@ try {
     await page.goto(demo, { waitUntil: 'networkidle' });
     await page.getByRole('button', { name: 'Evidence' }).click();
     await expect(page.locator('.pending')).toContainText('Not live yet');
-    await expect(page.getByRole('button', { name: 'Next' })).toBeDisabled();
+    await expect(
+      page.getByRole('link', { name: 'See it on chain' }),
+    ).toBeVisible();
     await page.getByText('Deployed contracts').click();
     if (published) {
       const gate = JSON.parse(published).auditPolicy.gate;
@@ -141,17 +152,65 @@ try {
     await page.setViewportSize({ width: 1440, height: 950 });
     await page.goto(demo, { waitUntil: 'networkidle' });
     await page.getByRole('button', { name: 'Mint' }).click();
-    // Every Gate rung is already lit; no timer ever runs.
-    await expect(page.locator('.rung[data-lit="true"]')).toHaveCount(10);
+    // Every Gate rung is already lit; no timer ever runs. The rung count is
+    // pinned to IssuanceGate.issue() by test/demo-claims.test.mjs.
+    // Scoped to the stage: the Gate step's own illustration also draws rungs.
+    const rungs = await page.locator('.stage .rung').count();
+    assert.ok(rungs > 0, 'the stage has no Gate ladder');
+    await expect(page.locator('.stage .rung[data-lit="true"]')).toHaveCount(
+      rungs,
+    );
     await page.waitForTimeout(900);
-    await expect(page.locator('.rung[data-lit="true"]')).toHaveCount(10);
+    await expect(page.locator('.stage .rung[data-lit="true"]')).toHaveCount(
+      rungs,
+    );
+    assert.deepEqual(external, []);
+    assert.deepEqual(errors, []);
+    await page.close();
+  }
+
+  // A step is addressable: ?step=N opens it, out-of-range falls back to the
+  // first, and Back walks the steps instead of leaving the site.
+  {
+    const external = [];
+    const errors = [];
+    const page = await browser.newPage();
+    page.on('pageerror', (error) => errors.push(error.message));
+    await isolate(page, external, published);
+    await page.setViewportSize({ width: 1440, height: 950 });
+    const current = () =>
+      page.locator('.rail button[aria-current="step"]').innerText();
+
+    for (let index = 0; index < steps.length; index += 1) {
+      await page.goto(`${demo}?step=${index + 1}`, {
+        waitUntil: 'networkidle',
+      });
+      assert.match(await current(), new RegExp(steps[index]));
+    }
+    for (const query of ['?step=0', `?step=${steps.length + 1}`, '?step=x']) {
+      await page.goto(demo + query, { waitUntil: 'networkidle' });
+      assert.match(
+        await current(),
+        new RegExp(steps[0]),
+        `${query} fell wrong`,
+      );
+    }
+
+    await page.goto(`${demo}?step=2`, { waitUntil: 'networkidle' });
+    await page.getByRole('button', { name: 'Next' }).click();
+    assert.match(await current(), new RegExp(steps[2]));
+    assert.equal(new URL(page.url()).searchParams.get('step'), '3');
+    await page.goBack();
+    assert.match(await current(), new RegExp(steps[1]));
+    assert.equal(new URL(page.url()).searchParams.get('step'), '2');
+
     assert.deepEqual(external, []);
     assert.deepEqual(errors, []);
     await page.close();
   }
 
   console.log(
-    'Walkthrough: four steps over one accumulating stage, detail on demand, evidence and limit on the last step, reduced motion stationary, no external requests.',
+    'Walkthrough: four steps over one accumulating stage, addressable by ?step, detail on demand, evidence and limit on the last step, reduced motion stationary, no external requests.',
   );
 } finally {
   await browser.close();

@@ -9,32 +9,57 @@
 
   const on = (from: number) => (step >= from ? 'on' : 'off');
 
-  // The Gate ladder only runs while the Gate itself is the subject.
-  let rung = $state(10);
+  // The Gate ladder only runs while the Gate itself is the subject. CHECKS is
+  // the ordered guard count in IssuanceGate.issue() before the mint: eight
+  // inline reverts plus _request, _permit and _evidence. Pinned by
+  // test/demo-claims.test.mjs so it cannot drift from the contract.
+  const CHECKS = 11;
+  let rung = $state(CHECKS);
   let timer: ReturnType<typeof setInterval> | undefined;
 
   $effect(() => {
     clearInterval(timer);
     if (step !== 2 || prefersReducedMotion.current) {
-      rung = step < 2 ? 0 : 10;
+      rung = step < 2 ? 0 : CHECKS;
       return;
     }
     rung = 0;
     timer = setInterval(() => {
-      rung = rung >= 10 ? 10 : rung + 1;
-      if (rung >= 10) clearInterval(timer);
+      rung = rung >= CHECKS ? CHECKS : rung + 1;
+      if (rung >= CHECKS) clearInterval(timer);
     }, 130);
   });
 
   onMount(() => () => clearInterval(timer));
 
-  const rungs = Array.from({ length: 10 }, (_, index) => 72 + index * 17);
+  const rungs = Array.from(
+    { length: CHECKS },
+    (_, index) => 72 + (index * 153) / (CHECKS - 1),
+  );
+
+  const summary = [
+    { at: 0, text: 'Signed document, 196-byte capsule' },
+    { at: 0, text: 'zkPDF inside the SP1 guest' },
+    { at: 0, text: '224 bytes of public values' },
+    { at: 1, text: 'Reserved 1000 mg, issued 0' },
+    { at: 1, text: 'Issuer permit, expires in minutes' },
+    { at: 2, text: `${CHECKS} ordered checks, one transaction` },
+    { at: 2, text: 'Token: not minted yet' },
+    { at: 3, text: '20 contracts deployed, 3 ERC-8004 records' },
+  ];
+  const label = $derived(
+    `The engine, step ${step + 1} of 4. ` +
+      summary
+        .map((row) => `${row.text}${step >= row.at ? '' : ' (not yet)'}`)
+        .join('. '),
+  );
 </script>
 
 <svg
   class="stage"
   viewBox="0 0 960 290"
-  aria-hidden="true"
+  role="img"
+  aria-label={label}
   focusable="false"
   fill="none"
   stroke-width="1.5"
@@ -116,18 +141,27 @@
 
   <g class="part" data-state={on(2)}>
     <rect class="ink" x="524" y="40" width="196" height="210" rx="14" />
-    <path class="rail" pathLength="1" d="M548 72v153" style="--p:{rung / 10}" />
+    <path
+      class="rail"
+      pathLength="1"
+      d="M548 72v153"
+      style="--p:{rung / CHECKS}"
+    />
     {#each rungs as y, index}
       <g class="rung" data-lit={index < rung}>
         <path class="hair" d={`M548 ${y}h18`} />
         <circle class="dot" cx="548" cy={y} r="4" />
       </g>
     {/each}
+    <!-- One label per pair of rungs, short enough to stay inside the box. -->
     <text class="micro" x="576" y="76">ISSUANCE IS OPEN</text>
-    <text class="micro" x="576" y="127">NOT USED BEFORE · YOU SIGNED</text>
-    <text class="micro" x="576" y="178">BANK ALLOWED IT · PROOF HOLDS</text>
-    <text class="micro" x="576" y="229">AMOUNT MATCHES · THEN MINT</text>
-    <text class="micro" x="524" y="28">TEN CHECKS, ONE TRANSACTION</text>
+    <text class="micro" x="576" y="107">NOT USED BEFORE</text>
+    <text class="micro" x="576" y="137">BOTH SIDES SIGNED</text>
+    <text class="micro" x="576" y="168">PROOF HOLDS</text>
+    <text class="micro" x="576" y="198">AMOUNT MATCHES</text>
+    <text class="micro" x="524" y="28"
+      >{CHECKS} ORDERED CHECKS, ONE TRANSACTION</text
+    >
   </g>
 
   <path class="link" pathLength="1" data-state={on(2)} d="M726 145h30" />
@@ -150,7 +184,47 @@
   </g>
 </svg>
 
+<ol class="stage-list">
+  {#each summary as row}
+    <li data-state={on(row.at)}>{row.text}</li>
+  {/each}
+</ol>
+
 <style>
+  .stage-list {
+    display: none;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .stage-list li {
+    padding-left: 15px;
+    position: relative;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--p-muted);
+    transition: color 320ms ease;
+  }
+  .stage-list li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 7px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--p-line);
+    transition: background 320ms ease;
+  }
+  .stage-list li[data-state='on'] {
+    color: var(--p-ink);
+  }
+  .stage-list li[data-state='on']::before {
+    background: var(--p-accent);
+  }
+
   .stage {
     display: block;
     width: 100%;
@@ -282,6 +356,16 @@
     .rail,
     .rung .dot {
       transition: none;
+    }
+  }
+  /* Below this width the wide diagram renders its 9-unit type at about 3px,
+     so the list carries the same progression instead. */
+  @media (max-width: 760px) {
+    .stage {
+      display: none;
+    }
+    .stage-list {
+      display: flex;
     }
   }
 </style>

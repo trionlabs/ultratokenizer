@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
+  import { pushState } from '$app/navigation';
+  import { page } from '$app/state';
   import PortalShell from '$lib/components/PortalShell.svelte';
   import Glyph from '$lib/visuals/Glyph.svelte';
   import EngineStage from '$lib/visuals/EngineStage.svelte';
@@ -22,7 +24,7 @@
       id: 'Prove',
       who: 'you',
       line: 'Your machine checks the signature and emits a small proof. The file never leaves.',
-      why: 'Otherwise you would upload a bank document to a server and have to trust whoever runs it.',
+      why: 'Otherwise you would upload your document to a server and have to trust whoever runs it.',
       aside:
         'zkPDF reads the signature. SP1 is the VM it runs in. The on-chain verifier is a third thing — step three.',
       items: [
@@ -56,7 +58,7 @@
       id: 'Authorise',
       who: 'the institution',
       line: 'One gram is set aside on chain, then a permit that expires in minutes.',
-      why: 'Otherwise the minter could issue any amount it liked and call it backed.',
+      why: 'Otherwise the issuer could mint any amount it liked and call it backed.',
       aside: '',
       items: [
         {
@@ -80,8 +82,8 @@
     {
       id: 'Mint',
       who: 'the chain',
-      line: 'Ten checks in one transaction. Any failure and nothing happens.',
-      why: 'Otherwise one operator could mint whatever they wanted and you would find out later.',
+      line: 'Eleven ordered checks in one transaction. Any failure and nothing happens.',
+      why: 'Otherwise the issuer could mint whatever it wanted and you would find out later.',
       aside: '',
       items: [
         {
@@ -122,11 +124,33 @@
   ];
 
   let step = $state(0);
+
+  function indexFromQuery(search: string) {
+    const wanted = Number(new URLSearchParams(search).get('step'));
+    const inRange =
+      Number.isInteger(wanted) && wanted >= 1 && wanted <= steps.length;
+    return inRange ? wanted - 1 : 0;
+  }
+
+  // Shallow routing carries the step, so Back returns to the previous one
+  // instead of leaving the site. History entries this page did not create —
+  // the first load, or Back onto it — carry no state, so the query string is
+  // the fallback. `step` is read untracked so the effect does not re-run on
+  // its own write. This runs in the browser only, which keeps the prerender
+  // away from `url.searchParams`.
+  $effect(() => {
+    const carried = page.state.step;
+    const index =
+      typeof carried === 'number' ? carried : indexFromQuery(location.search);
+    if (untrack(() => step) !== index) step = index;
+  });
+
   const current = $derived(steps[step]);
   const last = $derived(step === steps.length - 1);
 
   function go(index: number) {
-    step = Math.min(Math.max(index, 0), steps.length - 1);
+    const next = Math.min(Math.max(index, 0), steps.length - 1);
+    pushState(`?step=${next + 1}`, { step: next });
   }
 
   let deployment = $state<DeploymentConfig>();
@@ -209,6 +233,28 @@
     </p>
   </section>
 
+  <section class="thesis" aria-label="What is different here">
+    <p class="thesis-head">Three questions, three separate answers.</p>
+    <ol>
+      <li>
+        <span class="q">Is the document real?</span>
+        <span class="a">zkPDF, inside SP1</span>
+      </li>
+      <li>
+        <span class="q">Who is the issuer?</span>
+        <span class="a">ERC-8004 registry</span>
+      </li>
+      <li>
+        <span class="q">May this mint happen?</span>
+        <span class="a">the Gate, on Hedera</span>
+      </li>
+    </ol>
+    <p class="thesis-foot">
+      Most systems answer all three with one trusted server. Each answer here is
+      checkable on its own, by someone who does not trust us.
+    </p>
+  </section>
+
   <section class="stage-wrap" aria-label="The engine">
     <EngineStage {step} />
   </section>
@@ -243,13 +289,18 @@
             onclick={() => go(step - 1)}
             aria-label="Previous step"><Glyph name="back" size={15} /></button
           >
-          <button
-            class="move primary"
-            type="button"
-            disabled={last}
-            onclick={() => go(step + 1)}
-            >Next <Glyph name="arrow" size={15} /></button
-          >
+          {#if last}
+            <a class="move primary" href="/trust/"
+              >See it on chain <Glyph name="arrow" size={15} /></a
+            >
+          {:else}
+            <button
+              class="move primary"
+              type="button"
+              onclick={() => go(step + 1)}
+              >Next <Glyph name="arrow" size={15} /></button
+            >
+          {/if}
         </div>
       </div>
       <p class="line">{current.line}</p>
@@ -268,7 +319,7 @@
                   <strong>{item.label}</strong>
                   <small>{item.line}</small>
                 </span>
-                <span class="more">More</span>
+                <span class="more" aria-hidden="true"></span>
               </summary>
               <div class="item-body">
                 <p class="why"><span>Why</span>{item.why}</p>
@@ -290,8 +341,9 @@
                 >
                 <span class="item-copy">
                   <strong>Deployed contracts</strong>
-                  <small>Four addresses, twenty sources verified.</small>
+                  <small>Twenty deployed, twenty runtimes verified.</small>
                 </span>
+                <span class="more" aria-hidden="true"></span>
               </summary>
               <div class="item-body">
                 {#if deployment}
@@ -424,9 +476,8 @@
     font-weight: 700;
   }
   button.rail-step[data-done='true'] span {
-    background: var(--p-accent);
+    background: var(--p-iris);
     color: white;
-    opacity: 0.55;
   }
   button.rail-step[data-on='true'] {
     background: var(--p-accent-soft);
@@ -466,6 +517,49 @@
     line-height: 1.5;
     max-width: 52ch;
   }
+  .thesis {
+    margin-top: 16px;
+    padding: 14px 0 12px;
+    border-top: 1px solid var(--p-line);
+  }
+  .thesis-head {
+    margin: 0 0 9px;
+    font-size: 0.86rem;
+    font-weight: 650;
+  }
+  .thesis ol {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .thesis li {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    padding: 10px 13px;
+    border-radius: 11px;
+    background: var(--p-accent-soft);
+  }
+  .thesis .q {
+    font-size: 0.78rem;
+    color: var(--p-ink);
+  }
+  .thesis .a {
+    font-size: 0.82rem;
+    font-weight: 650;
+    color: var(--p-accent);
+  }
+  .thesis-foot {
+    margin: 9px 0 0;
+    font-size: 0.75rem;
+    line-height: 1.55;
+    color: var(--p-muted);
+    max-width: 78ch;
+  }
   .standing {
     margin: 8px 0 0;
     padding: 10px 13px;
@@ -500,6 +594,12 @@
     margin-left: auto;
     font-size: 0.7rem;
     color: var(--p-accent);
+  }
+  .more::after {
+    content: 'More';
+  }
+  details[open] .more::after {
+    content: 'Less';
   }
   .aside {
     margin: 0;

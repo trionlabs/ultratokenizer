@@ -2,30 +2,35 @@
   import { onMount } from 'svelte';
   import { prefersReducedMotion } from 'svelte/motion';
 
-  // Ten checks in a fixed order. The mint on rung ten is only ever reached
-  // by passing every rung above it, so the order is the security property.
+  // The ordered guards of IssuanceGate.issue(), in source order: eight inline
+  // reverts and the three internal validators. The token on the last rung is
+  // only ever reached by passing every rung above it, so the order is the
+  // security property. demo-claims.test.mjs pins this count to the contract.
   const checks = [
-    'NOT PAUSED',
+    'ISSUANCE OPEN',
     'REQUEST FORM',
-    'DIGEST',
-    'REPLAY x4',
-    'HOLDER SIG',
+    'NOT USED BEFORE',
+    'HOLDER SIGNED',
     'ISSUER PERMIT',
-    'RIGHTS',
+    'RIGHTS RECORD',
     'SP1 PROOF',
     'RESERVATION',
-    'MINT',
+    'NOT EXPIRED',
+    'NOT DRAWN',
+    'AMOUNT MATCHES',
   ];
-  const firstRung = 24;
-  const rungGap = 24;
+  const firstRung = 18;
+  const rungGap = 20;
   const rungY = (index: number) => firstRung + index * rungGap;
+  const mintRung = rungY(checks.length);
   // Pause for three beats on the completed ladder before restarting.
   const cycleEnd = checks.length + 3;
 
-  // At rest the ladder is complete: every rung has been passed.
-  let cursor = $state(checks.length);
+  // At rest the ladder is complete: every rung has been passed and the token
+  // is reached, which is also the state reduced motion keeps.
+  let cursor = $state(checks.length + 1);
   let markerShift = $derived(
-    (Math.min(Math.max(cursor, 1), checks.length) - 1) * rungGap,
+    (Math.min(Math.max(cursor, 1), checks.length + 1) - 1) * rungGap,
   );
 
   onMount(() => {
@@ -51,7 +56,7 @@
   stroke-linejoin="round"
 >
   <!-- The spine is the single accent: one ordered traversal, top to bottom. -->
-  <line class="spine" x1="30" y1={rungY(0)} x2="30" y2={rungY(9)} />
+  <line class="spine" x1="30" y1={rungY(0)} x2="30" y2={mintRung} />
 
   {#each checks as check, index (check)}
     <g class="rung" data-passed={cursor > index}>
@@ -76,14 +81,14 @@
     </g>
   {/each}
 
-  <!-- Rung ten terminates in the token. Nothing else reaches it. -->
-  <g class="arrival" data-passed={cursor >= checks.length}>
-    <line x1="90" y1={rungY(9)} x2="236" y2={rungY(9)} />
-    <circle cx="254" cy={rungY(9)} r="14" />
-    <circle cx="254" cy={rungY(9)} r="6" />
+  <!-- The last rung terminates in the token. Nothing else reaches it. -->
+  <g class="arrival" data-passed={cursor > checks.length}>
+    <line x1="90" y1={mintRung} x2="236" y2={mintRung} />
+    <circle cx="254" cy={mintRung} r="14" />
+    <circle cx="254" cy={mintRung} r="6" />
     <text
       x="254"
-      y="264"
+      y={mintRung + 32}
       text-anchor="middle"
       font-size="9"
       letter-spacing="0.08em"
