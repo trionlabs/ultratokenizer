@@ -75,6 +75,13 @@ Issuance reconciliation binds the exact logical request and holder signature, no
 
 Use `connect()` to request the wallet account, `validate(bundle)` for preflight, `sign(bundle)` for holder approval, `simulate(bundle, signature)` before `submit(bundle, signature)`, and `wait(bundle, signature, hash)` for reconciliation. `balance()` reads the configured token; post-issuance transfers remain divisible into positive integer milligrams. `resolveEnsRecipient` resolves an optional name to an address before that address is confirmed as transfer intent.
 
+`connect()` requests permission and rereads the current account and chain through the wallet only.
+It makes no deployment RPC calls, generates no proof and submits no transaction. A connected wallet
+does not establish deployment admission. Full authority and ATS checks still run during request
+preparation, proof validation, signing, simulation and submission. The browser reconciles initial
+account-permission events against fresh observations; changed accounts and delayed results cannot
+silently inherit earlier approvals.
+
 `getTokenBackend(deployment)` distinguishes the explicitly selected backend. Ordinary balance,
 decimal and transfer calls use the shared ERC-20 ABI. The `association` operation is exclusive to native HTS and
 rejects ATS before making a wallet or RPC call; it never returns a fabricated success or hash.
@@ -125,7 +132,7 @@ review commitment. Its hash is an independently accepted assertion, not a certif
 itself. The supported history is direct creation of the inert initializer, with token, adapter,
 resolver and initializer absent before that block. A factory/migration history needs its own profile.
 
-Before wallet operations and proof preflight, the shared chain module checks ATS at one canonical
+During issuance preparation and proof preflight, the shared chain module checks ATS at one canonical
 block, including actual runtime library links, proxy storage/configuration, selected selectors,
 initialization status, relevant roles, owner, supply/decimals and transfer-policy state. The Gate's
 rights entry must select the same token and adapter/hash. Changing code/configuration fails;

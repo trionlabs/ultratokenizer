@@ -971,19 +971,84 @@ await test('a provider rejection after simulated acceptance retains the original
   assert.equal(state.sends, 1);
 });
 
+await test('connection reads current wallet access without querying the ATS deployment', async (t) => {
+  let reads = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    reads++;
+    throw new Error('Connection must not query the deployment');
+  });
+  const methods: string[] = [];
+  const provider = {
+    async request({ method }: { method: string }) {
+      methods.push(method);
+      if (method === 'eth_requestAccounts') return [issuer.address];
+      if (method === 'eth_accounts') return [holder.address];
+      if (method === 'eth_chainId') return '0x128';
+      throw new Error(`Unexpected wallet method: ${method}`);
+    },
+  } as EIP1193Provider;
+  const client = createIssuanceClient({
+    provider,
+    deployment: {
+      ...deployment,
+      format: DEPLOYMENT_V2_FORMAT,
+      backend: createAtsBackendFixture(),
+    },
+  });
+  assert.deepEqual(await client.connect(), {
+    address: holder.address,
+    chainId: '296',
+  });
+  assert.deepEqual(methods, [
+    'eth_requestAccounts',
+    'eth_accounts',
+    'eth_chainId',
+  ]);
+  assert.equal(reads, 0);
+  await assert.rejects(
+    client.validate(bundle),
+    hasCode('issuance_preflight_unavailable'),
+  );
+  assert.ok(reads > 0, 'Proof validation must still authenticate deployment');
+});
+
+await test('connection rejects the wrong network or revoked wallet access', async (t) => {
+  for (const scenario of ['wrong_chain', 'wrong_account'] as const) {
+    await t.test(scenario, async () => {
+      const methods: string[] = [];
+      const provider = {
+        async request({ method }: { method: string }) {
+          methods.push(method);
+          if (method === 'eth_requestAccounts') return [holder.address];
+          if (method === 'eth_accounts')
+            return scenario === 'wrong_account' ? [] : [holder.address];
+          if (method === 'eth_chainId')
+            return scenario === 'wrong_chain' ? '0x1' : '0x128';
+          throw new Error(`Unexpected wallet method: ${method}`);
+        },
+      } as EIP1193Provider;
+      const client = createIssuanceClient({ provider, deployment });
+      await assert.rejects(client.connect(), hasCode(scenario));
+      assert.deepEqual(methods, [
+        'eth_requestAccounts',
+        'eth_accounts',
+        'eth_chainId',
+      ]);
+    });
+  }
+});
+
 await test('holder preflight APIs sanitize read outages before any transaction or signature request', async (t) => {
-  for (const action of ['connect', 'validate', 'sign', 'simulate'] as const) {
+  for (const action of ['validate', 'sign', 'simulate'] as const) {
     await t.test(action, async (subtest) => {
       const { state, client, holderSignature } = await rpcFixture(subtest);
       state.onRpcRequest = () => {
         throw new Error('Private provider diagnostic');
       };
       await assert.rejects(
-        action === 'connect'
-          ? client.connect()
-          : action === 'simulate'
-            ? client.simulate(bundle, holderSignature)
-            : client[action](bundle),
+        action === 'simulate'
+          ? client.simulate(bundle, holderSignature)
+          : client[action](bundle),
         hasCode('issuance_preflight_unavailable'),
       );
       assert.equal(state.sends, 0);

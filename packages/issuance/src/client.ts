@@ -44,7 +44,6 @@ export function createIssuanceClient(input: {
     chainId,
     reader,
     wallet,
-    deploymentMatches,
     activeAccount,
     canonicalReceipt,
     send,
@@ -137,9 +136,17 @@ export function createIssuanceClient(input: {
     deployment,
     connect() {
       return preflight(async () => {
-        const [address] = await walletPrompt(() => wallet.requestAddresses());
+        await walletPrompt(() => wallet.requestAddresses());
+        // Connection grants account access only. Every sensitive operation below
+        // still authenticates the deployment and its current ATS configuration.
+        const [addresses, walletChain] = await Promise.all([
+          wallet.getAddresses(),
+          wallet.getChainId(),
+        ]);
+        const address = addresses[0];
         if (!address) throw new IssuanceClientError('wrong_account');
-        await deploymentMatches();
+        if (walletChain !== chainId)
+          throw new IssuanceClientError('wrong_chain');
         return Object.freeze({
           address: getAddress(address),
           chainId: policy.chainId,
