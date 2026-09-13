@@ -17,6 +17,7 @@ import {
   writeNew,
   ServiceError,
 } from './io.mjs';
+import { resolveProofBudget } from './budget.mjs';
 
 const LIMITS = {
   preparation: 64 * 1024,
@@ -127,7 +128,13 @@ export async function importVerifiedProof(service, input, command = runJson) {
     await runtime.assertOperationsEnabled({ newJob: false });
     const folder = store.directory(job.jobId);
     const originalJournal = join(folder, 'job.sp1-network-request.jsonl');
-    const originalBudget = confined(root, runtime.config.network.budgetPath);
+    const budgetBinding = await resolveProofBudget(
+      root,
+      runtime.config,
+      job,
+      folder,
+    );
+    const originalBudget = confined(root, budgetBinding.path);
     const unchanged = async () => {
       check(
         sha256(await readOwned(originalJournal, 2 * 1024 * 1024)) ===

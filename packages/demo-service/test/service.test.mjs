@@ -70,6 +70,12 @@ async function fixture(t, { enabled = true, failure } = {}) {
       if (!enabled) throw new ServiceError('operations_disabled');
     },
     assertCredentialsReady: async () => {},
+    dispatchAdmission: async () => ({ retainedJobIds: [] }),
+    selectProofBudget: async () => ({
+      path: 'reviewed-budget.jsonl',
+      id: 'aa'.repeat(32),
+      requester: holder.address,
+    }),
     checkPreparedProofRecovery: async () => {},
     reserve: async () => {
       counts.reserve += 1;
@@ -531,6 +537,119 @@ await test('credential preflight failure cannot reserve backing or retain a disp
   assert.equal(f.store.get(job.jobId).status, 'awaiting_signature');
   assert.equal(f.store.get(job.jobId).holderSignature, undefined);
   assert.equal(f.counts.reserve + f.counts.prove, 0);
+});
+
+await test('budget selection fails before persisting a signature or reserving backing', async (t) => {
+  const f = await fixture(t);
+  const job = await f.prepare();
+  f.runtime.selectProofBudget = async () => {
+    throw new ServiceError('operations_disabled');
+  };
+  await assert.rejects(f.service.start(job.jobId, await f.sign(job)), {
+    code: 'operations_disabled',
+  });
+  assert.equal(f.store.get(job.jobId).holderSignature, undefined);
+  assert.equal(f.store.get(job.jobId).proofBudget, undefined);
+  assert.equal(f.counts.reserve + f.counts.prove, 0);
+  await assert.rejects(
+    f.service.start(job.jobId, {
+      ...(await f.sign(job)),
+      proofBudget: { path: 'attacker.jsonl' },
+    }),
+    { code: 'invalid_request' },
+  );
+});
+
+await test('proof budget is durable before the first reservation and survives process restart', async (t) => {
+  const f = await fixture(t);
+  const prepared = await f.prepare();
+  const expected = await f.runtime.selectProofBudget(
+    f.store.get(prepared.jobId),
+  );
+  const reserve = f.runtime.reserve;
+  f.runtime.reserve = async (job) => {
+    const disk = JSON.parse(
+      await readFile(join(f.directory, job.jobId, 'job.json'), 'utf8'),
+    );
+    assert.deepEqual(job.proofBudget, expected);
+    assert.deepEqual(disk.proofBudget, expected);
+    assert.equal(disk.holderSignature, job.holderSignature);
+    return reserve(job);
+  };
+  await f.service.start(prepared.jobId, await f.sign(prepared));
+  await f.settle();
+  await f.store.close();
+  const reopened = await new JobStore(f.directory).open();
+  try {
+    assert.deepEqual(reopened.get(prepared.jobId).proofBudget, expected);
+  } finally {
+    await reopened.close();
+  }
+});
+
+await test('one reviewed observer permits only the selected document and never hides another unfinished job', async (t) => {
+  for (const other of [
+    'none',
+    'unfinished',
+    'reservation_uncertain',
+    'dispatch',
+  ]) {
+    await t.test(other, async (subtest) => {
+      const f = await fixture(subtest);
+      const nextId = 'bb'.repeat(32),
+        thirdId = 'cc'.repeat(32);
+      const source = await f.runtime.source(id);
+      f.runtime.source = async (documentId) => ({ ...source, documentId });
+      const old = await f.prepare();
+      await f.store.update(f.store.get(old.jobId), {
+        status: 'proving',
+        ...(await f.sign(old)),
+        reservation: { transactionHash: hash },
+      });
+      const unchanged = JSON.stringify(f.store.get(old.jobId));
+      f.runtime.dispatchAdmission = async () => ({
+        nextDocumentId: nextId,
+        retainedJobIds: [old.jobId],
+      });
+      f.service.running.set(old.jobId, Promise.resolve());
+      f.service.runningModes.set(
+        old.jobId,
+        other === 'dispatch' ? 'dispatch' : 'observe',
+      );
+      const next = await f.service.prepare({
+        documentId: nextId,
+        recipient: holder.address,
+      });
+      assert.equal((await f.service.config(thirdId)).readiness.canStart, false);
+      if (other === 'unfinished' || other === 'reservation_uncertain') {
+        const third = await f.service.prepare({
+          documentId: thirdId,
+          recipient: holder.address,
+        });
+        await f.store.update(f.store.get(third.jobId), {
+          status: 'attention_required',
+          ...(await f.sign(third)),
+          detailCode:
+            other === 'reservation_uncertain'
+              ? other
+              : 'proof_request_uncertain',
+        });
+      }
+      const result = await f.service.start(next.jobId, await f.sign(next));
+      if (other === 'none') {
+        assert.notEqual(result.status, 'blocked');
+        await f.settle();
+        assert.equal(f.counts.reserve, 1);
+        assert.equal(f.counts.prove, 1);
+      } else {
+        assert.equal(result.status, 'blocked');
+        assert.equal(f.store.get(next.jobId).holderSignature, undefined);
+        assert.equal(f.store.get(next.jobId).proofBudget, undefined);
+        assert.equal(f.counts.reserve + f.counts.prove, 0);
+      }
+      assert.equal(JSON.stringify(f.store.get(old.jobId)), unchanged);
+    });
+  }
 });
 
 await test('explicit prepared-proof continuation reuses the reservation and starts only once', async (t) => {

@@ -40,6 +40,7 @@ Required configuration fields:
 | `maxReservationFeeTinybar`                | Maximum gas fee liability for each issuer reservation transaction                                                       |
 | `operationsEnabled`                       | Explicit operator dispatch switch, initially `false`                                                                    |
 | `budgetReviewPath`                        | Time-bounded USD review retaining previous budget liability and pinning the new budget identity                         |
+| `continuationReviewPath` (optional)       | Private, expiring review admitting exactly one next document while one identified paid job remains observation-only     |
 | `network`                                 | Requester address/credential, existing budget journal, admitted artifact origin, disclosure approval and proving limits |
 
 `network` contains `requesterAddress`, `credential: {path, variable}`, `budgetPath`,
@@ -167,6 +168,45 @@ unfinished document may enter reservation/proof dispatch at a time, including in
 after a restart. This prevents a second document from reserving backing while the first has not
 yet reserved its proving fee. Polling and same-proof permit refresh remain available when the
 remaining budget cannot cover another proof.
+
+### Reviewed continuation with a retained paid job
+
+A new signed job durably stores its proof budget's path, immutable Created ID and requester in
+the same update as the holder signature, before any reservation. Observation and verified-proof
+import resolve that original budget even after the operator selects another active budget.
+For older paid jobs without this snapshot, the retained paid plan supplies the immutable budget
+ID. Missing or ambiguous identity fails closed; it never defaults to the current budget. An older
+pre-upload job without either binding requires operator reconciliation before it can continue.
+
+The optional continuation review makes one narrow exception to the unfinished-job guard. It names
+one exact prior paid job for observation only and one distinct allowlisted document for new
+issuance. It does not retry, cancel, refund or delete the prior job or release its reservation.
+All prior budget caps remain in the aggregate USD review. The HTTP client cannot select a budget
+or supply this review. Its owner-only JSON has exactly these fields:
+
+```text
+format: ultratokenizer.demo-continuation.v1
+validUntilUnix: operator-approved expiry (exclusive)
+aggregateReviewSha256: SHA-256 of the exact budgetReviewPath file
+nextDocumentId: unprefixed SHA-256 of the one admitted new PDF
+retainedJob:
+  jobId: unprefixed original request digest
+  documentId: unprefixed SHA-256 of the original PDF
+  requestDigest: original 0x-prefixed request digest
+  budgetPath: original budget journal's repository-relative path
+  budgetId: original budget's immutable Created event hash
+  paidRequestId: original acknowledged/recovered 0x-prefixed network request ID
+  reservationTransactionHash: original 0x-prefixed reservation transaction hash
+  mode: observe-only
+```
+
+The exception requires matching retained preparation and paid-request artifacts. A running prior
+job must have been launched explicitly as an observer; an ordinary dispatch cannot be exempted.
+Every other unfinished job is still checked, and any uncertain reservation blocks new issuance.
+The new document still needs its own holder signature and current operation/disclosure approval.
+Admission is rechecked before reservation, staging and paid submission. Expiry blocks new spending
+but leaves original paid-request observation available. This configuration change does not fix a
+failed SP1 proof; actual SDK and on-chain verification still determine whether minting is possible.
 
 ## Validation
 

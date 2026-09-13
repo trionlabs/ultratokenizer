@@ -35,7 +35,11 @@ import {
   ServiceError,
 } from './io.mjs';
 import { credential, issuerProvider } from './issuer-provider.mjs';
-import { checkBudgetReview } from './budget.mjs';
+import {
+  checkBudgetReview,
+  readContinuationReview,
+  resolveProofBudget,
+} from './budget.mjs';
 import {
   checkPreparedRecovery,
   checkSubmittedRecovery,
@@ -338,6 +342,78 @@ export class RuntimeAdapter {
       throw new ServiceError('operations_disabled');
     }
   }
+  async selectProofBudget(job) {
+    return resolveProofBudget(this.root, this.config, job, undefined, {
+      newJob: true,
+    });
+  }
+  async assertProofDispatch(job, folder) {
+    await this.assertOperationsEnabled();
+    const budget = await resolveProofBudget(
+      this.root,
+      this.config,
+      job,
+      folder,
+    );
+    // Recovery may resolve historical plans; spending requires the snapshot
+    // persisted before this job's reservation and today's explicitly active ID.
+    check(
+      job.proofBudget && budget.path === this.config.network.budgetPath,
+      'operations_disabled',
+    );
+    const continuation = await readContinuationReview(
+      this.root,
+      this.config,
+      Math.floor(Date.now() / 1000),
+    );
+    check(
+      !continuation || continuation.nextDocumentId === job.documentId,
+      'operations_disabled',
+    );
+    return budget;
+  }
+  async dispatchAdmission(jobs, runningModes) {
+    const review = await readContinuationReview(
+      this.root,
+      this.config,
+      Math.floor(Date.now() / 1000),
+    );
+    if (!review) return { retainedJobIds: [] };
+    const retained = review.retainedJob;
+    const job = jobs.find((value) => value.jobId === retained.jobId);
+    check(
+      job?.holderSignature &&
+        job.documentId === retained.documentId &&
+        job.requestDigest === retained.requestDigest &&
+        job.reservation?.transactionHash ===
+          retained.reservationTransactionHash &&
+        job.detailCode !== 'reservation_uncertain' &&
+        (runningModes.get(job.jobId) === 'observe' ||
+          (!runningModes.has(job.jobId) &&
+            ['attention_required', 'ready_to_mint'].includes(job.status))),
+      'proof_request_uncertain',
+    );
+    const folder = join(this.path('storePath'), job.jobId);
+    const budget = await resolveProofBudget(
+      this.root,
+      this.config,
+      job,
+      folder,
+    );
+    check(
+      budget.path === retained.budgetPath && budget.id === retained.budgetId,
+      'proof_request_uncertain',
+    );
+    const binding = await this.checkSubmittedProofRecovery(job, folder);
+    check(
+      binding.requestId === retained.paidRequestId,
+      'proof_request_uncertain',
+    );
+    return {
+      nextDocumentId: review.nextDocumentId,
+      retainedJobIds: [job.jobId],
+    };
+  }
   async source(id) {
     const source = this.sources.get(id);
     check(source && this.inspected.has(id), 'unsupported_document', 404);
@@ -467,6 +543,7 @@ export class RuntimeAdapter {
   async reserveOnce(job, folder) {
     check(!this.reservationUncertain, 'reservation_uncertain');
     await this.assertOperationsEnabled({ newJob: true });
+    await this.assertProofDispatch(job, folder);
     const source = this.sources.get(job.documentId);
     const ledger = openInstitutionLedger({ path: this.path('ledgerPath') });
     try {
@@ -524,6 +601,7 @@ export class RuntimeAdapter {
   }
   async checkPreparedProofRecovery(job, folder) {
     await this.assertOperationsEnabled({ newJob: true });
+    await this.assertProofDispatch(job, folder);
     await this.assertCredentialsReady();
     const source = this.sources.get(job.documentId);
     check(source, 'source_not_admitted');
@@ -624,7 +702,6 @@ export class RuntimeAdapter {
     );
   }
   async prove(job, folder, update, { prepared = false } = {}) {
-    await this.assertOperationsEnabled();
     const source = this.sources.get(job.documentId);
     const prefix = join(folder, 'job');
     const preparationPath = `${prefix}.sp1-network-preparation.json`;
@@ -632,7 +709,8 @@ export class RuntimeAdapter {
     const quotePath = `${prefix}.sp1-network-quote.json`;
     const settingsPath = `${prefix}.sp1-network-submission.json`;
     const requestJournal = `${prefix}.sp1-network-request.jsonl`;
-    const budgetPath = confined(this.root, this.config.network.budgetPath);
+    const budget = await this.assertProofDispatch(job, folder);
+    const budgetPath = confined(this.root, budget.path);
     const requestPath = join(folder, 'request.json');
     if (!prepared) await writeNew(requestPath, job.request);
     const review = this.proofReview(
@@ -655,7 +733,7 @@ export class RuntimeAdapter {
         requestPath,
         preparationPath,
       ]);
-    await this.assertOperationsEnabled();
+    await this.assertProofDispatch(job, folder);
     const key = await credential(this.root, this.config.network.credential);
     check(
       privateKeyToAccount(key).address.toLowerCase() ===
@@ -725,7 +803,7 @@ export class RuntimeAdapter {
       budgetPath,
       requestJournal,
     ]);
-    await this.assertOperationsEnabled();
+    await this.assertProofDispatch(job, folder);
     await update('queued');
     try {
       await command(['submit-request', requestJournal, budgetPath], { env });
@@ -737,6 +815,12 @@ export class RuntimeAdapter {
   async checkSubmittedProofRecovery(job, folder) {
     const source = this.sources.get(job.documentId);
     check(source, 'source_not_admitted');
+    const budget = await resolveProofBudget(
+      this.root,
+      this.config,
+      job,
+      folder,
+    );
     return checkSubmittedRecovery(
       folder,
       job,
@@ -746,7 +830,7 @@ export class RuntimeAdapter {
         await readOwned(join(folder, 'request.json'), 16 * 1024),
       ),
       this.program,
-      confined(this.root, this.config.network.budgetPath),
+      confined(this.root, budget.path),
       this.config.network.requesterAddress,
     );
   }

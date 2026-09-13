@@ -39,8 +39,9 @@ export class DemoService {
     this.store = store;
     this.now = now;
     this.running = new Map();
+    this.runningModes = new Map();
   }
-  async config() {
+  async config(documentId) {
     const config = await this.runtime.configuration();
     if (
       [...this.store.jobs.values()].some(
@@ -52,15 +53,43 @@ export class DemoService {
         readiness: { canStart: false, blocker: 'reservation_uncertain' },
       };
     }
-    const retained = [...this.store.jobs.values()].find(
-      (job) => job.holderSignature && !job.proof,
+    let admission;
+    try {
+      admission = await this.runtime.dispatchAdmission(
+        [...this.store.jobs.values()],
+        this.runningModes,
+      );
+    } catch {
+      return {
+        ...config,
+        readiness: { canStart: false, blocker: 'operations_disabled' },
+      };
+    }
+    if (
+      documentId &&
+      admission.nextDocumentId &&
+      documentId !== admission.nextDocumentId
+    )
+      return {
+        ...config,
+        readiness: { canStart: false, blocker: 'operations_disabled' },
+      };
+    const exempt = new Set(admission.retainedJobIds);
+    const unfinished = [...this.store.jobs.values()].filter(
+      (job) => job.holderSignature && !job.proof && !exempt.has(job.jobId),
     );
-    if (this.running.size > 0 || (retained && ACTIVE.has(retained.status))) {
+    if (
+      [...this.running.keys()].some(
+        (id) => !exempt.has(id) || this.runningModes.get(id) !== 'observe',
+      ) ||
+      unfinished.some((job) => ACTIVE.has(job.status))
+    ) {
       return {
         ...config,
         readiness: { canStart: false, blocker: 'verification_in_progress' },
       };
     }
+    const retained = unfinished[0];
     if (retained) {
       const blocker = [
         'proof_request_rejected',
@@ -93,7 +122,7 @@ export class DemoService {
     return {
       documentId,
       document,
-      ...(await this.config()),
+      ...(await this.config(documentId)),
       ...(resumable(job) && BigInt(job.request.validUntil) > BigInt(this.now())
         ? { existingJobStatus: job.status }
         : {}),
@@ -129,7 +158,7 @@ export class DemoService {
             now: this.now(),
           }),
         );
-        const config = await this.config();
+        const config = await this.config(input.documentId);
         const requestDigest = getIssuanceRequestDigest(request);
         const prepared = {
           request,
@@ -175,7 +204,7 @@ export class DemoService {
         requestDigest: job.requestDigest,
         prepared: job.prepared,
         status: job.status,
-        readiness: (await this.config()).readiness,
+        readiness: (await this.config(input.documentId)).readiness,
       };
     });
   }
@@ -211,7 +240,7 @@ export class DemoService {
         ['ready_to_mint', 'attention_required'].includes(job.status)
       )
         return this.status(id);
-      const config = await this.config();
+      const config = await this.config(job.documentId);
       if (!config.readiness.canStart) {
         await this.store.update(job, {
           status: 'blocked',
@@ -220,9 +249,11 @@ export class DemoService {
         return this.status(id);
       }
       await this.runtime.assertCredentialsReady();
+      const proofBudget = await this.runtime.selectProofBudget(job);
       // A durable signature precedes every allocation, chain write and paid network action.
       await this.store.update(job, {
         holderSignature: signature,
+        proofBudget,
         status: 'reserving',
         detailCode: null,
       });
@@ -304,12 +335,19 @@ export class DemoService {
     });
   }
   launch(job, options) {
+    this.runningModes.set(
+      job.jobId,
+      options?.submitted ? 'observe' : 'dispatch',
+    );
     const work = this.pipeline(job, options)
       .catch(() => {
         job.status = 'attention_required';
         job.detailCode = 'service_unavailable';
       })
-      .finally(() => this.running.delete(job.jobId));
+      .finally(() => {
+        this.running.delete(job.jobId);
+        this.runningModes.delete(job.jobId);
+      });
     this.running.set(job.jobId, work);
   }
   async pipeline(job, { prepared = false, submitted = false } = {}) {

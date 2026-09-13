@@ -87,14 +87,33 @@ async function fixture(t) {
   };
   await put(`${storePath}/${id}/job.sp1-network-preparation.json`, preparation);
   await put(`${storePath}/${id}/request.json`, request);
+  const originalBudgetId = 'aa'.repeat(32);
   const originalJournal = await put(
     `${storePath}/${id}/job.sp1-network-request.jsonl`,
-    Buffer.from('{"original":"private paid journal"}\n'),
+    { body: { event: 'prepared', plan: { budgetId: originalBudgetId } } },
   );
   const originalBudget = await put(
     'work/runtime/hedera-testnet/original.sp1-network-budget.jsonl',
-    Buffer.from('{"original":"retained budget"}\n'),
+    {
+      eventHash: originalBudgetId,
+      body: {
+        event: 'created',
+        requester: holder.address,
+        total_cap_wei: '100',
+        single_cap_wei: '100',
+      },
+    },
   );
+  const budgetReviewPath = 'work/runtime/hedera-testnet/budget-review.json';
+  const budgetReview = {
+    format: 'ultratokenizer.demo-budget-review.v1',
+    activeBudgetPath: originalBudget.path,
+    activeBudgetId: originalBudgetId,
+    activeTotalCapWei: '100',
+    requester: holder.address,
+    retainedBudgets: [],
+  };
+  await put(budgetReviewPath, budgetReview);
   const budgetId = 'ee'.repeat(32);
   const plan = {
     preparation,
@@ -195,8 +214,10 @@ async function fixture(t) {
     root,
     program: preparation,
     config: {
+      budgetReviewPath,
       network: {
         budgetPath: originalBudget.path,
+        requesterAddress: holder.address,
         originAdmissionPath: source.originAdmission.path,
       },
     },
@@ -266,6 +287,7 @@ async function fixture(t) {
     put,
     originalJournal,
     originalBudget,
+    budgetReview,
   };
 }
 
@@ -297,6 +319,38 @@ await test('operator imports into the existing job without re-reserving, paying 
   assert.notEqual(report.sourceRequestId, report.originalRequestId);
   await assert.rejects(importVerifiedProof(f.service, input, f.command));
   assert.equal(f.counts.permit, 1);
+});
+
+await test('original paid job imports against its retained budget after the active budget rotates', async (t) => {
+  const f = await fixture(t);
+  const nextBudget = await f.put(
+    'work/runtime/hedera-testnet/next.sp1-network-budget.jsonl',
+    {
+      eventHash: '99'.repeat(32),
+      body: {
+        event: 'created',
+        requester: holder.address,
+        total_cap_wei: '100',
+      },
+    },
+  );
+  f.budgetReview.retainedBudgets.push({
+    ...f.originalBudget,
+    maximumLiabilityWei: f.budgetReview.activeTotalCapWei,
+  });
+  f.budgetReview.activeBudgetPath = nextBudget.path;
+  f.budgetReview.activeBudgetId = '99'.repeat(32);
+  f.runtime.config.network.budgetPath = nextBudget.path;
+  await f.put(f.runtime.config.budgetReviewPath, f.budgetReview);
+  const result = await importVerifiedProof(
+    f.service,
+    await f.load(),
+    f.command,
+  );
+  assert.equal(result.bundleReady, true);
+  assert.equal(f.counts.permit, 1);
+  for (const pin of [f.originalJournal, f.originalBudget, nextBudget])
+    assert.equal(sha256(await readFile(join(f.root, pin.path))), pin.sha256);
 });
 
 for (const failure of [
