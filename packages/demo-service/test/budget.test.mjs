@@ -339,9 +339,10 @@ await test('retained-job exception requires exact paid identity, reservation and
   const f = await continuationFixture(t);
   const runtime = new RuntimeAdapter(f.root, f.config);
   let paidRequestId = f.continuation.retainedJob.paidRequestId;
-  runtime.checkSubmittedProofRecovery = async () => ({
-    requestId: paidRequestId,
-  });
+  runtime.checkSubmittedProofRecovery = async (_job, _folder, options) => {
+    assert.deepEqual(options, { allowRetiredSource: true });
+    return { requestId: paidRequestId };
+  };
   const admission = await runtime.dispatchAdmission([f.old], new Map());
   assert.deepEqual(admission, {
     nextDocumentId: f.next.documentId,

@@ -5,7 +5,7 @@ issuer client and SP1 requester. The browser uploads a signed PDF, approves one 
 request in its wallet, and receives a real verified bundle when proof generation and issuer
 authorization finish. The browser remains responsible for submitting and confirming the mint.
 
-The supported input is a closed batch of ten SHA-256-pinned synthetic gold PDFs. Each represents
+The supported input is a closed manifest of up to fifty SHA-256-pinned synthetic gold PDFs. Each represents
 exactly 1,000 milligrams for its signed recipient. Native CMS/capsule verification runs before a
 document is accepted and again against the newly prepared request. This does not produce a ZK
 proof. Raw EML, arbitrary PDFs, real bank documents, quantity selection and issuer selection are
@@ -31,7 +31,7 @@ Required configuration fields:
 | `format`                                  | `ultratokenizer.demo-service.v1`                                                                                        |
 | `origin`, `port`                          | Exact loopback browser origin and loopback API port                                                                     |
 | `deploymentPath`, `discoveryPath`         | Independently admitted deployment and published 8004 attribution index                                                  |
-| `manifestPath`                            | Private ten-document manifest with exact file hashes and source identities                                              |
+| `manifestPath`                            | Private bounded document manifest with exact file hashes and source identities                                          |
 | `policyTermsPath`, `rightsTermsPath`      | UTF-8 terms; both hashes must match canonical Gate records                                                              |
 | `storePath`, `ledgerPath`                 | Private job directory and unified institution ledger                                                                    |
 | `claimRunnerPath`, `networkRequesterPath` | Existing compiled native tools                                                                                          |
@@ -100,7 +100,7 @@ The Gate may remain paused during preproof reservation and proving. Final bundle
 requires deliberate Gate activation. A failed or expired permit can be refreshed against the same
 verified proof; this endpoint cannot request a replacement proof.
 
-There is one process lock and at most ten active durable jobs. An expired preparation can be
+There is one process lock and at most ten active durable jobs across up to fifty admitted documents. An expired preparation can be
 replaced only while it remains an untouched `awaiting_signature` draft: no persisted signature,
 state update, extra field or file is allowed. The old directory is retained under
 `expired-unsigned/`; its job ID stops resolving and its signature cannot authorize the fresh

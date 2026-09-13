@@ -38,7 +38,11 @@ export async function loadBridgeConfig(root, path) {
   check(sha256(await readOwned(deploymentPath)) === value.deploymentSha256);
   check(sha256(await readOwned(manifestPath)) === value.manifestSha256);
   const manifest = await readJson(manifestPath);
-  check(Array.isArray(manifest.runs) && manifest.runs.length === 10);
+  check(
+    Array.isArray(manifest.runs) &&
+      manifest.runs.length > 0 &&
+      manifest.runs.length <= 50,
+  );
   const deployment = await readJson(deploymentPath);
   // This adapter publishes only the admitted Hedera document-demo profile.
   // A different chain or policy requires a separate explicit review.

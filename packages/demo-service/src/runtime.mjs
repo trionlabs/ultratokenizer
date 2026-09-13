@@ -46,6 +46,9 @@ import {
 } from './prepared-recovery.mjs';
 import { observeSubmittedRequest } from './proof-observation.mjs';
 
+const MAX_ADMITTED_DOCUMENTS = 50;
+const DOCUMENT_NUMBER = /^(0[1-9]|[1-4][0-9]|50)$/;
+
 /** Concrete local adapter. Configuration is operator-owned; request bodies never choose tools or pins. */
 /**
  * Classifies a failed reservation attempt. `capacity_exceeded` comes only from
@@ -176,17 +179,22 @@ export class RuntimeAdapter {
     const manifest = await readJson(this.path('manifestPath'), 64 * 1024);
     check(
       manifest.format === 'ultratokenizer.demo-batch.v1' &&
-        manifest.runs.length === 10,
+        Array.isArray(manifest.runs) &&
+        manifest.runs.length > 0 &&
+        manifest.runs.length <= MAX_ADMITTED_DOCUMENTS,
       'service_unavailable',
       503,
     );
+    const runNumbers = new Set();
     for (const run of manifest.runs) {
       check(
-        /^(0[1-9]|10)$/.test(run.number) &&
+        DOCUMENT_NUMBER.test(run.number) &&
+          !runNumbers.has(run.number) &&
           /^[0-9a-f]{64}$/.test(run.fileSha256),
         'service_unavailable',
         503,
       );
+      runNumbers.add(run.number);
       const source = await readJson(
         join(dirname(this.path('manifestPath')), run.number, 'source.json'),
         16 * 1024,
@@ -404,7 +412,9 @@ export class RuntimeAdapter {
       budget.path === retained.budgetPath && budget.id === retained.budgetId,
       'proof_request_uncertain',
     );
-    const binding = await this.checkSubmittedProofRecovery(job, folder);
+    const binding = await this.checkSubmittedProofRecovery(job, folder, {
+      allowRetiredSource: true,
+    });
     check(
       binding.requestId === retained.paidRequestId,
       'proof_request_uncertain',
@@ -812,8 +822,27 @@ export class RuntimeAdapter {
     }
     return this.observeSubmittedProof(job, folder, update);
   }
-  async checkSubmittedProofRecovery(job, folder) {
-    const source = this.sources.get(job.documentId);
+  async checkSubmittedProofRecovery(
+    job,
+    folder,
+    { allowRetiredSource = false } = {},
+  ) {
+    let source = this.sources.get(job.documentId);
+    if (!source && allowRetiredSource) {
+      check(
+        job.prepared?.sourceId &&
+          /^0x[0-9a-f]{64}$/.test(job.prepared.sourceId) &&
+          /^0x[0-9a-f]{64}$/.test(job.prepared.signerFingerprint),
+        'source_not_admitted',
+      );
+      // A continuation review pins the paid job before this path is used. Its
+      // signed request journal and preparation seal remain the source of truth
+      // after the document leaves the manifest for new admissions.
+      source = {
+        sourceId: job.prepared.sourceId,
+        source: { signerFingerprint: job.prepared.signerFingerprint.slice(2) },
+      };
+    }
     check(source, 'source_not_admitted');
     const budget = await resolveProofBudget(
       this.root,

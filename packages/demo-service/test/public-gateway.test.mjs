@@ -380,7 +380,7 @@ await test('invalid configuration, redirects and malformed upstream responses fa
   }
 });
 
-await test('private configuration binds service, deployment and ten-document manifest hashes', async (t) => {
+await test('private configuration binds service, deployment and a bounded document manifest', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'public-gateway-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const write = async (path, value) => {
@@ -389,7 +389,7 @@ await test('private configuration binds service, deployment and ten-document man
     return createHash('sha256').update(bytes).digest('hex');
   };
   const deployment = { auditPolicy: { chainId: '296', policyVersion: '2' } };
-  const manifest = { runs: Array.from({ length: 10 }, () => ({})) };
+  const manifest = { runs: Array.from({ length: 50 }, () => ({})) };
   const service = {
     format: 'ultratokenizer.demo-service.v1',
     origin: bridgeOptions.localOrigin,
@@ -422,7 +422,7 @@ await test('private configuration binds service, deployment and ten-document man
   await assert.rejects(loadBridgeConfig(root, 'bridge.json'));
   await write('deployment.json', deployment);
   await write('manifest.json', {
-    runs: Array.from({ length: 50 }, () => ({})),
+    runs: Array.from({ length: 51 }, () => ({})),
   });
   await assert.rejects(loadBridgeConfig(root, 'bridge.json'));
   await write('manifest.json', manifest);
