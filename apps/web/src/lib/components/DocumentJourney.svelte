@@ -9,7 +9,7 @@
     documentStatusLabel,
   } from '../application/document-session';
   import { documentBlocker } from '../application/document-client';
-  import { formatGrams, saveJson } from '../issuance';
+  import { formatGrams, getTokenBackend, saveJson } from '../issuance';
   import Glyph from '../visuals/Glyph.svelte';
   import EvidenceArtifact, {
     type ProofStage,
@@ -138,6 +138,12 @@
     !!snapshot.transaction || snapshot.unknownSubmission === 'issuance',
   );
   let proofAccepted = $derived(snapshot.sourceProof === 'accepted');
+  let isAts = $derived(
+    !!snapshot.deployment && getTokenBackend(snapshot.deployment) === 'ats',
+  );
+  let gateChecked = $derived(
+    !!snapshot.receipt || snapshot.simulation === 'passed',
+  );
   let needsResume = $derived(
     flow.started &&
       !hasOutcome &&
@@ -184,19 +190,19 @@
 <div class="document-journey" class:loaded={!!document}>
   <div class="stage-copy document-heading">
     <p class="scene-kicker">
-      Document → token <span>{currentStep + 1} / 3</span>
+      Signed right → Hedera ATS <span>{currentStep + 1} / 3</span>
     </p>
     <h1 id="issuance-title" tabindex="-1">
-      Ownership Docs. <em>Verifiably tokenized.</em>
+      Prove the right. <em>Issue the token.</em>
     </h1>
     <p>
       {snapshot.receipt
-        ? 'Your tokens are in the recipient wallet. Keep the evidence.'
+        ? 'Issued through Hedera ATS. Save the receipt and inspect the chain.'
         : hasOutcome
           ? 'Check the transaction outcome before continuing.'
           : document
-            ? 'Review the fixed amount, then verify and mint to your wallet.'
-            : 'Start with a signed gold-right document from the selected issuer.'}
+            ? 'The amount is fixed. SP1 proves it; the Gate authorizes its ATS mint.'
+            : 'Upload a signed allocation. Its exact amount can be issued once.'}
     </p>
   </div>
 
@@ -214,7 +220,7 @@
     />
 
     <ol class="flow-rail document-steps" aria-label="Issuance progress">
-      {#each ['Upload document', 'Verify & mint', 'Review'] as label, index}
+      {#each ['Document', 'Verify & issue', 'Receipt'] as label, index}
         <li
           class:done={index < currentStep || !!snapshot.receipt}
           class:current={index === currentStep}
@@ -363,7 +369,7 @@
                   snapshot.receipt,
                   'ultratokenizer-issuance-receipt.json',
                 )}>Save receipt</button
-            ><a class="secondary-button" href="/verify/">Verify evidence</a>
+            ><a class="secondary-button" href="/verify/">Verify receipt</a>
           </div>
           <button
             class="text-link"
@@ -453,9 +459,11 @@
         <div class="issuer-card" aria-label="Selected issuer">
           <span class="issuer-mark"><Glyph name="wallet" size={17} /></span>
           <div>
-            <small>Selected issuer</small><strong>{issuer.label}</strong><span
+            <small>Issuer identity</small><strong>{issuer.label}</strong><span
               class="issuer-context"
-              >{short(issuer.wallet)} · ERC-8004 #{issuer.agentId}</span
+              >ERC-8004 #{issuer.agentId} · discovery only · {short(
+                issuer.wallet,
+              )}</span
             >
           </div>
           <button
@@ -508,28 +516,61 @@
       {/if}
 
       {#if document}
-        <div class="document-phases" aria-label="Verification and mint phases">
-          <div class:phase-done={proofAccepted}>
-            <span>2a</span>
+        <div class="document-phases" aria-label="Proof-gated ATS issuance">
+          <div
+            class:phase-done={proofAccepted}
+            class:phase-active={flow.started && !proofAccepted}
+          >
+            <span>01</span>
             <div>
-              <strong>Verify with SP1</strong>
+              <small>SP1</small>
+              <strong>Prove the document</strong>
               <p>
                 {proofAccepted
-                  ? 'Proof and issuer approval verified.'
+                  ? 'Groth16 proof matched this exact request.'
                   : flow.status
                     ? documentStatusLabel[flow.status.status]
                     : flow.document?.existingJobStatus
                       ? documentStatusLabel[flow.document.existingJobStatus]
-                      : 'Approve the request, then generate and check its proof.'}
+                      : 'Authenticate the PDF and prove its fixed amount.'}
               </p>
             </div>
           </div>
-          <div>
-            <span>2b</span>
+          <div
+            class:phase-done={gateChecked}
+            class:phase-active={proofAccepted && !gateChecked}
+          >
+            <span>02</span>
             <div>
-              <strong>Mint to wallet</strong>
+              <small>GATE</small>
+              <strong>Authorize issuance</strong>
               <p>
-                The Gate checks the proof and mints directly to your wallet.
+                {snapshot.receipt
+                  ? 'Every proof, permit and replay check passed.'
+                  : snapshot.simulation === 'passed'
+                    ? 'Current Gate conditions passed.'
+                    : proofAccepted
+                      ? 'Check the wallet, permit, reservation and single use.'
+                      : 'Locked until the proof is accepted.'}
+              </p>
+            </div>
+          </div>
+          <div
+            class:phase-done={!!snapshot.receipt}
+            class:phase-active={gateChecked && !snapshot.receipt}
+          >
+            <span>03</span>
+            <div>
+              <small>{isAts ? 'HEDERA ATS' : 'TOKEN'}</small>
+              <strong>Issue to the wallet</strong>
+              <p>
+                {snapshot.receipt
+                  ? 'ATS supply and recipient balance increased together.'
+                  : snapshot.transaction
+                    ? 'Waiting for the Hedera transaction result.'
+                    : isAts
+                      ? 'The Gate adapter is the configured ATS issuer.'
+                      : 'The token mint stays locked behind the Gate.'}
               </p>
             </div>
           </div>
@@ -557,14 +598,14 @@
             <button
               class="primary-button"
               disabled={busy || unresolved}
-              onclick={() => session.simulate()}>Check before minting</button
+              onclick={() => session.simulate()}>Check Gate conditions</button
             >
           {:else}
             <button
               class="primary-button"
               disabled={busy || unresolved || !snapshot.disclosed}
               onclick={() => session.submit()}
-              >Mint {formatGrams(document.amountMilligrams)} g <Glyph
+              >Issue {formatGrams(document.amountMilligrams)} g through ATS <Glyph
                 name="arrow"
                 size={15}
               /></button
@@ -607,8 +648,8 @@
             >{preparingApproval
               ? requestSigningLabel
               : flow.document?.existingJobStatus
-                ? 'Sign to resume verification'
-                : 'Verify & mint'}
+                ? 'Resume SP1 verification'
+                : 'Start SP1 verification'}
             <Glyph name="arrow" size={15} /></button
           >
           {#if preparingApproval}
@@ -623,8 +664,8 @@
           {:else}
             <p class="field-hint">
               {flow.document?.existingJobStatus
-                ? 'Sign the same request to resume its current status. This does not submit or pay for another proof.'
-                : 'Sign to start verification. When the proof is ready, confirm minting in your wallet.'}
+                ? 'Sign the same request to resume its current status. No second proof request is created.'
+                : 'First approve the exact request. The ATS mint is a separate wallet transaction after the proof returns.'}
             </p>
           {/if}
         {/if}
@@ -748,7 +789,7 @@
     margin: 10px 0 8px;
   }
   .document-heading > p:last-child {
-    font-size: 12px;
+    font-size: 0.84rem;
     line-height: 1.5;
   }
   .document-heading .scene-kicker {
@@ -789,10 +830,10 @@
   .document-summary small,
   .issuer-card small {
     color: var(--p-muted);
-    font-size: 10px;
+    font-size: 0.7rem;
   }
   .document-summary strong {
-    font-size: 13px;
+    font-size: 0.86rem;
     overflow-wrap: anywhere;
   }
   .fixed-amount {
@@ -828,10 +869,10 @@
     flex-shrink: 0;
   }
   .issuer-card strong {
-    font-size: 13px;
+    font-size: 0.86rem;
   }
   .issuer-context {
-    font-size: 10px;
+    font-size: 0.69rem;
     color: var(--p-muted);
   }
   .issuer-card button {
@@ -861,76 +902,81 @@
     max-height: 220px;
     overflow: auto;
   }
-  /* Numbered circles on a connecting rail, the same idiom .flow-rail already
-     uses, so a phase badge reads the same here as in the main issuance flow. */
   .document-phases {
+    position: relative;
     width: 100%;
     display: grid;
-    gap: 0;
-    padding: 3px 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-block: 1px solid var(--p-line);
   }
   .document-phases > div {
     position: relative;
     display: grid;
-    grid-template-columns: 26px minmax(0, 1fr);
-    gap: 12px;
-    align-items: start;
-    padding-bottom: 15px;
+    grid-template-columns: 1fr auto;
+    gap: 3px 10px;
+    min-width: 0;
+    min-height: 116px;
+    padding: 13px 14px 12px;
+    transition:
+      background 280ms ease,
+      color 280ms ease;
   }
-  .document-phases > div:last-child {
-    padding-bottom: 0;
-  }
-  .document-phases > div:not(:last-child)::after {
-    content: '';
-    transition: background 300ms;
-    position: absolute;
-    left: 13px;
-    top: 30px;
-    bottom: 5px;
-    width: 1px;
-    background: var(--p-line);
+  .document-phases > div + div {
+    border-left: 1px solid var(--p-line);
   }
   .document-phases > div > span {
-    position: relative;
-    z-index: 1;
-    transition:
-      color 300ms,
-      background 300ms,
-      border-color 300ms;
-    width: 26px;
-    height: 26px;
-    display: grid;
-    place-items: center;
-    border-radius: 50%;
-    border: 1px solid var(--p-line);
-    background: var(--p-canvas);
+    grid-column: 2;
+    grid-row: 1;
     color: var(--p-muted);
-    font-size: 0.64rem;
+    font-size: 0.61rem;
     font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .document-phases > div > div {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+  .document-phases small {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--p-muted);
+    font-size: 0.61rem;
+    font-weight: 750;
+    letter-spacing: 0.13em;
   }
   .document-phases strong {
     display: block;
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     font-weight: 650;
-    line-height: 26px;
+    line-height: 1.3;
   }
   .document-phases p {
-    margin: 1px 0 0;
+    margin: 6px 0 0;
     color: var(--p-muted);
-    font-size: 0.72rem;
-    line-height: 1.5;
+    font-size: 0.69rem;
+    line-height: 1.45;
   }
-  /* A finished phase has to be visible on the badge, not only in the title. */
-  .phase-done > span {
-    border-color: var(--p-accent);
-    background: var(--p-accent-soft);
-    color: var(--p-accent);
-  }
-  .phase-done::after {
-    background: var(--p-accent);
-  }
+  .phase-done > span,
+  .phase-done small,
   .phase-done strong {
     color: var(--p-accent);
+  }
+  .phase-active {
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--p-iris-soft) 68%, transparent),
+      transparent
+    );
+  }
+  .phase-active::before {
+    content: '';
+    position: absolute;
+    inset: -1px 18px auto;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--p-accent);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--p-accent) 35%, transparent);
+    animation: phase-pulse 1.8s ease-in-out infinite;
   }
   .bound-recipient {
     margin: 0;
@@ -954,7 +1000,7 @@
     max-width: 350px;
     margin: -3px 0 0;
     text-align: center;
-    font-size: 10px;
+    font-size: 0.72rem;
     color: var(--p-muted);
     line-height: 1.6;
   }
@@ -1000,42 +1046,6 @@
   .loaded .issuer-details {
     padding: 0 0 12px;
     border-bottom: 1px solid var(--p-line);
-  }
-  .loaded .document-phases {
-    gap: 0;
-    padding: 0 0 12px;
-    border-bottom: 1px solid var(--p-line);
-  }
-  .loaded .document-phases > div {
-    grid-template-columns: 36px minmax(0, 1fr);
-    gap: 0;
-    padding-bottom: 12px;
-  }
-  .loaded .document-phases > div:last-child {
-    padding-bottom: 0;
-  }
-  .loaded .document-phases > div::after {
-    display: none;
-  }
-  .loaded .document-phases > div > span {
-    width: 36px;
-    height: auto;
-    display: block;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    line-height: 20px;
-    font-size: 11px;
-    font-weight: 500;
-  }
-  .loaded .document-phases strong {
-    font-size: 13px;
-    line-height: 20px;
-  }
-  .loaded .document-phases p {
-    margin-top: 3px;
-    font-size: 11px;
-    line-height: 1.5;
   }
   .loaded .document-action > .primary-button,
   .loaded .document-action > .secondary-button {
@@ -1101,6 +1111,12 @@
   .address {
     font-family: monospace;
   }
+  @keyframes phase-pulse {
+    50% {
+      opacity: 0.42;
+      transform: scaleX(0.78);
+    }
+  }
   @media (max-width: 640px) {
     .document-action {
       gap: 13px;
@@ -1115,6 +1131,25 @@
     }
     .issuer-card button {
       font-size: 10px;
+    }
+    .document-phases {
+      grid-template-columns: 1fr;
+    }
+    .document-phases > div {
+      min-height: 0;
+      padding: 12px 2px;
+    }
+    .document-phases > div + div {
+      border-top: 1px solid var(--p-line);
+      border-left: 0;
+    }
+    .phase-active::before {
+      inset: -1px 0 auto;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .phase-active::before {
+      animation: none;
     }
   }
 </style>

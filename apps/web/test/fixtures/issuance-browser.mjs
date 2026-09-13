@@ -492,7 +492,7 @@ export async function exerciseIssuanceRecovery({
           await page.setViewportSize({ width, height });
           await page.evaluate(() => window.scrollTo(0, 0));
           const action = page.getByRole('button', {
-            name: loaded ? 'Verify & mint' : 'Upload signed PDF',
+            name: loaded ? 'Start SP1 verification' : 'Upload signed PDF',
             exact: true,
           });
           await expect(action).toBeVisible();
@@ -593,7 +593,7 @@ export async function exerciseIssuanceRecovery({
       await checkViewport(true);
       pauseAuthorization();
       await page
-        .getByRole('button', { name: 'Verify & mint', exact: true })
+        .getByRole('button', { name: 'Start SP1 verification', exact: true })
         .click();
       const approvalStatus = page.locator('.request-signing-status');
       const checkingAuthorization = page.getByRole('button', {
@@ -701,7 +701,7 @@ export async function exerciseIssuanceRecovery({
         { timeout: 15000 },
       );
       await page
-        .getByRole('button', { name: 'Check before minting', exact: true })
+        .getByRole('button', { name: 'Check Gate conditions', exact: true })
         .click();
       assert.equal(proofStarts, 1);
       assert.equal(permitRefreshes, 1);
@@ -775,7 +775,7 @@ export async function exerciseIssuanceRecovery({
         .click();
     }
     const issue = page.getByRole('button', {
-      name: 'Mint 1.000 g',
+      name: documentFlow ? 'Issue 1.000 g through ATS' : 'Mint 1.000 g',
       exact: true,
     });
     // Validation performs several sequential RPC checks; allow the configured
@@ -800,7 +800,7 @@ export async function exerciseIssuanceRecovery({
     await expect(page.locator('.artifact-body')).not.toHaveClass(/is-coin/);
     await expect(
       page.locator('.flow-rail [aria-current="step"]'),
-    ).toContainText(documentFlow ? 'Verify & mint' : 'Mint');
+    ).toContainText(documentFlow ? 'Verify & issue' : 'Mint');
     const transaction = page.getByRole('region', {
       name: 'Issuance transaction',
       exact: true,
@@ -914,7 +914,7 @@ export async function exerciseIssuanceRecovery({
       await expect(page.locator('.artifact-body')).not.toHaveClass(/is-coin/);
       await expect(
         page.locator('.flow-rail [aria-current="step"]'),
-      ).toContainText(documentFlow ? 'Verify & mint' : 'Mint');
+      ).toContainText(documentFlow ? 'Verify & issue' : 'Mint');
     }
     await expect(transaction).toContainText(finalHash);
     await expect(

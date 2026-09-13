@@ -39,6 +39,9 @@ try {
     await expect(
       page.getByRole('link', { name: 'Download sample' }),
     ).toBeVisible();
+    await expect(
+      page.getByRole('link', { name: /Request SP1 credit/ }),
+    ).toHaveAttribute('href', 'https://t.me/yamanc');
     await guideButton.click();
     await expect(
       page.getByRole('link', { name: 'Download sample' }),

@@ -35,11 +35,11 @@
     {
       requirement:
         'Demo video showing issuance, configuration and a lifecycle operation',
-      status: 'Runbook published',
+      status: 'Pending live result',
       evidence:
-        'Configuration is the Trust page. Issuance is the complete run in the token engine. The lifecycle operation is an ATS transfer of the minted token in 0.001 g units, which exercises the transfer and balance-tracker facets rather than bypassing them.',
-      href: 'https://github.com/trionlabs/ultratokenizer/blob/main/PRESENTATION.md',
-      label: 'Five-minute runbook',
+        'Configuration is inspectable on the Trust page. This criterion closes only after a confirmed proof-gated ATS mint and a 0.001 g transfer are recorded in the final video.',
+      href: '/demo/',
+      label: 'Follow the mechanism',
     },
   ];
 
@@ -171,8 +171,18 @@
         The designated wallet signs the exact request, waits for SP1 proof
         verification, then confirms a separate Hedera mint transaction.
       </p>
+      <p class="funded-note">
+        Want to run it with your own wallet? Request a wallet-bound synthetic
+        allocation and bounded proof credit. Share only your public EVM address.
+      </p>
       <div class="actions">
         <a class="primary" href="/#engine">Start the live run</a>
+        <a
+          href="https://t.me/yamanc"
+          target="_blank"
+          rel="noreferrer"
+          >Request SP1 credit · @yamanc</a
+        >
         <a href="/demo/">See the mechanism</a>
       </div>
     </article>
@@ -339,6 +349,12 @@
           No wallet or PROVE is needed for inspection. Proof and mint are
           presenter-led.
         </p>
+        <p>
+          For your own live run, send only your public EVM address to
+          <a href="https://t.me/yamanc" target="_blank" rel="noreferrer"
+            >@yamanc</a
+          >. Never share wallet secrets.
+        </p>
         <nav aria-label="Try the demo">
           <a href="/jury/08-gold.pdf" download>Download sample</a>
           <a href="/#engine">Open Tokenize</a>
@@ -400,6 +416,9 @@
     margin-top: 10px;
     color: var(--p-muted);
     font-size: 0.7rem;
+  }
+  .funded-note {
+    font-size: 0.76rem;
   }
   .try-guide nav {
     display: flex;

@@ -114,6 +114,12 @@
                     ? (emptyCaption ?? 'Waiting for proof package')
                     : 'Proof becomes token',
   );
+  let sheetLabel = $derived(
+    verified ? 'VERIFIED / 224 B' : working ? 'SP1 / GROTH16' : 'SIGNED / XAU',
+  );
+  let sheetTitle = $derived(
+    verified ? 'Right\nverified' : working ? 'Proof\nrunning' : 'Gold\nright',
+  );
   function move(event: PointerEvent) {
     if (prefersReducedMotion.current || event.pointerType !== 'mouse') return;
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
@@ -151,8 +157,10 @@
   <div class="artifact-lift">
     <div class="artifact-body" class:is-coin={minted}>
       <div class="proof-sheet">
-        <div class="sheet-top"><b>u.</b><span>PROOF / XAU</span></div>
-        <strong>Gold<br />right</strong>
+        <div class="sheet-top"><b>u.</b><span>{sheetLabel}</span></div>
+        <strong
+          >{sheetTitle.split('\n')[0]}<br />{sheetTitle.split('\n')[1]}</strong
+        >
         <div class="sheet-lines"><span></span><span></span><span></span></div>
         <div class="sheet-bottom">
           <span>{amount ? `${amount} g` : ''}</span><small
@@ -163,9 +171,9 @@
       <div class="coin-face">
         <span class="coin-ring"></span>
         {#if minted}
-          <span class="coin-top">ULTRATOKENIZER</span>
+          <span class="coin-top">HEDERA · ATS</span>
           <strong>Au</strong><span class="coin-amount">{amount} g</span><small
-            >MINT CONFIRMED</small
+            >ISSUANCE CONFIRMED</small
           >
         {/if}
       </div>

@@ -7,7 +7,7 @@
 
 export const SITE_ORIGIN = 'https://ultratokenizer.trionlabs.dev';
 export const SITE_NAME = 'Ultratokenizer';
-export const SITE_TAGLINE = 'zkPDF-backed token issuance on Hedera';
+export const SITE_TAGLINE = 'Proof-gated issuance on Hedera ATS';
 
 /**
  * The network this project targets. This is a public network fact, not operator
@@ -74,6 +74,7 @@ export const SITE_PAGES = [
       'Wallet-free path: download the synthetic Demo 08 PDF, upload it unchanged, and inspect the fixed amount and bound recipient.',
       'Uploading the document does not request a proof, spend funds or mint anything.',
       'The signed allocation names the recipient, so a copied PDF cannot redirect the mint to another wallet.',
+      'A reviewer can request a fresh wallet-bound synthetic allocation and bounded SP1 credit from @yamanc on Telegram by sharing only a public EVM address.',
       'Every claim on this page resolves to a HashScan contract, a Sourcify source record or an ERC-8004 identity entry.',
     ],
   },

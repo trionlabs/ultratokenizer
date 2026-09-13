@@ -156,6 +156,14 @@ export async function exerciseTokenRecovery({
       });
       return;
     }
+    if (
+      url.origin === base.origin &&
+      request.method() === 'GET' &&
+      url.pathname === '/deployment.json'
+    ) {
+      await route.fulfill({ status: 404, body: '' });
+      return;
+    }
     if (url.origin === base.origin && request.method() === 'GET') {
       await route.continue();
       return;

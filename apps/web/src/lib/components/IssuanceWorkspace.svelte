@@ -160,6 +160,13 @@
   let tokenBackend = $derived(
     snapshot.deployment ? getTokenBackend(snapshot.deployment) : undefined,
   );
+  let atsAdapter = $derived(
+    snapshot.deployment &&
+      'backend' in snapshot.deployment &&
+      snapshot.deployment.backend.kind === 'ats'
+      ? snapshot.deployment.backend.adapter.address
+      : undefined,
+  );
   let networkLabel = $derived(
     snapshot.deployment
       ? snapshot.deployment.auditPolicy.chainId === '296'
@@ -169,6 +176,27 @@
   );
   let issuanceStarted = $derived(
     !!snapshot.transaction || snapshot.unknownSubmission === 'issuance',
+  );
+  let proofRailStatus = $derived(
+    snapshot.sourceProof === 'accepted'
+      ? 'Verified'
+      : documentAmount || request
+        ? 'Awaiting proof'
+        : 'Configured',
+  );
+  let gateRailStatus = $derived(
+    snapshot.receipt
+      ? 'Accepted'
+      : snapshot.simulation === 'passed'
+        ? 'Preflight passed'
+        : 'Locked',
+  );
+  let tokenRailStatus = $derived(
+    snapshot.receipt
+      ? 'Issued'
+      : snapshot.transaction
+        ? 'Transaction pending'
+        : 'Deployed',
   );
   let flowSteps = $derived([
     { label: 'Proof', done: !!request },
@@ -407,6 +435,14 @@
     )
       await session.recoverIssuanceHash(recoveryHash);
     else await session.recoverTokenHash(recoveryHash);
+  }
+
+  function shortAddress(value: string) {
+    return `${value.slice(0, 6)}…${value.slice(-4)}`;
+  }
+
+  function hashscanContract(value: string) {
+    return `https://hashscan.io/testnet/contract/${value}`;
   }
 </script>
 
@@ -1005,17 +1041,88 @@
     </section>
 
     {#if snapshot.deployment}
-      <aside class="activity-rail" aria-label="Session and transaction status">
+      <aside
+        class="activity-rail"
+        aria-label="Hedera ATS deployment and session status"
+      >
+        <section class="stack-overview">
+          <div class="rail-heading">
+            <span>Token infrastructure</span><span class="network-chip"
+              >Testnet · 296</span
+            >
+          </div>
+          <div class="backend-title">
+            <span class="ats-monogram">ATS</span>
+            <div>
+              <strong>Hedera Asset Tokenization Studio</strong>
+              <small>Configured token backend</small>
+            </div>
+          </div>
+          <ol class="stack-path" aria-label="Proof-gated token path">
+            <li
+              data-state={proofRailStatus === 'Verified' ? 'done' : 'waiting'}
+            >
+              <span>01</span>
+              <div>
+                <strong>SP1 Groth16</strong><small>{proofRailStatus}</small>
+              </div>
+            </li>
+            <li data-state={gateRailStatus === 'Accepted' ? 'done' : 'waiting'}>
+              <span>02</span>
+              <div>
+                <strong>Issuance Gate</strong><small>{gateRailStatus}</small>
+              </div>
+            </li>
+            <li data-state={tokenRailStatus === 'Issued' ? 'done' : 'ready'}>
+              <span>03</span>
+              <div>
+                <strong>ATS token</strong><small>{tokenRailStatus}</small>
+              </div>
+            </li>
+          </ol>
+          <dl class="stack-facts">
+            <div>
+              <dt>ATS issuer</dt>
+              <dd>
+                {atsAdapter
+                  ? `Gate adapter · ${shortAddress(atsAdapter)}`
+                  : 'Gate adapter'}
+              </dd>
+            </div>
+            <div>
+              <dt>Token</dt>
+              <dd>
+                <a
+                  href={hashscanContract(snapshot.deployment.auditPolicy.token)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >{shortAddress(snapshot.deployment.auditPolicy.token)}</a
+                >
+              </dd>
+            </div>
+          </dl>
+          <a class="stack-link" href="/trust/"
+            >Inspect ATS graph, roles, and code <Glyph
+              name="arrow"
+              size={12}
+            /></a
+          >
+        </section>
         <section>
           <div class="rail-heading">
-            <span>This session</span><span class="rail-dot"></span>
+            <span>This run</span><span class="rail-dot"></span>
           </div>
           <dl class="session-list">
             <div>
               <dt>Network</dt>
               <dd>
                 {networkLabel}
-                <a class="network-link" href="/trust/">View contracts</a>
+                <a
+                  class="network-link"
+                  href={hashscanContract(snapshot.deployment.auditPolicy.gate)}
+                  target="_blank"
+                  rel="noopener noreferrer">Gate</a
+                >
               </dd>
             </div>
             <div>
@@ -1047,19 +1154,19 @@
             </p>{/if}
         </section>
         <section>
-          <div class="rail-heading"><span>Session activity</span></div>
+          <div class="rail-heading"><span>Chain activity</span></div>
           {#if !snapshot.transaction && !snapshot.tokenTransaction}
             <div class="empty-activity">
               <Glyph name="receipt" size={23} />
               <p>
                 {snapshot.unknownSubmission
                   ? 'Transaction outcome unknown.'
-                  : 'No transactions yet.'}
+                  : 'No wallet transaction yet.'}
               </p>
               <small>
                 {snapshot.unknownSubmission
                   ? 'A transaction may have been sent. Check wallet activity.'
-                  : 'Your latest transaction status appears here.'}
+                  : 'Proof and authorization can happen before the ATS mint.'}
               </small>
             </div>
           {:else}
@@ -1122,7 +1229,7 @@
                 <dt>Backend</dt>
                 <dd>
                   {tokenBackend === 'ats'
-                    ? 'ATS · EVM token'
+                    ? 'Hedera Asset Tokenization Studio'
                     : 'HTS · native token'}
                 </dd>
               </div>
@@ -1231,7 +1338,7 @@
   <footer class="live-footer">
     <Glyph name="wallet" size={14} />
     {snapshot.deployment
-      ? 'You sign in your wallet. Proofs and transaction details are public.'
+      ? 'Signed PDF → SP1 proof → Gate decision → Hedera ATS. Your wallet confirms issuance.'
       : 'Connecting a wallet does not sign or mint.'}
     {#if operatorMode}
       <nav aria-label="Operator tools">

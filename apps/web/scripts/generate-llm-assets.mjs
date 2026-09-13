@@ -66,7 +66,9 @@ function trackMatrix(deployment, discovery) {
     },
     {
       requirement: 'Deploy and demonstrate on Hedera testnet.',
-      status: 'Met',
+      status: LIFECYCLE_DEMONSTRATED
+        ? 'Met'
+        : 'Deployment met; live issuance pending',
       evidence: [
         `Chain ID ${policy.chainId} (Hedera testnet), RPC ${deployment.rpcUrl}.`,
         `IssuanceGate ${policy.gate}, SP1 Groth16 verifier ${policy.verifierAddress}, ATS token ${policy.token}.`,
@@ -89,12 +91,12 @@ function trackMatrix(deployment, discovery) {
         'Demo video of five minutes or less showing issuance, configuration, and at least one lifecycle operation such as a transfer, compliance check, or distribution.',
       status: LIFECYCLE_DEMONSTRATED
         ? 'Met'
-        : 'Deployed and ready; recorded in the submission video',
+        : 'Pending confirmed mint and transfer',
       evidence: [
         'Configuration: the Trust page shows the live Gate, verifier, ATS token graph, cap, reserved amount and ERC-8004 records, read from chain.',
-        'Issuance: the token engine at / performs the complete run — document authentication, holder consent signature, SP1 Groth16 proof, issuer reservation and permit, then the Gate-enforced mint on Hedera.',
-        'Lifecycle operation: the Transfer view moves the minted ATS token in 0.001 g units through the ATS transfer path, so the compliance and balance-tracker facets are exercised rather than bypassed.',
-        'A five-minute presentation runbook with exact timings is published in the repository as PRESENTATION.md.',
+        'Issuance: the token engine at / implements document authentication, holder consent, SP1 Groth16 proof preparation, issuer reservation and permit, and a separate Gate-enforced Hedera mint. This criterion is not complete until one current-program proof and mint are confirmed.',
+        'Lifecycle operation: the Transfer view implements 0.001 g ATS transfers through the transfer and balance-tracker facets. This criterion is not complete until a transaction is recorded after the mint.',
+        'The final recording must use these deployed pages and show the resulting public transaction evidence; an animation, local verifier or submitted proof request is insufficient.',
       ],
     },
   ];
@@ -189,7 +191,7 @@ Read this section before summarising the project. These boundaries are enforced 
 - Source matching in Sourcify establishes that the deployed runtime matches published sources. It is not a security audit.
 - The exact quantity and recipient wallet are public from reservation broadcast onward, including cancellations and failed mint attempts. Private source fields and witnesses stay outside every observation API.
 
-${LIFECYCLE_DEMONSTRATED ? '' : 'Current honest status: the ATS graph, the Gate, the SP1 verifier and the ERC-8004 records are deployed on Hedera testnet and independently inspectable. The complete issuance path is implemented and the demo is presenter-driven; a run is counted as issued only once its Hedera transaction is confirmed and reconciled.'}`;
+${LIFECYCLE_DEMONSTRATED ? '' : 'Current honest status: the ATS graph, the Gate, the SP1 verifier and the ERC-8004 records are deployed on Hedera testnet and independently inspectable. The issuance path is implemented and presenter-driven, but no current-program proof acceptance, confirmed mint or transfer is claimed until its public transaction and reconciled receipt are available.'}`;
 }
 
 /**
@@ -210,6 +212,12 @@ function buildLlmsIndex(deployment, discovery) {
 Built for the ETHGlobal Hedera track "Tokenization of Anything". Deployed on ${SITE_CHAIN.name}, chain ID ${SITE_CHAIN.id}. The token is an ATS graph; the mint role belongs to a proof-gated contract rather than a key holder.
 
 The single most useful file for a language model is [llms-full.txt](${SITE_ORIGIN}/llms-full.txt): it contains the complete deployed address set, the architecture, the qualification-requirement mapping and the explicit claim boundaries.
+
+## Automated review boundary
+
+An unauthorised agent can reproduce the repository tests, inspect deployment and discovery data, compare contract bytecode, and audit a published receipt. It cannot create a new live issuance from public files alone: Demo 08 is bound to the designated presenter wallet, issuer and wallet signing keys are not published, and remote proof fulfillment is an external dependency. Read ${SITE_ORIGIN}/api/config for current readiness; \`readiness.canStart\` is only permission to begin, never evidence of a completed proof or mint.
+
+For a fresh reviewer-led SP1 run, contact [\`@yamanc\` on Telegram](https://t.me/yamanc) and provide only the public EVM recipient address. The operator can prepare a new wallet-bound synthetic allocation and bounded proof credit when the prover is available. Never send a private key, seed phrase or wallet export. Proof credit permits proving; it does not prove completion.
 
 ## Pages
 
@@ -342,6 +350,24 @@ ${pageText}
 3. Open ${SITE_ORIGIN}/trust/ and follow the HashScan and Sourcify links for the Gate, the verifier and the ATS graph. Compare them with /deployment.json.
 4. Open ${SITE_ORIGIN}/verify/ and re-check an exported receipt against a trust policy you obtained separately. The receipt cannot choose who you trust.
 5. Clone either repository and run the gates: \`npm run check\`, \`npm run check:contracts\`, \`npm run check:ats\`, \`npm run check:evidence\`, \`npm run check:parity\`.
+
+## Automated reviewer boundary
+
+A wallet-free agent can reproduce the build and test gates, read \`/deployment.json\`
+and \`/discovery.json\`, inspect the pinned Hedera bytecode and state, resolve the
+ERC-8004 records, and audit a published receipt. It cannot initiate a new live
+issuance from public materials alone. Demo 08 names the designated presenter
+wallet, signing keys are intentionally not published, and a remote prover must
+return the current program's Groth16 artifact. Read \`/api/config\` for the current
+readiness signal. A value of \`readiness.canStart: true\` permits a run to begin;
+it does not prove completion.
+
+An automated reviewer with a transaction-signing wallet can request a fresh
+reviewer-bound synthetic allocation and bounded SP1 credit from
+[\`@yamanc\` on Telegram](https://t.me/yamanc). It should provide only its public
+EVM recipient address and must never transmit a private key, seed phrase or wallet
+export. The result is valid only after proof acceptance, the Hedera transaction
+and receipt reconciliation all agree.
 
 ## Frequently asked questions
 

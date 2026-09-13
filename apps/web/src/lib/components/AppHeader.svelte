@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { SITE_TAGLINE } from '$lib/site-meta.js';
   import BrandMark from './BrandMark.svelte';
   let {
     current,
@@ -36,7 +37,7 @@
     <a class="live-brand" href="/" aria-label="Ultratokenizer home"
       ><BrandMark />ultratokenizer<i>.</i></a
     >
-    <span class="engine-label">zkPDF-backed token issuance</span>
+    <span class="engine-label">{SITE_TAGLINE}</span>
   </div>
   <nav aria-label="Workspace">
     {#each links as link}

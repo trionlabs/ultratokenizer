@@ -61,12 +61,12 @@ try {
     await page.goto(base, { waitUntil: 'networkidle' });
     await expect(
       page.getByRole('heading', {
-        name: 'Ownership Docs. Verifiably tokenized.',
+        name: 'Prove the right. Issue the token.',
       }),
     ).toBeVisible();
-    await expect(page.locator('body')).not.toContainText('MINT CONFIRMED');
+    await expect(page.locator('body')).not.toContainText('ISSUANCE CONFIRMED');
     await expect(page.locator('.engine-label')).toHaveText(
-      'zkPDF-backed token issuance',
+      'Proof-gated issuance on Hedera ATS',
     );
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(
@@ -84,7 +84,7 @@ try {
     if (scenario === 'ready') {
       await expect(page.locator('.header-wallet')).toBeEnabled();
       await expect(page.locator('.live-footer')).toContainText(
-        'Proofs and transaction details are public.',
+        'Signed PDF → SP1 proof → Gate decision → Hedera ATS.',
       );
       await expect(page.locator('.activity-rail')).toContainText(
         'Hedera testnet',
@@ -102,7 +102,7 @@ try {
     await expect(page.locator('.flow-rail li')).toHaveCount(3);
     await expect(
       page.locator('.flow-rail [aria-current="step"]'),
-    ).toContainText('Upload document');
+    ).toContainText('Document');
     await expect(page.locator('.document-action')).not.toContainText('JSON');
     assert.deepEqual(await page.evaluate(() => window.walletCalls), []);
     if (scenario !== 'ready') {
@@ -276,7 +276,7 @@ try {
     'If this screen stays',
   );
   await expect(stalled.locator('#issuance-title')).toHaveText(
-    'Ownership Docs. Verifiably tokenized.',
+    'Prove the right. Issue the token.',
   );
   await expect(stalled.locator('.app-surface')).toHaveAttribute('inert', '');
   const retry = stalled.getByRole('link', {
@@ -289,7 +289,7 @@ try {
   ]);
   await expect(
     recovered.getByRole('heading', {
-      name: 'Ownership Docs. Verifiably tokenized.',
+      name: 'Prove the right. Issue the token.',
     }),
   ).toBeVisible();
   await recovered.close();

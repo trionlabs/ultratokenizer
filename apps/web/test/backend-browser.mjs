@@ -93,7 +93,10 @@ try {
   );
   await expect(connect).toBeEnabled();
   await expect(associate).toHaveCount(0);
-  await expect(page.locator('.activity-rail')).toHaveCount(0);
+  await expect(page.locator('.activity-rail')).toHaveCount(1);
+  await expect(page.locator('.activity-rail')).toContainText(
+    'Hedera Asset Tokenization Studio',
+  );
 
   for (const deployment of [
     hts.deployment,
@@ -131,7 +134,7 @@ try {
   await expect(tokenWorkspace).not.toContainText('has not associated');
   await expect(tokenWorkspace).not.toContainText('HTS association');
   await expect(page.locator('.technical-details')).toContainText(
-    'ATS · EVM token',
+    'Hedera Asset Tokenization Studio',
   );
   await expect(page.locator('.session-list')).toContainText('1.000 g XAU');
   await expect(
@@ -178,7 +181,7 @@ try {
   );
   await expect(associate).toHaveCount(0);
   await expect(page.locator('.technical-details')).toContainText(
-    'ATS · EVM token',
+    'Hedera Asset Tokenization Studio',
   );
   await expect(page.locator('.session-list')).toContainText('1.000 g XAU');
 
