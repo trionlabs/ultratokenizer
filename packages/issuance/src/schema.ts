@@ -41,6 +41,8 @@ const messages = {
   invalid_proof: 'The configured verifier rejected the cryptographic proof.',
   invalid_transaction_hash:
     'Enter the full nonzero 32-byte transaction hash from the wallet that submitted this operation.',
+  invalid_holder_signature:
+    'Enter the complete 65-byte holder signature from the wallet that approved this request.',
   wallet_rejected:
     'The wallet request was declined. No authorization was returned.',
   wallet_network_unavailable:
@@ -177,6 +179,14 @@ export function parseTransactionHash(input: unknown): Hex {
     return nonzeroHash(input);
   } catch {
     throw new IssuanceClientError('invalid_transaction_hash');
+  }
+}
+/** Malformed recovery input is distinct from a signature that fails to authorize its request. */
+export function parseHolderSignature(input: unknown): Hex {
+  try {
+    return bytes(input, 65, 65);
+  } catch {
+    throw new IssuanceClientError('invalid_holder_signature');
   }
 }
 export function rpcUrl(input: unknown): string {

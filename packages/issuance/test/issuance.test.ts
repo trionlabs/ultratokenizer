@@ -1447,7 +1447,10 @@ await test('issuance receipt recovery rejects malformed holder signatures before
     holderSignature + '00',
     '0x' + 'zz'.repeat(65),
   ])
-    await assert.rejects(client.wait(bundle, value as Hex, hash));
+    await assert.rejects(
+      client.wait(bundle, value as Hex, hash),
+      hasCode('invalid_holder_signature'),
+    );
   assert.equal(reads, 0);
 });
 

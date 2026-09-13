@@ -26,6 +26,7 @@ import {
   assertBundleDeployment,
   IssuanceClientError,
   bytes,
+  parseHolderSignature,
   parseTransactionHash,
   type IssuanceBundle,
   parsePreparedIssuanceRequest,
@@ -283,7 +284,7 @@ export function createIssuanceClient(input: {
     ): Promise<IssuanceReceipt> {
       const bundle = bundleForDeployment(value);
       const hash = parseTransactionHash(transactionHash);
-      const signature = bytes(holderSignature, 65, 65);
+      const signature = parseHolderSignature(holderSignature);
       // Historical reconciliation does not require a live permit or the currently selected wallet.
       const receipt = await canonicalReceipt(hash);
       let transaction;
