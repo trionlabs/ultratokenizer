@@ -203,7 +203,7 @@ try {
         page.getByRole('heading', {
           name: route
             ? 'Verify a receipt'
-            : 'Prove the right. Issue the token.',
+            : 'Ownership Docs. Verifiably tokenized.',
         }),
       ).toBeVisible();
     }

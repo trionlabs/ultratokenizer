@@ -193,7 +193,7 @@
       Signed right → Hedera ATS <span>{currentStep + 1} / 3</span>
     </p>
     <h1 id="issuance-title" tabindex="-1">
-      Prove the right. <em>Issue the token.</em>
+      Ownership Docs. <em>Verifiably tokenized.</em>
     </h1>
     <p>
       {snapshot.receipt

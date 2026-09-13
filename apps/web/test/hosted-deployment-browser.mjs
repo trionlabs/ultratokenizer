@@ -61,7 +61,7 @@ try {
     await page.goto(base, { waitUntil: 'networkidle' });
     await expect(
       page.getByRole('heading', {
-        name: 'Prove the right. Issue the token.',
+        name: 'Ownership Docs. Verifiably tokenized.',
       }),
     ).toBeVisible();
     await expect(page.locator('body')).not.toContainText('ISSUANCE CONFIRMED');
@@ -276,7 +276,7 @@ try {
     'If this screen stays',
   );
   await expect(stalled.locator('#issuance-title')).toHaveText(
-    'Prove the right. Issue the token.',
+    'Ownership Docs. Verifiably tokenized.',
   );
   await expect(stalled.locator('.app-surface')).toHaveAttribute('inert', '');
   const retry = stalled.getByRole('link', {
@@ -289,7 +289,7 @@ try {
   ]);
   await expect(
     recovered.getByRole('heading', {
-      name: 'Prove the right. Issue the token.',
+      name: 'Ownership Docs. Verifiably tokenized.',
     }),
   ).toBeVisible();
   await recovered.close();
