@@ -111,9 +111,9 @@
       items: [
         {
           icon: 'eye' as const,
-          label: 'Registry',
-          line: 'Three records, eight cross-checks each.',
-          why: 'So a reviewer resolves who the issuer is without asking us for the answer.',
+          label: 'ERC-8004 registry',
+          line: 'Names the issuer. Decides nothing.',
+          why: 'So a reviewer resolves who the issuer is without asking us. Three records, each cross-checked against live contract state on eight points before the app shows it. The Gate still decides every mint.',
           visual: Step10Registry,
           href: 'https://eips.ethereum.org/EIPS/eip-8004#registration-v1',
         },

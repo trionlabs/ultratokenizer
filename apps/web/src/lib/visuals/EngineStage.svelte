@@ -68,9 +68,11 @@
   <path class="link" pathLength="1" data-state={on(0)} d="M152 214h30" />
 
   <g class="part" data-state={on(0)}>
-    <path class="accent" d="M238 168l40 23v46l-40 23-40-23v-46Z" />
-    <text class="mono mid" x="238" y="218">SP1</text>
-    <text class="micro mid" x="238" y="278">zkVM</text>
+    <path class="accent hollow" d="M238 168l40 23v46l-40 23-40-23v-46Z" />
+    <rect class="accent" x="210" y="203" width="56" height="22" rx="6" />
+    <text class="mono mid light" x="238" y="218">zkPDF</text>
+    <text class="micro mid" x="238" y="192">SP1 GUEST</text>
+    <text class="micro mid" x="238" y="278">RUNS INSIDE A zkVM</text>
   </g>
 
   <path class="link" pathLength="1" data-state={on(0)} d="M294 214h28" />
@@ -121,10 +123,10 @@
         <circle class="dot" cx="548" cy={y} r="4" />
       </g>
     {/each}
-    <text class="micro" x="576" y="76">NOT PAUSED</text>
-    <text class="micro" x="576" y="127">REPLAY · SIGNATURE</text>
-    <text class="micro" x="576" y="178">PERMIT · PROOF</text>
-    <text class="micro" x="576" y="229">RESERVATION · MINT</text>
+    <text class="micro" x="576" y="76">ISSUANCE IS OPEN</text>
+    <text class="micro" x="576" y="127">NOT USED BEFORE · YOU SIGNED</text>
+    <text class="micro" x="576" y="178">BANK ALLOWED IT · PROOF HOLDS</text>
+    <text class="micro" x="576" y="229">AMOUNT MATCHES · THEN MINT</text>
     <text class="micro" x="524" y="28">TEN CHECKS, ONE TRANSACTION</text>
   </g>
 
@@ -142,7 +144,7 @@
     <rect class="soft-box" x="744" y="20" width="196" height="26" rx="8" />
     <text class="micro" x="756" y="37">20/20 SOURCES VERIFIED</text>
     <rect class="soft-box" x="744" y="52" width="196" height="26" rx="8" />
-    <text class="micro" x="756" y="69">3 REGISTRY RECORDS</text>
+    <text class="micro" x="756" y="69">ERC-8004 · 3 RECORDS</text>
     <rect class="soft-box" x="744" y="84" width="196" height="26" rx="8" />
     <text class="micro" x="756" y="101">4 CONTRACTS LIVE</text>
   </g>
@@ -179,6 +181,9 @@
     fill: var(--p-accent);
   }
   .accent.soft {
+    fill: var(--p-accent-soft);
+  }
+  .accent.hollow {
     fill: var(--p-accent-soft);
   }
   .iris {
