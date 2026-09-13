@@ -1,8 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Ultratokenizer">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 720" role="img" aria-label="Ultratokenizer">
   <title>Ultratokenizer</title>
-  <!-- The header brand mark: a tile rounded harder at the base than the top. -->
-  <path d="M14 2h20a10 10 0 0 1 10 10v15a17 17 0 0 1-17 17h-6A17 17 0 0 1 4 27V12A10 10 0 0 1 14 2z" fill="#75628f"/>
-  <text x="24" y="34.5" text-anchor="middle" fill="#fdfcfe"
-        font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif"
-        font-size="30" font-weight="650">u</text>
+  <!-- The UT monogram: a T interlocked with a U on one square field. Drawn as
+       rectangles, never as text, so it renders identically without a font. The
+       stroke is 120 and every gap is 60, which is what keeps it readable when
+       the tab shrinks it to 16px. -->
+  <rect width="720" height="720" fill="#302b38"/>
+  <g fill="#eeebf2">
+    <rect x="72" y="96" width="576" height="120"/>
+    <rect x="300" y="216" width="120" height="227"/>
+    <rect x="72" y="276" width="120" height="347"/>
+    <rect x="528" y="276" width="120" height="347"/>
+    <rect x="72" y="503" width="576" height="120"/>
+  </g>
 </svg>

@@ -36,25 +36,34 @@ const palette = {
 const stack =
   "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif";
 
-const mark = (size) => `
-  <span class="mark" style="
-    width:${size * 0.88}px; height:${size}px; font-size:${size * 0.68}px;
-    border-radius:${size * 0.235}px ${size * 0.235}px ${size * 0.38}px ${size * 0.38}px;
-  ">u</span>`;
+// The UT monogram, identical to static/favicon.svg: a T interlocked with a U
+// drawn as rectangles on one square field. Kept inline because the screenshot
+// needs real markup, not a file reference.
+const monogram = (
+  size,
+) => `<svg width="${size}" height="${size}" viewBox="0 0 720 720" aria-hidden="true">
+    <rect width="720" height="720" fill="${palette.ink}"/>
+    <g fill="${palette.accentSoft}">
+      <rect x="72" y="96" width="576" height="120"/>
+      <rect x="300" y="216" width="120" height="227"/>
+      <rect x="72" y="276" width="120" height="347"/>
+      <rect x="528" y="276" width="120" height="347"/>
+      <rect x="72" y="503" width="576" height="120"/>
+    </g>
+  </svg>`;
 
 const shell = (body, css) => `<!doctype html><html><head><meta charset="utf-8">
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:${stack};color:${palette.ink};-webkit-font-smoothing:antialiased}
-  .mark{display:grid;place-items:center;background:${palette.accent};
-    color:${palette.paper};font-weight:650;line-height:1;padding-bottom:0.06em;flex:0 0 auto}
+  svg{display:block;flex:0 0 auto}
   ${css}
 </style></head><body>${body}</body></html>`;
 
 const ogCard = shell(
   `<div class="card">
     <div class="brand">
-      ${mark(46)}
+      ${monogram(62)}
       <span class="wordmark">ultratokenizer<i>.</i></span>
       <span class="rule"></span>
       <span class="descriptor">zkPDF-backed token issuance</span>
@@ -89,9 +98,10 @@ const ogCard = shell(
    .url{margin-left:auto;color:${palette.muted};font-size:19px}`,
 );
 
+// iOS applies its own corner mask, so the monogram is rendered full bleed.
 const touchIcon = shell(
-  `<div class="icon">${mark(132)}</div>`,
-  `.icon{width:180px;height:180px;display:grid;place-items:center;background:${palette.paper}}`,
+  `<div class="icon">${monogram(180)}</div>`,
+  `.icon{width:180px;height:180px;display:grid;place-items:center}`,
 );
 
 const browser = await chromium.launch();

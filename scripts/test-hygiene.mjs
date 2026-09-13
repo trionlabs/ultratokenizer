@@ -63,3 +63,37 @@ await test('ordinary project URLs, fixture addresses and English text stay allow
     [],
   );
 });
+
+await test('PNG metadata is still scanned while compressed pixel data is not', () => {
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const chunk = (type, body) => {
+    const data = Buffer.from(body);
+    const header = Buffer.alloc(8);
+    header.writeUInt32BE(data.length, 0);
+    header.write(type, 4, 'latin1');
+    // The scan never validates CRCs, so a fixed placeholder keeps this readable.
+    return Buffer.concat([header, data, Buffer.alloc(4)]);
+  };
+  const png = (...chunks) => Buffer.concat([signature, ...chunks]);
+  // Built from parts so this file does not itself carry a literal home path.
+  const noise = [' ~noise', homePath].join('/');
+
+  // A tool that writes a path into an image writes it into a text chunk.
+  assert.ok(
+    hygieneIssues(
+      png(chunk('IHDR', 'x'.repeat(13)), chunk('tEXt', `Source${homePath}`)),
+    ).includes('absolute home path'),
+  );
+
+  // The same bytes inside IDAT are DEFLATE output, not prose.
+  assert.deepEqual(
+    hygieneIssues(png(chunk('IHDR', 'x'.repeat(13)), chunk('IDAT', noise))),
+    [],
+  );
+
+  // Anything that does not parse cleanly as PNG keeps the whole-file scan.
+  const truncated = png(chunk('IDAT', noise)).subarray(0, -3);
+  assert.ok(hygieneIssues(truncated).includes('absolute home path'));
+  const notPng = Buffer.from(noise);
+  assert.ok(hygieneIssues(notPng).includes('absolute home path'));
+});

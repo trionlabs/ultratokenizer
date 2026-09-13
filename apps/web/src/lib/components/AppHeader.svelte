@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import BrandMark from './BrandMark.svelte';
   let {
     current,
     actions,
@@ -33,7 +34,7 @@
 <header class="app-header">
   <div class="brand-block">
     <a class="live-brand" href="/" aria-label="Ultratokenizer home"
-      ><span>u</span>ultratokenizer<i>.</i></a
+      ><BrandMark />ultratokenizer<i>.</i></a
     >
     <span class="engine-label">zkPDF-backed token issuance</span>
   </div>
@@ -90,20 +91,8 @@
     letter-spacing: -0.04em;
     text-decoration: none;
   }
-  .live-brand > span {
-    width: 30px;
-    height: 34px;
-    display: grid;
-    place-items: center;
-    padding-bottom: 3px;
-    color: var(--p-paper);
-    background: var(--p-accent);
-    border-radius: 8px 8px 13px 13px;
-    /* The tile is a fixed-size brand mark, so its letterform is fixed with it.
-       A rem here let the glyph grow past the tile at 200% text while the tile
-       stayed put. The wordmark beside it is real text and still scales. */
-    font-size: 23px;
-    font-weight: 650;
+  .live-brand :global(svg) {
+    display: block;
     flex-shrink: 0;
   }
   .live-brand i {

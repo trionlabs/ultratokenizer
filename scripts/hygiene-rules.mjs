@@ -35,7 +35,36 @@ function decodeEscapes(value) {
   return value;
 }
 
-export function hygieneIssues(content) {
+const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
+/**
+ * A PNG's IDAT payload is DEFLATE output: arbitrary bytes that carry no prose,
+ * but that do produce home-path shaped sequences by chance in any file of real
+ * size. Scanning it reports leaks that are not there while
+ * catching none that are, because a tool writing a path into an image writes it
+ * into a tEXt, iTXt or zTXt chunk. Keep every chunk header and every non-pixel
+ * chunk body; drop only the compressed image data. Anything that does not parse
+ * cleanly as PNG is scanned whole.
+ */
+function withoutPixelData(content) {
+  if (!content.subarray(0, 8).equals(PNG_SIGNATURE)) return content;
+  const kept = [content.subarray(0, 8)];
+  let offset = 8;
+  while (offset + 8 <= content.length) {
+    const length = content.readUInt32BE(offset);
+    const end = offset + 12 + length;
+    if (length > content.length || end > content.length) return content;
+    const type = content.subarray(offset + 4, offset + 8);
+    kept.push(type);
+    if (type.toString('latin1') !== 'IDAT')
+      kept.push(content.subarray(offset + 8, offset + 8 + length));
+    offset = end;
+  }
+  return offset === content.length ? Buffer.concat(kept) : content;
+}
+
+export function hygieneIssues(rawContent) {
+  const content = withoutPixelData(rawContent);
   const findings = new Set();
   const rawText = content.toString('utf8');
   const text = decodeEscapes(rawText);
