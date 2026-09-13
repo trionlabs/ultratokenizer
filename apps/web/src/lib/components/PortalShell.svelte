@@ -39,8 +39,8 @@
   }
   :global(.portal-shell h1) {
     max-width: none;
-    font-size: clamp(2rem, 4vw, 3.2rem);
-    letter-spacing: -0.05em;
+    font-size: clamp(1.7rem, 2.6vw, 2.25rem);
+    letter-spacing: -0.025em;
     margin: 9px 0 14px;
   }
   :global(.portal-shell h2) {
