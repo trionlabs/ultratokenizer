@@ -179,6 +179,28 @@ test('status cannot claim mint readiness without a bundle or switch job binding'
   }
 });
 
+test('a submitted proof observation failure remains readable without implying another submission', async () => {
+  const job = { jobId: 'job_123', documentId: 'doc_123', requestDigest: hash };
+  const client = createDocumentClient(async () =>
+    json({
+      ...job,
+      phase: 'proof',
+      status: 'attention_required',
+      detailCode: 'proof_observation_unavailable',
+      bundleReady: false,
+      canRetry: false,
+    }),
+  );
+  const status = await client.status(job, signal());
+  assert.equal(status.bundleReady, false);
+  assert.equal(status.canRetry, false);
+  assert.match(documentBlocker(status.detailCode), /submitted proof request/);
+  assert.doesNotMatch(
+    documentBlocker(status.detailCode),
+    /invalid response|sign again/,
+  );
+});
+
 test('unknown service errors, HTML and duplicate JSON keys never become UI messages', async () => {
   for (const response of [
     json(

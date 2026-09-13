@@ -119,9 +119,7 @@
   let needsResume = $derived(
     flow.started &&
       !hasOutcome &&
-      (!snapshot.signature ||
-        !flow.status ||
-        flow.status.status === 'awaiting_signature'),
+      (!flow.status || flow.status.status === 'awaiting_signature'),
   );
   let canRefreshApproval = $derived(
     flow.errorCode === 'permit_expired' ||
@@ -602,7 +600,7 @@
           {#if canRefreshApproval}
             <button
               class="secondary-button"
-              disabled={busy || unresolved || !snapshot.signature}
+              disabled={busy || unresolved || !walletMatches || !flow.job}
               onclick={() => journey.refreshPermit()}
               >Refresh issuer approval</button
             >
@@ -610,9 +608,22 @@
             <button
               class="secondary-button"
               disabled={busy}
+              aria-busy={flow.pending === 'checking'}
               onclick={() => journey.checkStatus()}
-              >Check verification status</button
+              >{flow.pending === 'checking'
+                ? 'Checking status…'
+                : 'Refresh status'}</button
             >
+            <p class="field-hint">
+              {#if flow.statusCheckedAt}
+                Checked at {new Date(flow.statusCheckedAt).toLocaleTimeString(
+                  'en-GB',
+                )}.
+              {/if}
+              {#if flow.status && !['blocked', 'attention_required', 'ready_to_mint'].includes(flow.status.status) && !flow.error}
+                Updates automatically while this request runs.
+              {/if}
+            </p>
           {/if}
         {/if}
         {#if blocker}<p class="stage-notice" role="status">{blocker}</p>{/if}

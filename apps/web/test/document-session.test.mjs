@@ -368,8 +368,119 @@ test('refresh restores only public request data and resumes read-only without an
   assert.equal(restored.read().job.jobId, h.job.jobId);
   assert.deepEqual(h.calls, before);
   await restored.resume();
-  assert.deepEqual(h.calls.slice(before.length), ['restore-holder', 'status']);
+  assert.deepEqual(h.calls.slice(before.length), ['status']);
+  assert.equal(h.holder.read().signature, undefined);
+  h.setStatus({
+    status: 'ready_to_mint',
+    phase: 'issuance',
+    bundleReady: true,
+  });
+  await restored.checkStatus();
+  assert.deepEqual(h.calls.slice(before.length), [
+    'status',
+    'status',
+    'restore-holder',
+    'bundle',
+    'validate-proof',
+  ]);
+  assert.equal(h.holder.read().sourceProof, 'accepted');
+  restored.dispose();
+  h.holder.dispose();
+});
+
+test('reloaded issuer approval recovery restores the saved signature only on explicit permit refresh', async () => {
+  for (const detailCode of [
+    'permit_expired',
+    'issuer_unavailable',
+    'deployment_unavailable',
+  ]) {
+    const values = new Map();
+    const storage = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value),
+      removeItem: (key) => values.delete(key),
+    };
+    const h = await harness();
+    h.session.restoreStorage(storage);
+    await h.session.upload(file());
+    h.session.disclose(true);
+    await h.session.verifyAndMint();
+    h.session.dispose();
+    h.holder.walletChanged();
+    await h.holder.connect();
+    const restored = createDocumentSession(h.holder, h.api);
+    restored.restoreStorage(storage);
+    h.setStatus({
+      status: 'attention_required',
+      phase: 'issuance',
+      detailCode,
+      bundleReady: false,
+    });
+    const before = h.calls.length;
+    await restored.resume();
+    assert.deepEqual(h.calls.slice(before), ['status']);
+    assert.equal(h.holder.read().signature, undefined);
+    assert.equal(h.holder.read().sourceProof, 'unchecked');
+    h.setStatus({
+      status: 'ready_to_mint',
+      detailCode: null,
+      bundleReady: true,
+    });
+    await restored.refreshPermit();
+    assert.deepEqual(h.calls.slice(before), [
+      'status',
+      'restore-holder',
+      'permit',
+      'bundle',
+      'validate-proof',
+    ]);
+    assert.equal(h.calls.filter((call) => call === 'start').length, 1);
+    assert.equal(h.holder.read().sourceProof, 'accepted');
+    restored.dispose();
+    h.holder.dispose();
+  }
+});
+
+test('a wallet change during saved issuer approval restoration cannot refresh the permit', async () => {
+  let finish;
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: (key) => values.delete(key),
+  };
+  const h = await harness({
+    holder: {
+      restorePreparedRequest: (prepared, signature) =>
+        new Promise((resolve) => {
+          finish = () => resolve({ prepared, signature, gatePaused: true });
+        }),
+    },
+  });
+  h.session.restoreStorage(storage);
+  await h.session.upload(file());
+  h.session.disclose(true);
+  await h.session.verifyAndMint();
+  h.session.dispose();
+  h.holder.walletChanged();
+  await h.holder.connect();
+  const restored = createDocumentSession(h.holder, h.api);
+  restored.restoreStorage(storage);
+  h.setStatus({
+    status: 'attention_required',
+    phase: 'issuance',
+    detailCode: 'permit_expired',
+    bundleReady: false,
+  });
+  await restored.resume();
+  const pending = restored.refreshPermit();
+  assert.equal(typeof finish, 'function');
+  h.holder.walletChanged();
+  finish();
+  await pending;
+  assert.ok(!h.calls.includes('permit'));
   assert.equal(h.holder.read().sourceProof, 'unchecked');
+  assert.equal(h.holder.read().signature, undefined);
   restored.dispose();
   h.holder.dispose();
 });
@@ -421,7 +532,7 @@ test('a start request that never arrived is re-sent once on resume', async () =>
       };
     };
     await h.session.resume();
-    assert.deepEqual(h.calls.slice(-2), ['status', 'start']);
+    assert.deepEqual(h.calls.slice(-3), ['status', 'restore-holder', 'start']);
     assert.equal(h.session.read().status.status, 'proving');
   } finally {
     h.session.dispose();
@@ -538,6 +649,24 @@ test('wallet changes during resume status observation cannot start a paid job', 
   assert.equal(h.holder.read().signature, undefined);
   assert.equal(h.session.read().errorCode, 'wrong_account');
   assert.equal(h.session.read().status.status, 'awaiting_signature');
+  h.session.dispose();
+  h.holder.dispose();
+});
+
+test('a successful unchanged status refresh records completion without manufacturing proof progress', async () => {
+  const h = await harness();
+  await h.session.upload(file());
+  h.session.disclose(true);
+  await h.session.verifyAndMint();
+  const previous = h.session.read().status;
+  const before = Date.now();
+  await h.session.checkStatus();
+  assert.deepEqual(h.session.read().status, previous);
+  assert.ok(h.session.read().statusCheckedAt >= before);
+  assert.equal(h.session.read().pending, undefined);
+  assert.equal(h.holder.read().sourceProof, 'unchecked');
+  assert.equal(h.holder.read().transaction, undefined);
+  assert.equal(h.calls.filter((c) => c === 'start').length, 1);
   h.session.dispose();
   h.holder.dispose();
 });

@@ -135,6 +135,8 @@ export async function exerciseIssuanceRecovery({
     requestDigest: digest,
   };
   let proofStarts = 0;
+  let permitRefreshes = 0;
+  let documentStatusOverride;
   const event = gateAbi.find(
     (item) => item.type === 'event' && item.name === 'Issued',
   );
@@ -216,8 +218,25 @@ export async function exerciseIssuanceRecovery({
           detailCode: null,
           bundleReady: true,
           canRetry: false,
+          ...documentStatusOverride,
         };
-      else if (url.pathname === `/api/jobs/${job.jobId}/bundle`) value = bundle;
+      else if (url.pathname === `/api/jobs/${job.jobId}/permit`) {
+        assert.equal(
+          rpcRequest.postDataJSON().holderSignature,
+          holderSignature,
+        );
+        permitRefreshes++;
+        documentStatusOverride = undefined;
+        value = {
+          ...job,
+          phase: 'issuance',
+          status: 'ready_to_mint',
+          detailCode: null,
+          bundleReady: true,
+          canRetry: false,
+        };
+      } else if (url.pathname === `/api/jobs/${job.jobId}/bundle`)
+        value = bundle;
       else throw new Error(`Unexpected document endpoint ${url.pathname}`);
       return route.fulfill({
         status: 200,
@@ -632,9 +651,50 @@ export async function exerciseIssuanceRecovery({
         'working',
       );
       await expect(page.locator('.artifact-body')).not.toHaveClass(/is-coin/);
+      documentStatusOverride = {
+        phase: 'proof',
+        status: 'proving',
+        bundleReady: false,
+      };
+      await page.reload({ waitUntil: 'networkidle' });
       await page
-        .getByRole('button', { name: 'Check verification status', exact: true })
+        .getByRole('button', { name: 'Connect recipient wallet', exact: true })
         .click();
+      await expect(
+        page.getByRole('button', { name: 'Connecting…', exact: true }).first(),
+      ).toBeDisabled();
+      await page.evaluate(() => window.grantIssuanceWallet());
+      const resume = page.getByRole('button', {
+        name: 'Resume verification',
+        exact: true,
+      });
+      await expect(resume).toBeEnabled();
+      const readsBeforeResume = rpcCalls.length;
+      await resume.click();
+      await expect(page.locator('.artifact-caption')).toHaveText(
+        'SP1 proof in progress',
+      );
+      await expect(resume).toHaveCount(0);
+      assert.equal(
+        rpcCalls.length,
+        readsBeforeResume,
+        'active resume only observes API status',
+      );
+      documentStatusOverride = {
+        phase: 'issuance',
+        status: 'attention_required',
+        detailCode: 'permit_expired',
+        bundleReady: false,
+      };
+      await page
+        .getByRole('button', { name: 'Refresh status', exact: true })
+        .click();
+      const refreshApproval = page.getByRole('button', {
+        name: 'Refresh issuer approval',
+        exact: true,
+      });
+      await expect(refreshApproval).toBeEnabled();
+      await refreshApproval.click();
       await expect(page.locator('.proof-object')).toHaveAttribute(
         'data-state',
         'verified',
@@ -644,6 +704,17 @@ export async function exerciseIssuanceRecovery({
         .getByRole('button', { name: 'Check before minting', exact: true })
         .click();
       assert.equal(proofStarts, 1);
+      assert.equal(permitRefreshes, 1);
+      assert.equal(
+        await page.evaluate(
+          () =>
+            window.issuanceWallet.methods.filter(
+              (method) => method === 'eth_signTypedData_v4',
+            ).length,
+        ),
+        0,
+        'reload recovery reuses the saved signature',
+      );
     } else {
       for (const [label, value] of [
         ['Import deployment configuration', fixture.deployment],

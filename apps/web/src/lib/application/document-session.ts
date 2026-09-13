@@ -19,6 +19,7 @@ export type DocumentSnapshot = Readonly<{
   document?: UploadedDocument;
   job?: PreparedDocumentJob;
   status?: DocumentJobStatus;
+  statusCheckedAt?: number;
   pending?:
     | 'configuration'
     | 'upload'
@@ -159,13 +160,22 @@ export function createDocumentSession(
     }, 3_000);
   }
   async function acceptBundle(signal: AbortSignal, current: () => boolean) {
-    if (
-      !state.job ||
-      !holder.read().signature ||
-      !holder.read().preparedRequest
-    )
-      return;
+    if (!state.job) return;
     const job = state.job;
+    if (!holder.read().signature || !holder.read().preparedRequest) {
+      if (!retainedSignature) return;
+      // Observing a running job needs no chain scan. Restore the saved approval
+      // only when a returned bundle can actually be verified.
+      await holder.restorePreparedRequest(job.prepared, retainedSignature);
+      if (
+        !current() ||
+        state.job !== job ||
+        holder.read().error ||
+        !holder.read().signature ||
+        !holder.read().preparedRequest
+      )
+        return;
+    }
     const bundle = await api.bundle(job, signal);
     if (current() && state.job === job)
       await holder.acceptPreparedBundle(bundle);
@@ -176,7 +186,7 @@ export function createDocumentSession(
     await run('checking', async (signal, current) => {
       const status = await api.status(job, signal);
       if (!current() || state.job !== job) return;
-      update({ status });
+      update({ status, statusCheckedAt: Date.now() });
       if (status.bundleReady && holder.read().sourceProof !== 'accepted')
         await acceptBundle(signal, current);
     });
@@ -329,25 +339,23 @@ export function createDocumentSession(
       const job = state.job;
       const signature = retainedSignature;
       await run('checking', async (signal, current) => {
-        await holder.restorePreparedRequest(job.prepared, signature);
-        const approval = holder.read();
-        if (!current() || !approval.signature || approval.error) return;
+        const wallet = holder.read().wallet;
         let status = await api.status(job, signal);
         if (!current() || state.job !== job) return;
-        update({ status });
-        // `started` is set before the POST, so a lost start response leaves the
-        // service parked at awaiting_signature while this session believes the
-        // job is running. Re-send it with the signature already retained: the
-        // service returns the current status for a job it has begun, so a
-        // duplicate never opens a second reservation or pays for a second proof.
+        update({ status, statusCheckedAt: Date.now() });
+        // A running job is observed immediately. Only a start that never reached
+        // the service needs its saved approval rechecked before resubmission.
         if (status.status === 'awaiting_signature') {
-          const currentApproval = holder.read();
+          if (!wallet || holder.read().wallet !== wallet)
+            throw new DocumentClientError('wrong_account');
+          await holder.restorePreparedRequest(job.prepared, signature);
+          const approval = holder.read();
+          if (!current() || !approval.signature || approval.error) return;
           if (
-            currentApproval.signature !== approval.signature ||
-            currentApproval.preparedRequest !== approval.preparedRequest ||
-            currentApproval.wallet !== approval.wallet ||
-            currentApproval.busy ||
-            currentApproval.pendingOperation
+            approval.wallet !== wallet ||
+            approval.signature !== signature ||
+            approval.busy ||
+            approval.pendingOperation
           )
             throw new DocumentClientError('wrong_account');
           status = await api.start(job, signature, signal);
@@ -401,12 +409,35 @@ export function createDocumentSession(
       for (const listener of listeners) listener(state);
     },
     async refreshPermit() {
-      if (blocked() || !state.job || !holder.read().signature) return;
+      if (blocked() || !state.job || !retainedSignature) return;
       const job = state.job,
-        signature = holder.read().signature!;
+        signature = retainedSignature,
+        wallet = holder.read().wallet;
       await run('approval', async (signal, current) => {
+        if (
+          !wallet ||
+          wallet.address.toLowerCase() !==
+            job.prepared.request.recipient.toLowerCase()
+        )
+          throw new DocumentClientError('wrong_account');
+        // A reload keeps the public approval without slow chain reads. Restore
+        // it only for this explicit same-proof authorization refresh.
+        if (!holder.read().signature || !holder.read().preparedRequest)
+          await holder.restorePreparedRequest(job.prepared, signature);
+        const approval = holder.read();
+        if (!current() || state.job !== job || approval.error) return;
+        if (
+          approval.wallet !== wallet ||
+          approval.signature !== signature ||
+          !approval.preparedRequest ||
+          getIssuanceRequestDigest(approval.preparedRequest.request) !==
+            job.requestDigest ||
+          approval.busy ||
+          approval.pendingOperation
+        )
+          throw new DocumentClientError('wrong_account');
         const status = await api.refreshPermit(job, signature, signal);
-        if (current()) {
+        if (current() && state.job === job) {
           update({ status });
           if (status.bundleReady) await acceptBundle(signal, current);
         }

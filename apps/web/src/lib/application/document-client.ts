@@ -43,6 +43,8 @@ const messages = {
     'The reservation outcome needs review. Do not start another request.',
   proof_request_uncertain:
     'The proof request outcome needs review. Do not start another request.',
+  proof_observation_unavailable:
+    'The submitted proof request could not be checked. The issuer will resume tracking this same request; do not start another.',
   proof_deadline_elapsed:
     'The proof request deadline passed. The issuer must review this request.',
   proof_unavailable: 'The proof service is unavailable. No mint was submitted.',
