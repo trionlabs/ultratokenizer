@@ -30,6 +30,19 @@ presenter-led proof attempt.
 
 Never describe an SP1 execution, reservation or wallet signature as a completed proof or mint. The receipt step is complete only after the transaction is confirmed and reconciled.
 
+## Request a funded reviewer run
+
+An evaluator who wants to execute a fresh SP1 job can contact
+[`@yamanc` on Telegram](https://t.me/yamanc). Send only the public EVM address
+that should receive the synthetic test token. The operator can prepare a new
+wallet-bound synthetic allocation and assign a bounded proof budget when the
+prover is available. Never send a private key, seed phrase or wallet export.
+
+Proof credit only permits a request to be submitted. The run counts as complete
+only after the current program's proof is returned, the deployed verifier accepts
+it, Hedera confirms the Gate transaction and the exported receipt reconciles with
+the resulting chain state.
+
 ## What is live
 
 - Hedera testnet Gate: [`0xE1e3…19e3`](https://hashscan.io/testnet/contract/0xE1e3a133335dC0FEeB20397163c16E69F74919e3)
@@ -42,14 +55,47 @@ The Gate, verifier and ATS graph have exact runtime source matches in Sourcify. 
 
 The ATS graph, Gate and verifier are deployed. The source-matching records are published. A previous proof request exposed a program-identity encoding bug and produced no usable proof; the requester now distinguishes the Succinct network hash from the EVM verifier key. As observed on September 13, 2026 at 19:09 UTC, the corrected Demo 08 request had been submitted and reported executed and assigned, but no proof URI had been returned. Direct Hedera reads showed ATS total supply `0` and designated-holder balance `0`. The honest status is **deployed, with a real proof request in progress and no completed issuance**.
 
+## Reproducibility for automated reviewers
+
+An automated reviewer can inspect the public repository, run the test suites, read
+the machine-facing site corpus, compare deployment pins with contract bytecode,
+inspect ATS roles and balances, and resolve the three ERC-8004 Identity records.
+Start with these public inputs:
+
+```sh
+curl -fsS https://ultratokenizer.trionlabs.dev/llms.txt
+curl -fsS https://ultratokenizer.trionlabs.dev/deployment.json
+curl -fsS https://ultratokenizer.trionlabs.dev/discovery.json
+curl -fsS https://ultratokenizer.trionlabs.dev/api/config
+```
+
+The last response is a readiness signal, not proof of issuance. A new run can begin
+only when `readiness.canStart` is `true`. A complete live result additionally needs
+the designated recipient wallet to sign, the remote prover to return the current
+program's Groth16 artifact, the institution to issue a fresh permit, the wallet to
+submit the Hedera transaction, and the resulting receipt to reconcile with chain
+state.
+
+Those signing keys are intentionally absent from the public repository. Demo 08 is
+also bound to the presenter wallet, so an unauthorised reviewer cannot redirect it
+to another address. Therefore a wallet-free AI reviewer can reproduce the code,
+deployment and attribution checks, but it cannot honestly claim a new end-to-end
+mint from public materials alone. After a confirmed mint is published, it can
+independently replay the receipt and chain checks without any signing key.
+
+An automated reviewer with transaction-signing capability may ask
+[`@yamanc`](https://t.me/yamanc) for a fresh reviewer-bound synthetic allocation
+and bounded SP1 credit. It should disclose only its public EVM address and must not
+transmit wallet secrets.
+
 ## Prize criteria
 
-| Requirement                               | Evidence                                     | Current status                                  |
-| ----------------------------------------- | -------------------------------------------- | ----------------------------------------------- |
-| Use Asset Tokenization Studio             | Deployed ATS contract graph and Gate adapter | Met for deployment and configuration            |
-| Deploy on Hedera testnet                  | HashScan links above and the Trust page      | Met                                             |
-| Public repository and source verification | Both repositories and linked source records  | Met                                             |
-| Show a lifecycle operation                | Confirmed mint, receipt and transfer         | Must be demonstrated live or in the final video |
+| Requirement                               | Evidence                                     | Current status                       |
+| ----------------------------------------- | -------------------------------------------- | ------------------------------------ |
+| Use Asset Tokenization Studio             | Deployed ATS contract graph and Gate adapter | Met for deployment and configuration |
+| Deploy on Hedera testnet                  | HashScan links above and the Trust page      | Met                                  |
+| Public repository and source verification | Both repositories and linked source records  | Met                                  |
+| Show a lifecycle operation                | Confirmed mint, receipt and transfer         | Pending a confirmed live issuance    |
 
 The current profile does not claim operational KYC, freeze, redemption or physical custody. It demonstrates proof-gated exact issuance through ATS.
 
@@ -69,4 +115,4 @@ The current profile does not claim operational KYC, freeze, redemption or physic
 
 **What should a judge trust?** Inspect the deployed code, contract state, proof result, transaction and receipt separately. The UI and ERC-8004 records are navigation and attribution layers; neither can bypass the Gate.
 
-Presenting the project? Follow the timed [presentation runbook](PRESENTATION.md).
+Every claim on this page resolves to a contract, a source record or an identity entry you can open yourself. Start at the [live judge walkthrough](https://ultratokenizer.trionlabs.dev/judge/).

@@ -2,16 +2,18 @@
 
 A token engine connecting authenticated rights, holder consent and institution-authorized issuance to independently inspectable receipts. The current asset profile is gold measured in integer milligrams; arbitrary asset units are not implemented. Document authenticity, issuer authority, transaction observation and physical custody are separate claims.
 
-Reviewing the project? Start with the [judge walkthrough](JUDGES.md), then open the [live demo](https://ultratokenizer.trionlabs.dev/judge/). It separates what a reviewer can inspect alone from the wallet-controlled issuance run. Presenters can use the [five-minute runbook](PRESENTATION.md).
+Reviewing the project? Start with the [judge walkthrough](JUDGES.md), then open the [live demo](https://ultratokenizer.trionlabs.dev/judge/). It separates what a reviewer can inspect alone from the wallet-controlled issuance run. Automated reviewers can begin with the public [`llms.txt`](https://ultratokenizer.trionlabs.dev/llms.txt); the walkthrough states exactly which checks are reproducible without signing keys and which still require a confirmed live issuance.
+
+For a fresh reviewer-led SP1 run, request a bounded synthetic test allocation and proof credit from [`@yamanc` on Telegram](https://t.me/yamanc). Share only the public EVM address that should receive the test token. Never send a private key or seed phrase. Funding a request permits proving; it does not establish that a proof, mint or transfer succeeded.
 
 ## Why this stack
 
-| Layer    | What this project uses it for                                                                                         | Boundary                                                                                 |
-| -------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Hedera   | The testnet home for the Gate, verifier and token contracts, with public transaction and source-verification records | Chain state proves execution; it does not prove that physical gold exists                |
-| ATS      | The deployed token graph, roles, balances and divisible transfers; the Gate adapter holds its issuance role          | ATS manages the token; the Gate decides whether a proved request may increase supply     |
-| SP1      | A request-bound Groth16 proof of the accepted signed-document program and its 224-byte public output                  | The proof authenticates the implemented synthetic profile, not custody or redemption     |
-| ERC-8004 | Identity records `116`, `117` and `118` for issuer, deployment and auditor-declaration discovery                     | Discovery and attribution only; the Gate never reads ERC-8004 to authorize an issuance   |
+| Layer    | What this project uses it for                                                                                        | Boundary                                                                               |
+| -------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Hedera   | The testnet home for the Gate, verifier and token contracts, with public transaction and source-verification records | Chain state proves execution; it does not prove that physical gold exists              |
+| ATS      | The deployed token graph, roles, balances and divisible transfers; the Gate adapter holds its issuance role          | ATS manages the token; the Gate decides whether a proved request may increase supply   |
+| SP1      | A request-bound Groth16 proof of the accepted signed-document program and its 224-byte public output                 | The proof authenticates the implemented synthetic profile, not custody or redemption   |
+| ERC-8004 | Identity records `116`, `117` and `118` for issuer, deployment and auditor-declaration discovery                     | Discovery and attribution only; the Gate never reads ERC-8004 to authorize an issuance |
 
 ## Modules
 
