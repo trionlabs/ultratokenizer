@@ -3,6 +3,7 @@
   import PortalShell from '$lib/components/PortalShell.svelte';
 
   import PageMeta from '$lib/components/PageMeta.svelte';
+  import JudgeOverview from '$lib/visuals/JudgeOverview.svelte';
   // The Hedera "Tokenization of Anything" qualification requirements, each
   // bound to something a reviewer can open. The generated /llms-full.txt
   // carries the same mapping with every deployed address resolved.
@@ -11,24 +12,27 @@
       requirement:
         'Use the Asset Tokenization Studio to issue or manage a tokenised asset',
       status: 'Met',
+      met: true,
       evidence:
-        'The asset is an ATS token graph built from a pinned upstream commit and compiled in-repo. Its issuance role belongs to the Gate mint adapter, so ATS is extended rather than wrapped: minting is held by a proof-gated contract instead of a key holder.',
+        'The Gate mint adapter holds the only issuance role, so minting is gated by a contract, not a key holder.',
       href: '/trust/',
       label: 'Inspect the token graph',
     },
     {
       requirement: 'Deploy and demonstrate on Hedera testnet',
       status: 'Met',
+      met: true,
       evidence:
-        'Gate, SP1 Groth16 verifier, mint adapter and the complete ATS facet graph are deployed on chain ID 296. The Trust page reads their state from chain on every visit, and the graph was admitted by a reviewed atomic creation transaction pinned to a block.',
+        'Gate, verifier, adapter and the full ATS facet graph are live on chain ID 296, read from chain on every visit.',
       href: '/trust/',
       label: 'Read live chain state',
     },
     {
       requirement: 'Public GitHub repo, contracts verified where applicable',
       status: 'Met',
+      met: true,
       evidence:
-        'Both repositories are public. The Gate, the verifier and the ATS graph have exact runtime source matches in Sourcify, and every address is additionally pinned by runtime code hash in deployment.json, so a swapped implementation fails the check instead of passing silently.',
+        'Public repo. Gate, verifier and ATS graph are exact Sourcify matches, each pinned by runtime code hash.',
       href: 'https://github.com/trionlabs/ultratokenizer',
       label: 'Open the repository',
     },
@@ -36,18 +40,12 @@
       requirement:
         'Demo video showing issuance, configuration and a lifecycle operation',
       status: 'Pending live result',
+      met: false,
       evidence:
-        'Configuration is inspectable on the Trust page. This criterion closes only after a confirmed proof-gated ATS mint and a 0.001 g transfer are recorded in the final video.',
+        'Closes only after a confirmed proof-gated mint and a 0.001 g transfer are recorded.',
       href: '/demo/',
       label: 'Follow the mechanism',
     },
-  ];
-
-  const beyondBaseline = [
-    'Compliance facets ship with the graph: transfer control list, supply cap, ERC-1400 partitions.',
-    'Scheduled-task libraries are deployed for later vesting, coupon and maturity work.',
-    'One control the Studio does not have: issuance requires a zero-knowledge proof of an off-chain right, checked on chain before supply moves.',
-    'A third party re-checks an exported receipt offline, against a trust policy obtained separately.',
   ];
 
   const documentNumbers = Array.from({ length: 50 }, (_, index) =>
@@ -96,11 +94,7 @@
     <div>
       <p class="eyebrow">Judge walkthrough · 5 minutes</p>
       <h1>No token mints without a proof of a signed document.</h1>
-      <p class="intro">
-        Review the claim, follow the proof, check the chain. Every contract and
-        document here is inspectable without a wallet. The presenter controls
-        the recipient wallet for the live proof and mint.
-      </p>
+      <p class="intro">Everything here is inspectable without a wallet.</p>
     </div>
     <aside class="live" aria-live="polite">
       <span
@@ -130,6 +124,10 @@
     </aside>
   </section>
 
+  <section class="overview-section" aria-label="How issuance is gated">
+    <JudgeOverview />
+  </section>
+
   <section class="choice" aria-label="Choose a review path">
     <article>
       <p class="step">On your own</p>
@@ -152,16 +150,11 @@
         The designated wallet signs the exact request, waits for SP1 proof
         verification, then confirms a separate Hedera mint.
       </p>
-      <p class="funded-note">
-        Want your own wallet in the run? Ask for a wallet-bound allocation and a
-        bounded PROVE budget. Send only your public EVM address.
-      </p>
       <div class="actions">
         <a class="primary" href="/#engine">Start the live run</a>
         <a href="https://t.me/yamanc" target="_blank" rel="noreferrer"
-          >Request proof budget · @yamanc</a
+          >Use your own wallet · @yamanc</a
         >
-        <a href="/demo/">See the mechanism</a>
       </div>
     </article>
   </section>
@@ -171,13 +164,12 @@
       <p class="eyebrow">Signed test set</p>
       <h2 id="documents-title">Inspect 50 separate signed rights</h2>
       <p>
-        Every PDF is a distinct CMS-signed synthetic 1.000 g right for the
-        presenter wallet. The live engine admits Demo 08; the other 49 are for
-        offline inspection and carry no proofs, permits, mints or keys.
+        Each is a distinct CMS-signed 1.000 g right. The engine admits Demo 08;
+        the rest are for offline inspection.
       </p>
     </div>
     <div class="library-actions">
-      <a class="primary" href="/jury/ultratokenizer-jury-documents.zip" download
+      <a href="/jury/ultratokenizer-jury-documents.zip" download
         >Download all 50 PDFs</a
       >
       <details>
@@ -191,85 +183,23 @@
     </div>
   </section>
 
-  <section class="route" aria-labelledby="review-order">
-    <div class="section-head">
-      <p class="eyebrow">Recommended order</p>
-      <h2 id="review-order">What to check</h2>
-    </div>
-    <ol>
-      <li>
-        <span>01</span>
-        <div>
-          <strong>Document</strong>
-          <p>Upload Demo 08. Confirm 1.000 g, one issuer and one recipient.</p>
-        </div>
-        <a href="/#engine">Open</a>
-      </li>
-      <li>
-        <span>02</span>
-        <div>
-          <strong>Proof path</strong>
-          <p>
-            See what SP1 proves, what becomes public and why execution is not a
-            completed proof.
-          </p>
-        </div>
-        <a href="/demo/">Explain</a>
-      </li>
-      <li>
-        <span>03</span>
-        <div>
-          <strong>Authority</strong>
-          <p>
-            Inspect the Gate, ATS token, verifier and ERC-8004 Identity records.
-          </p>
-        </div>
-        <a href="/trust/">Inspect</a>
-      </li>
-      <li>
-        <span>04</span>
-        <div>
-          <strong>Result</strong>
-          <p>
-            After mint confirmation, verify the receipt and compare it with the
-            chain.
-          </p>
-        </div>
-        <a href="/verify/">Verify</a>
-      </li>
-    </ol>
-  </section>
-
   <section class="track" aria-labelledby="track-title">
     <div class="section-head">
       <p class="eyebrow">Hedera track · Tokenization of Anything</p>
-      <h2 id="track-title">Qualification requirements and their evidence</h2>
+      <h2 id="track-title">Qualification requirements</h2>
     </div>
     <ul class="track-list">
       {#each qualification as item (item.requirement)}
         <li>
           <div class="track-head">
             <h3>{item.requirement}</h3>
-            <span class="pill">{item.status}</span>
+            <span class="pill" class:pending={!item.met}>{item.status}</span>
           </div>
           <p>{item.evidence}</p>
           <a href={item.href}>{item.label} →</a>
         </li>
       {/each}
     </ul>
-    <div class="beyond">
-      <strong>Beyond the baseline</strong>
-      <ul>
-        {#each beyondBaseline as line (line)}
-          <li>{line}</li>
-        {/each}
-      </ul>
-      <p class="beyond-note">
-        Not claimed for this submission: a staffed compliance operation, a
-        secondary market, coupon or royalty distribution, price or NAV oracles,
-        physical custody and redemption.
-      </p>
-    </div>
   </section>
 
   <section class="truth" aria-labelledby="truth-title">
@@ -279,20 +209,20 @@
     </div>
     <div class="truth-grid">
       <p>
-        <strong>On chain</strong> Gate, SP1 verifier and ATS token are deployed on
-        Hedera testnet.
+        <strong>Enforcement</strong> The checks are the proof, the holder signature,
+        the issuer permit, the reservation and a single-use claim.
       </p>
       <p>
-        <strong>Identity</strong> ERC-8004 records provide attribution, not a licence
-        or mint authority.
+        <strong>Identity</strong> An ERC-8004 record is attribution, never a licence
+        or a mint authority.
       </p>
       <p>
-        <strong>Asset</strong> The PDF and institution are synthetic; no physical
-        backing or redemption is claimed.
+        <strong>Asset</strong> The PDF and institution are synthetic. No backing,
+        custody or redemption is claimed.
       </p>
       <p>
-        <strong>Completion</strong> A mint counts only after proof acceptance, wallet
-        confirmation and receipt reconciliation.
+        <strong>Completion</strong> Reconciliation confirms what happened. It cannot
+        authorize a mint, or repair one.
       </p>
     </div>
     <a
@@ -304,10 +234,6 @@
 </PortalShell>
 
 <style>
-  .funded-note {
-    margin-top: 10px;
-    font-size: 0.76rem;
-  }
   .track {
     padding: 30px 0;
     border-top: 1px solid var(--p-line);
@@ -333,17 +259,6 @@
     display: grid;
     align-content: start;
     gap: 12px;
-  }
-  .library-actions > .primary {
-    display: block;
-    padding: 12px 18px;
-    border-radius: 999px;
-    background: var(--p-accent);
-    color: white;
-    font-size: 0.78rem;
-    font-weight: 650;
-    text-align: center;
-    text-decoration: none;
   }
   .library-actions details {
     padding: 12px 16px;
@@ -404,12 +319,30 @@
   }
   .pill {
     flex: 0 0 auto;
-    padding: 3px 10px;
+    padding: 3px 10px 3px 8px;
     border-radius: 999px;
     background: var(--p-accent-soft);
     color: var(--p-accent);
     font-size: 0.68rem;
     white-space: nowrap;
+  }
+  .pill::before {
+    content: '\2713\00a0';
+    font-weight: 700;
+  }
+  /* Done and not-done were the same badge, so the one open requirement read as
+     finished at a glance. Hollow, and a ring instead of a tick. */
+  .pill.pending {
+    background: transparent;
+    border: 1px solid var(--p-line);
+    color: var(--p-muted);
+  }
+  .pill.pending::before {
+    content: '\25cb\00a0';
+    font-weight: 400;
+  }
+  .overview-section {
+    margin: 4px 0 30px;
   }
   .track-list p {
     margin: 10px 0 14px;
@@ -419,29 +352,9 @@
   .track-list a {
     font-size: 0.78rem;
   }
-  .beyond {
-    margin-top: 18px;
-    padding: 20px;
-    border: 1px solid var(--p-line);
-    border-radius: 18px;
-    background: color-mix(in srgb, var(--p-paper) 92%, var(--p-iris));
-  }
-  .beyond strong {
-    font-size: 0.86rem;
-  }
-  .beyond ul {
-    margin: 10px 0 0;
-    padding-left: 18px;
-    color: var(--p-muted);
-    font-size: 0.8rem;
-  }
-  .beyond li {
-    margin-top: 6px;
-  }
-  .beyond-note {
-    margin: 14px 0 0;
-    color: var(--p-muted);
-    font-size: 0.76rem;
+  section p,
+  section li {
+    max-width: 68ch;
   }
   .hero {
     display: grid;
@@ -539,10 +452,6 @@
     background: var(--p-accent);
     border-radius: 999px;
   }
-  .route {
-    padding: 30px 0;
-    border-top: 1px solid var(--p-line);
-  }
   .section-head {
     display: flex;
     align-items: baseline;
@@ -551,39 +460,6 @@
   }
   .section-head h2 {
     font-size: 1.7rem;
-  }
-  .route ol {
-    list-style: none;
-    margin: 18px 0 0;
-    padding: 0;
-    border-top: 1px solid var(--p-line);
-  }
-  .route ol > li {
-    display: grid;
-    grid-template-columns: 44px minmax(0, 1fr) auto;
-    gap: 16px;
-    align-items: center;
-    padding: 18px 4px;
-    border-bottom: 1px solid var(--p-line);
-  }
-  .route ol > li > span {
-    color: var(--p-iris);
-    font-size: 0.7rem;
-    font-weight: 700;
-  }
-  .route ol > li strong {
-    font-size: 0.9rem;
-  }
-  .route ol > li p {
-    color: var(--p-muted);
-    font-size: 0.78rem;
-    margin-top: 2px;
-  }
-  .route ol > li a {
-    color: var(--p-accent);
-    font-size: 0.74rem;
-    font-weight: 650;
-    text-decoration: none;
   }
   .truth {
     margin: 6px 0 30px;
@@ -634,12 +510,6 @@
     .choice article,
     .truth {
       padding: 20px;
-    }
-    .route ol > li {
-      grid-template-columns: 32px minmax(0, 1fr);
-    }
-    .route ol > li a {
-      grid-column: 2;
     }
   }
   @media (prefers-reduced-motion: reduce) {

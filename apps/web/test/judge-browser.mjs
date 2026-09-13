@@ -35,7 +35,7 @@ try {
       page.getByRole('link', { name: 'Download all 50 PDFs' }),
     ).toBeVisible();
     await expect(
-      page.getByRole('link', { name: /Request proof budget/ }),
+      page.getByRole('link', { name: /Use your own wallet/ }),
     ).toHaveAttribute('href', 'https://t.me/yamanc');
     await expect(page.getByText('What the demo establishes')).toBeVisible();
     // An unscoped `li` rule once reached every list on the page and squeezed
