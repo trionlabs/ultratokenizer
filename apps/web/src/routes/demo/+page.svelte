@@ -287,27 +287,6 @@
           onclick={() => go(index)}><span>{index + 1}</span>{item.id}</button
         >
       {/each}
-      <div class="nav">
-        <button
-          class="move"
-          type="button"
-          disabled={step === 0}
-          onclick={() => go(step - 1)}
-          aria-label="Previous step"><Glyph name="back" size={15} /></button
-        >
-        {#if last}
-          <a class="move primary" href="/trust/"
-            >See it on chain <Glyph name="arrow" size={15} /></a
-          >
-        {:else}
-          <button
-            class="move primary"
-            type="button"
-            onclick={() => go(step + 1)}
-            >Next <Glyph name="arrow" size={15} /></button
-          >
-        {/if}
-      </div>
     </nav>
 
     <section class="stage-wrap" aria-label="The engine">
@@ -315,110 +294,142 @@
     </section>
 
     <section class="panel" aria-label={current.id}>
-      <p class="who">{current.who}</p>
-      <h2>{current.id}</h2>
-      <p class="line">{current.line}</p>
-      <p class="why step-why"><span>Why</span>{current.why}</p>
-      {#if current.aside}<p class="aside">{current.aside}</p>{/if}
+      <!-- Back and Next sit with the step they move, not at the foot of the
+           rail where they were three hundred pixels from the reader's eye. -->
+      <div class="panel-head">
+        <div class="panel-title">
+          <p class="who">{current.who}</p>
+          <h2>{current.id}</h2>
+        </div>
+        <div class="nav">
+          <button
+            class="move"
+            type="button"
+            disabled={step === 0}
+            onclick={() => go(step - 1)}
+            aria-label="Previous step"><Glyph name="back" size={15} /></button
+          >
+          {#if last}
+            <a class="move primary" href="/trust/"
+              >See it on chain <Glyph name="arrow" size={15} /></a
+            >
+          {:else}
+            <button
+              class="move primary"
+              type="button"
+              onclick={() => go(step + 1)}
+              >Next <Glyph name="arrow" size={15} /></button
+            >
+          {/if}
+        </div>
+      </div>
 
-      <ul class="items">
-        {#each current.items as item (item.label)}
-          <li>
-            <details>
-              <summary>
-                <span class="icon" aria-hidden="true"
-                  ><Glyph name={item.icon} size={15} /></span
-                >
-                <span class="item-copy">
-                  <strong>{item.label}</strong>
-                  <small>{item.line}</small>
-                </span>
-                <span class="more" aria-hidden="true"></span>
-              </summary>
-              <div class="item-body">
-                <p class="why"><span>Why</span>{item.why}</p>
-                <div class="item-visual"><item.visual /></div>
-                <a href={item.href} target="_blank" rel="noopener noreferrer"
-                  >Evidence <Glyph name="arrow" size={12} /></a
-                >
-              </div>
-            </details>
-          </li>
-        {/each}
+      <div class="panel-body">
+        <div class="copy">
+          <p class="line">{current.line}</p>
+          <p class="why step-why"><span>Why</span>{current.why}</p>
+          {#if current.aside}<p class="aside">{current.aside}</p>{/if}
+        </div>
 
-        {#if last}
-          <li>
-            <details>
-              <summary>
-                <span class="icon" aria-hidden="true"
-                  ><Glyph name="check" size={15} /></span
-                >
-                <span class="item-copy">
-                  <strong>Deployed contracts</strong>
-                  <small>Twenty deployed, twenty runtimes verified.</small>
-                </span>
-                <span class="more" aria-hidden="true"></span>
-              </summary>
-              <div class="item-body">
-                {#if deployment}
-                  <ul class="chips">
-                    {#each addresses as entry}
-                      <li>
-                        <a
-                          class="chip"
-                          href={hashscan(entry.value)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          >{entry.label}
-                          <span class="mono">{short(entry.value)}</span></a
-                        >
+        <ul class="items">
+          {#each current.items as item (item.label)}
+            <li>
+              <details>
+                <summary>
+                  <span class="icon" aria-hidden="true"
+                    ><Glyph name={item.icon} size={15} /></span
+                  >
+                  <span class="item-copy">
+                    <strong>{item.label}</strong>
+                    <small>{item.line}</small>
+                  </span>
+                  <span class="more" aria-hidden="true"></span>
+                </summary>
+                <div class="item-body">
+                  <p class="why"><span>Why</span>{item.why}</p>
+                  <div class="item-visual"><item.visual /></div>
+                  <a href={item.href} target="_blank" rel="noopener noreferrer"
+                    >Evidence <Glyph name="arrow" size={12} /></a
+                  >
+                </div>
+              </details>
+            </li>
+          {/each}
+
+          {#if last}
+            <li>
+              <details>
+                <summary>
+                  <span class="icon" aria-hidden="true"
+                    ><Glyph name="check" size={15} /></span
+                  >
+                  <span class="item-copy">
+                    <strong>Deployed contracts</strong>
+                    <small>Twenty deployed, twenty runtimes verified.</small>
+                  </span>
+                  <span class="more" aria-hidden="true"></span>
+                </summary>
+                <div class="item-body">
+                  {#if deployment}
+                    <ul class="chips">
+                      {#each addresses as entry}
+                        <li>
+                          <a
+                            class="chip"
+                            href={hashscan(entry.value)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            >{entry.label}
+                            <span class="mono">{short(entry.value)}</span></a
+                          >
+                        </li>
+                      {/each}
+                    </ul>
+                  {:else if configState === 'loading'}
+                    <p class="small" role="status">Reading configuration.</p>
+                  {:else}
+                    <p class="small">
+                      This host has not published a configuration. The Trust
+                      page reads the chain.
+                    </p>
+                  {/if}
+                </div>
+              </details>
+            </li>
+            <li>
+              <details>
+                <summary>
+                  <span class="icon" aria-hidden="true"
+                    ><Glyph name="receipt" size={15} /></span
+                  >
+                  <span class="item-copy">
+                    <strong>Track requirements</strong>
+                    <small
+                      >One met, one deployed, two partly. Nothing hidden.</small
+                    >
+                  </span>
+                  <span class="more" aria-hidden="true"></span>
+                </summary>
+                <div class="item-body">
+                  <ul class="criteria">
+                    {#each required as row}
+                      <li data-met={row.status !== 'Partly met'}>
+                        <span>{row.status}</span>{row.need}
                       </li>
                     {/each}
                   </ul>
-                {:else if configState === 'loading'}
-                  <p class="small" role="status">Reading configuration.</p>
-                {:else}
-                  <p class="small">
-                    This host has not published a configuration. The Trust page
-                    reads the chain.
-                  </p>
-                {/if}
-              </div>
-            </details>
-          </li>
-          <li>
-            <details>
-              <summary>
-                <span class="icon" aria-hidden="true"
-                  ><Glyph name="receipt" size={15} /></span
-                >
-                <span class="item-copy">
-                  <strong>Track requirements</strong>
-                  <small
-                    >One met, one deployed, two partly. Nothing hidden.</small
+                  <a
+                    href="https://ethglobal.com/events/ethonline2026/prizes#hedera"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >The requirements <Glyph name="arrow" size={12} /></a
                   >
-                </span>
-                <span class="more" aria-hidden="true"></span>
-              </summary>
-              <div class="item-body">
-                <ul class="criteria">
-                  {#each required as row}
-                    <li data-met={row.status !== 'Partly met'}>
-                      <span>{row.status}</span>{row.need}
-                    </li>
-                  {/each}
-                </ul>
-                <a
-                  href="https://ethglobal.com/events/ethonline2026/prizes#hedera"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  >The requirements <Glyph name="arrow" size={12} /></a
-                >
-              </div>
-            </details>
-          </li>
-        {/if}
-      </ul>
+                </div>
+              </details>
+            </li>
+          {/if}
+        </ul>
+      </div>
 
       {#if last}
         <p class="pending">
@@ -462,6 +473,25 @@
     padding-top: 9px;
   }
 
+  /* PortalShell caps the reading column at 1120px, which is right for prose
+     and wrong for a 960-unit diagram: on a 1728px screen it left 35% of the
+     viewport empty and scaled the stage's 9px labels down to 6.75px. The
+     walkthrough steps out of that cap, and only it does. */
+  @media (min-width: 1240px) {
+    .masthead,
+    .thesis,
+    .reader {
+      margin-inline: calc(50% - min(50vw - 24px, 700px));
+    }
+    /* Wider container, same measure: the prose stays readable while the
+       diagram and the detail rows take the room. */
+    .masthead h1,
+    .standing,
+    .thesis-foot {
+      max-width: 68ch;
+    }
+  }
+
   .stage-wrap {
     grid-area: stage;
     min-width: 0;
@@ -474,6 +504,24 @@
     margin-top: 8px;
     padding-top: 10px;
     border-top: 1px solid var(--p-line);
+  }
+  .panel-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+  }
+  .panel-title {
+    min-width: 0;
+  }
+  /* The step's sentences keep a readable measure; the width left over goes to
+     the detail rows instead of stretching one line across the whole page. */
+  .panel-body {
+    display: grid;
+    grid-template-columns: minmax(0, 46ch) minmax(0, 1fr);
+    column-gap: 40px;
+    align-items: start;
+    margin-top: 10px;
   }
 
   .rail {
@@ -783,15 +831,12 @@
     max-width: 62ch;
   }
 
-  /* Back and the forward control share a row while the forward label is
-     short; the last step's longer label takes a row of its own. */
+  /* Back and the forward control sit on the step's own title line. */
   .nav {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid var(--p-line);
+    flex: none;
   }
   .tail {
     grid-area: tail;
@@ -857,10 +902,9 @@
          costs height. */
       min-height: 38px;
     }
-    .nav {
-      margin: 0 0 0 auto;
-      padding: 0;
-      border-top: 0;
+    .panel-body {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 4px;
     }
     .panel {
       margin-top: 0;
