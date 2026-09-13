@@ -9,6 +9,7 @@
   import { parseDeploymentConfig } from '$lib/issuance';
   import type { DeploymentConfig } from '$lib/issuance';
   import Step02Document from '$lib/visuals/steps/Step02Document.svelte';
+  import Step03Zkpdf from '$lib/visuals/steps/Step03Zkpdf.svelte';
   import Step04Digest from '$lib/visuals/steps/Step04Digest.svelte';
   import Step05Parity from '$lib/visuals/steps/Step05Parity.svelte';
   import Step06Exact from '$lib/visuals/steps/Step06Exact.svelte';
@@ -19,14 +20,19 @@
 
   const repo = 'https://github.com/trionlabs/ultratokenizer/blob/main/';
 
+  // This page makes no chain call by design; /trust/ is where live state is
+  // read. Every claim about chain state is therefore a reading taken at this
+  // block, and says so, rather than asserting a present tense it cannot check.
+  const asOf = { date: '2026-09-13', block: '40456427' };
+
   const steps = [
     {
       id: 'Prove',
       who: 'you',
-      line: 'Your machine checks the signature and emits a small proof. The file never leaves.',
-      why: 'Otherwise you would upload your document to a server and have to trust whoever runs it.',
+      line: 'The signature is checked inside a proof. What comes out is 224 bytes, not the document.',
+      why: 'The verifier and the chain learn that a document signed by this key authorised exactly this request. They learn nothing else in it — not the account, not the balance, not your name.',
       aside:
-        'zkPDF reads the signature. SP1 is the VM it runs in. The on-chain verifier is a third thing — step three.',
+        'zkPDF reads the signature. SP1 is the VM it runs in. The on-chain verifier is a third thing — step three. In this demo the prover runs in a local service, because a browser cannot run SP1; the 224 bytes are what reaches the chain either way.',
       items: [
         {
           icon: 'lock' as const,
@@ -35,6 +41,14 @@
           why: 'So a leaked document is worthless to anyone else.',
           visual: Step02Document,
           href: `${repo}proofs/claim-evidence/src/capsule.rs`,
+        },
+        {
+          icon: 'eye' as const,
+          label: 'What stays hidden',
+          line: 'Seven values are published. The rest of the document is not.',
+          why: 'The proof commits to profile version, request digest, signer fingerprint, source id, claim usage id, claim commitment and expiry. The claim id, issuer id, holder address, capacity and unit reach the chain only as one hash, and the claim usage id is a nullifier: the Gate can enforce single use without learning which claim it is. Amount and recipient are deliberately public — the Gate has to account for them.',
+          visual: Step03Zkpdf,
+          href: `${repo}proofs/claim-evidence/src/lib.rs`,
         },
         {
           icon: 'receipt' as const,
@@ -227,9 +241,12 @@
     <h1>How a signed gold document becomes a token on Hedera</h1>
     <p class="standing">
       Everything below is deployed on Hedera testnet. <strong
-        >No token has been minted yet</strong
-      >: the Groth16 proof has not returned, so the Gate is still paused. The
-      source document is synthetic, from no real bank.
+        >No token had been minted as of block {asOf.block}</strong
+      >
+      ({asOf.date}): the Groth16 proof has not returned, so the Gate was still
+      paused. This page makes no chain call —
+      <a href="/trust/">Trust</a> reads the current state. The source document is
+      synthetic, from no real bank.
     </p>
   </section>
 
@@ -294,7 +311,7 @@
     </nav>
 
     <section class="stage-wrap" aria-label="The engine">
-      <EngineStage {step} />
+      <EngineStage {step} asOf={asOf.date} />
     </section>
 
     <section class="panel" aria-label={current.id}>
@@ -405,8 +422,9 @@
 
       {#if last}
         <p class="pending">
-          <strong>Not live yet.</strong> The Groth16 proof has not returned, so the
-          Gate stays paused and nothing has been minted.
+          <strong>Not live yet.</strong> The Groth16 proof has not returned, so
+          at block {asOf.block} ({asOf.date}) the Gate was paused and nothing
+          had been minted. Read it live on <a href="/trust/">Trust</a>.
         </p>
       {/if}
     </section>
@@ -424,8 +442,8 @@
     gap: 2px;
   }
   :global(.portal-shell .masthead h1) {
-    font-size: clamp(1.35rem, 2.3vw, 1.72rem);
-    font-weight: 450;
+    font-size: clamp(1.28rem, 2vw, 1.56rem);
+    font-weight: 400;
     letter-spacing: -0.025em;
     line-height: 1.2;
     margin: 1px 0 0;
@@ -441,7 +459,7 @@
     column-gap: 32px;
     align-items: start;
     border-top: 1px solid var(--p-line);
-    padding-top: 11px;
+    padding-top: 9px;
   }
 
   .stage-wrap {
@@ -449,7 +467,7 @@
     min-width: 0;
   }
   .stage-wrap :global(.stage) {
-    max-width: min(772px, 80vh);
+    max-width: 100%;
   }
   .panel {
     grid-area: panel;
@@ -469,7 +487,7 @@
     align-items: center;
     gap: 10px;
     width: 100%;
-    min-height: 38px;
+    min-height: 46px;
     padding: 6px 12px 6px 7px;
     border: 0;
     border-radius: 999px;
@@ -517,12 +535,12 @@
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--p-accent);
-    font-weight: 700;
+    font-weight: 600;
   }
   :global(.portal-shell .panel h2) {
     margin: 0;
-    font-size: clamp(1.2rem, 2vw, 1.46rem);
-    font-weight: 450;
+    font-size: clamp(1.08rem, 1.7vw, 1.3rem);
+    font-weight: 400;
     letter-spacing: -0.025em;
     line-height: 1.1;
   }
@@ -533,14 +551,14 @@
     max-width: 76ch;
   }
   .thesis {
-    margin-top: 13px;
-    padding: 12px 0 10px;
+    margin-top: 9px;
+    padding: 9px 0 7px;
     border-top: 1px solid var(--p-line);
   }
   .thesis-head {
-    margin: 0 0 8px;
-    font-size: 0.83rem;
-    font-weight: 550;
+    margin: 0 0 6px;
+    font-size: 0.82rem;
+    font-weight: 500;
   }
   .thesis ol {
     display: grid;
@@ -555,7 +573,7 @@
     flex-direction: column;
     gap: 2px;
     min-width: 0;
-    padding: 9px 12px;
+    padding: 7px 12px;
     border-radius: 10px;
     background: var(--p-accent-soft);
   }
@@ -565,11 +583,11 @@
   }
   .thesis .a {
     font-size: 0.82rem;
-    font-weight: 650;
+    font-weight: 600;
     color: var(--p-accent);
   }
   .thesis-foot {
-    margin: 7px 0 0;
+    margin: 6px 0 0;
     font-size: 0.75rem;
     line-height: 1.45;
     color: var(--p-muted);
@@ -599,7 +617,7 @@
     letter-spacing: 0.13em;
     text-transform: uppercase;
     color: var(--p-accent);
-    font-weight: 700;
+    font-weight: 600;
   }
   .step-why {
     font-size: 0.85rem;
@@ -636,6 +654,11 @@
   }
   .items > li {
     border-top: 1px solid var(--p-line);
+  }
+  /* The app stylesheet gives every <details> a 20px top margin, which here
+     stacked 20px of blank space onto each collapsed row. */
+  .items details {
+    margin: 0;
   }
   .items summary {
     display: flex;
@@ -830,6 +853,9 @@
     }
     button.rail-step {
       width: auto;
+      /* The taller pill exists to match the stage beside it; stacked, it only
+         costs height. */
+      min-height: 38px;
     }
     .nav {
       margin: 0 0 0 auto;

@@ -266,3 +266,150 @@ test('pending configuration cannot make the upload button a no-op; stale results
   h.session.dispose();
   h.holder.dispose();
 });
+
+// `started` is set before the POST, so a request that never reached the service
+// leaves it parked at awaiting_signature while this session believes the job is
+// running. Resume must re-send the start it already has a signature for.
+test('a start request that never arrived is re-sent once on resume', async () => {
+  const h = await harness();
+  try {
+    // The service never saw the first start, so it still reports the job unsigned.
+    h.setStatus({ status: 'awaiting_signature' });
+    await h.session.upload(file());
+    h.session.disclose(true);
+    await h.session.verifyAndMint();
+    assert.equal(h.session.read().started, true);
+    assert.equal(h.calls.filter((call) => call === 'start').length, 1);
+
+    // The re-sent start is the one that lands, and its status is what sticks.
+    h.api.start = async () => {
+      h.calls.push('start');
+      h.setStatus({ status: 'proving' });
+      return {
+        ...h.job,
+        phase: 'proof',
+        status: 'proving',
+        bundleReady: false,
+      };
+    };
+    await h.session.resume();
+    assert.deepEqual(h.calls.slice(-2), ['status', 'start']);
+    assert.equal(h.session.read().status.status, 'proving');
+  } finally {
+    h.session.dispose();
+    h.holder.dispose();
+  }
+});
+
+// A running job reports a running status, so resume must observe it and stop.
+test('resume never re-sends start for a job the service has begun', async () => {
+  const h = await harness();
+  try {
+    await h.session.upload(file());
+    h.session.disclose(true);
+    await h.session.verifyAndMint();
+    const before = h.calls.filter((call) => call === 'start').length;
+    await h.session.resume();
+    assert.equal(h.calls.filter((call) => call === 'start').length, before);
+  } finally {
+    h.session.dispose();
+    h.holder.dispose();
+  }
+});
+
+// A saved record that will not parse may still have work behind it on the
+// service, so a new document cannot quietly start beside it.
+test('an unreadable saved job stays visible after configuration and requires acknowledged removal', async () => {
+  const h = await harness();
+  let removed = 0;
+  h.session.restoreStorage({
+    getItem: () => 'not json',
+    setItem: () => {},
+    removeItem: () => {
+      removed++;
+    },
+  });
+  assert.equal(h.session.read().unreadable, true);
+  assert.match(h.session.read().error, /will not cancel/);
+  await h.session.loadConfiguration();
+  assert.match(h.session.read().error, /will not cancel/);
+  const before = [...h.calls];
+  await h.session.upload(file());
+  assert.deepEqual(h.calls, before, 'upload stays closed while unreadable');
+  h.session.discard();
+  assert.equal(h.session.read().unreadable, true);
+  assert.equal(removed, 0, 'removal needs explicit acknowledgment');
+  h.session.discard(true);
+  assert.equal(removed, 1);
+  assert.equal(h.session.read().unreadable, false);
+  assert.equal(h.session.read().error, undefined);
+  await h.session.upload(file());
+  assert.deepEqual(h.calls, [...before, 'upload']);
+  h.session.dispose();
+  h.holder.dispose();
+});
+
+test('removal cannot forget a known signed job with an uncertain start', async () => {
+  const h = await harness({
+    api: {
+      start: async () => {
+        throw new Error('Lost start response');
+      },
+    },
+  });
+  await h.session.upload(file());
+  h.session.disclose(true);
+  await h.session.verifyAndMint();
+  const job = h.session.read().job;
+  const signature = h.holder.read().signature;
+  const before = [...h.calls];
+  h.session.discard(true);
+  assert.equal(h.session.read().started, true);
+  assert.equal(h.session.read().job, job);
+  assert.equal(h.holder.read().signature, signature);
+  await h.session.upload(file());
+  assert.deepEqual(h.calls, before);
+  h.session.dispose();
+  h.holder.dispose();
+});
+
+test('failed browser removal keeps the unreadable record closed', async () => {
+  const h = await harness();
+  h.session.restoreStorage({
+    getItem: () => 'not json',
+    setItem: () => {},
+    removeItem: () => {
+      throw new Error('Browser storage denied');
+    },
+  });
+  h.session.discard(true);
+  assert.equal(h.session.read().unreadable, true);
+  assert.match(h.session.read().error, /could not remove/);
+  const before = [...h.calls];
+  await h.session.upload(file());
+  assert.deepEqual(h.calls, before);
+  h.session.dispose();
+  h.holder.dispose();
+});
+
+test('wallet changes during resume status observation cannot start a paid job', async () => {
+  const h = await harness();
+  h.setStatus({ status: 'awaiting_signature' });
+  await h.session.upload(file());
+  h.session.disclose(true);
+  await h.session.verifyAndMint();
+  const starts = h.calls.filter((call) => call === 'start').length;
+  const status = h.api.status;
+  h.api.status = async (...args) => {
+    const response = await status(...args);
+    h.holder.walletChanged();
+    return response;
+  };
+  await h.session.resume();
+  assert.equal(h.calls.filter((call) => call === 'start').length, starts);
+  assert.equal(h.holder.read().signature, undefined);
+  assert.equal(h.session.read().errorCode, 'wrong_account');
+  assert.equal(h.session.read().status.status, 'awaiting_signature');
+  h.session.dispose();
+  h.holder.dispose();
+});

@@ -38,6 +38,7 @@
   let uploadError = $state('');
   let recoveryHash = $state('');
   let detailOpen = $state(false);
+  let discardAcknowledged = $state(false);
   const short = (value: string) => `${value.slice(0, 6)}…${value.slice(-4)}`;
   // Every service status reaches the artifact. Only `queued` and `proving` used
   // to, so the picture sat on "Ready to verify" for most of a run while the
@@ -98,8 +99,12 @@
     !!snapshot.transaction || snapshot.unknownSubmission === 'issuance',
   );
   let proofAccepted = $derived(snapshot.sourceProof === 'accepted');
-  let needsSignature = $derived(
-    flow.started && !snapshot.signature && !hasOutcome,
+  let needsResume = $derived(
+    flow.started &&
+      !hasOutcome &&
+      (!snapshot.signature ||
+        !flow.status ||
+        flow.status.status === 'awaiting_signature'),
   );
   let canRefreshApproval = $derived(
     flow.errorCode === 'permit_expired' ||
@@ -190,7 +195,38 @@
     class="stage-action document-action"
     aria-label="Current issuance step"
   >
-    {#if flow.recovery && !snapshot.transaction}
+    {#if flow.unreadable && !flow.job}
+      <div
+        class="transaction-card"
+        role="region"
+        aria-label="Unreadable saved request"
+      >
+        <h2>The saved request could not be opened</h2>
+        <p>
+          An earlier request may still be running. Removing this browser record
+          does not cancel the issuer’s work. Contact the issuer to reconcile it.
+        </p>
+        <label class="disclosure-control">
+          <input
+            type="checkbox"
+            bind:checked={discardAcknowledged}
+            disabled={busy || unresolved}
+          />
+          <span>I understand the earlier request may continue.</span>
+        </label>
+        <button
+          class="secondary-button"
+          disabled={!discardAcknowledged ||
+            busy ||
+            unresolved ||
+            !!flow.pending}
+          onclick={() => {
+            journey.discard(discardAcknowledged);
+            discardAcknowledged = false;
+          }}>Remove unreadable record</button
+        >
+      </div>
+    {:else if flow.recovery && !snapshot.transaction}
       <div
         class="transaction-card"
         role="region"
@@ -486,15 +522,15 @@
               /></button
             >
           {/if}
-        {:else if needsSignature}
+        {:else if needsResume}
           <button
             class="primary-button"
             disabled={busy || unresolved}
             onclick={() => journey.resume()}>Resume verification</button
           >
           <p class="field-hint">
-            Recheck this wallet’s existing approval and proof request. This does
-            not send another transaction.
+            Check the saved approval and start this same request only if the
+            service has not begun. No new wallet signature is needed.
           </p>
         {:else if !flow.started}
           <label class="disclosure-control"

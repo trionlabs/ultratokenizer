@@ -31,6 +31,11 @@ export type DocumentSnapshot = Readonly<{
   error?: string;
   errorCode?: string;
   recovery?: Readonly<{ hash?: Hex }>;
+  /**
+   * A saved job was found but could not be read. Work may already exist on the
+   * service under it, so a separate session requires explicit acknowledgment.
+   */
+  unreadable: boolean;
 }>;
 
 /** A job never becomes a proof or a receipt merely because time has elapsed. */
@@ -41,6 +46,7 @@ export function createDocumentSession(
   let state: DocumentSnapshot = Object.freeze({
     reviewed: false,
     started: false,
+    unreadable: false,
   });
   const listeners = new Set<(value: DocumentSnapshot) => void>();
   let controller: AbortController | undefined;
@@ -116,7 +122,10 @@ export function createDocumentSession(
     const revision = ++version;
     const request = new AbortController();
     controller = request;
-    update({ pending, error: undefined, errorCode: undefined });
+    update({
+      pending,
+      ...(state.unreadable ? {} : { error: undefined, errorCode: undefined }),
+    });
     const current = () =>
       !disposed && revision === version && !request.signal.aborted;
     try {
@@ -194,8 +203,9 @@ export function createDocumentSession(
         });
       } catch {
         update({
+          unreadable: true,
           error:
-            'The saved document request could not be restored. Contact the issuer before starting another request.',
+            'The saved request could not be opened. Removing this browser record will not cancel any work already started by the issuer.',
         });
       }
     },
@@ -216,7 +226,7 @@ export function createDocumentSession(
       });
     },
     async upload(file: File) {
-      if (state.started || blocked()) return;
+      if (state.started || state.unreadable || blocked()) return;
       if (state.pending === 'configuration') {
         version++;
         controller?.abort();
@@ -322,17 +332,78 @@ export function createDocumentSession(
     async resume() {
       if (blocked() || !state.job || !retainedSignature) return;
       const job = state.job;
+      const signature = retainedSignature;
       await run('checking', async (signal, current) => {
-        await holder.restorePreparedRequest(job.prepared, retainedSignature!);
-        if (!current() || !holder.read().signature || holder.read().error)
-          return;
-        const status = await api.status(job, signal);
+        await holder.restorePreparedRequest(job.prepared, signature);
+        const approval = holder.read();
+        if (!current() || !approval.signature || approval.error) return;
+        let status = await api.status(job, signal);
+        if (!current() || state.job !== job) return;
+        update({ status });
+        // `started` is set before the POST, so a lost start response leaves the
+        // service parked at awaiting_signature while this session believes the
+        // job is running. Re-send it with the signature already retained: the
+        // service returns the current status for a job it has begun, so a
+        // duplicate never opens a second reservation or pays for a second proof.
+        if (status.status === 'awaiting_signature') {
+          const currentApproval = holder.read();
+          if (
+            currentApproval.signature !== approval.signature ||
+            currentApproval.preparedRequest !== approval.preparedRequest ||
+            currentApproval.wallet !== approval.wallet ||
+            currentApproval.busy ||
+            currentApproval.pendingOperation
+          )
+            throw new DocumentClientError('wrong_account');
+          status = await api.start(job, signature, signal);
+        }
         if (current()) {
           update({ status });
           if (status.bundleReady) await acceptBundle(signal, current);
         }
       });
       if (!state.error) schedule();
+    },
+    /**
+     * Remove only an unreadable local record, after acknowledging that issuer
+     * work is not cancelled. A known signed job or wallet outcome is retained.
+     */
+    discard(acknowledged = false) {
+      if (
+        !acknowledged ||
+        !state.unreadable ||
+        state.job ||
+        state.started ||
+        state.recovery ||
+        retainedSignature ||
+        retainedBundle ||
+        retainedHash ||
+        retainedUnknown ||
+        blocked() ||
+        state.pending
+      )
+        return;
+      try {
+        storage?.removeItem(storageKey);
+      } catch {
+        update({ error: 'The browser could not remove the saved request.' });
+        return;
+      }
+      version++;
+      controller?.abort();
+      clearTimeout(timer);
+      holder.clearPreparedRequest();
+      retainedSignature = undefined;
+      retainedBundle = undefined;
+      retainedHash = undefined;
+      retainedUnknown = false;
+      state = Object.freeze({
+        reviewed: false,
+        started: false,
+        unreadable: false,
+        configuration: state.configuration,
+      });
+      for (const listener of listeners) listener(state);
     },
     async refreshPermit() {
       if (blocked() || !state.job || !holder.read().signature) return;

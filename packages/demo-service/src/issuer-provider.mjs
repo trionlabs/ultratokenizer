@@ -1,5 +1,5 @@
 import { parseEnv } from 'node:util';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { getAddress, encodeFunctionData, hashTypedData, keccak256 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import {
@@ -11,6 +11,7 @@ import {
 import { ISSUANCE_GATE_ABI } from '../../issuance/dist/index.js';
 import {
   check,
+  confined,
   readOwned,
   writeNew,
   optionalJson,
@@ -25,7 +26,7 @@ export async function credential(root, source) {
     'operations_disabled',
   );
   const values = parseEnv(
-    (await readOwned(resolve(root, source.path), 64 * 1024)).toString('utf8'),
+    (await readOwned(confined(root, source.path), 64 * 1024)).toString('utf8'),
   );
   let value = values[source.variable];
   check(typeof value === 'string', 'operations_disabled');

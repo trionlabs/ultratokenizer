@@ -161,6 +161,8 @@ jobs:
           cargo +1.96.0 fmt --manifest-path enpara-evidence/Cargo.toml -- --check
           cargo +1.96.0 test --manifest-path enpara-evidence/Cargo.toml --locked --all-targets
           cargo +1.96.0 clippy --manifest-path enpara-evidence/Cargo.toml --locked --all-targets -- -D warnings
+      - name: Check the synthetic fixture generator
+        run: python3 tools/test_generate_fixture.py
       - run: cargo +1.96.0 build --locked -p ultratokenizer-claim-runner -p ultratokenizer-pdf-runner
       - name: Build a path-remapped candidate without replacing reviewed pins
         run: python3 tools/build-claim-guest.py

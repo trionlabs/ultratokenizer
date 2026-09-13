@@ -76,6 +76,14 @@ recycle reservation identifiers. Collisions return `request_conflict`.
 | `releaseUnused`          | Pending becomes `released`                                    | Pending is released once       |
 | `releaseExpiredUnopened` | Expired request with an absent reservation becomes `released` | Local pending is released once |
 
+The holder signature that the client checks before reserving is a client-side policy,
+not a chain rule. `IssuanceGate.openReservation` authorizes on `msg.sender == key.signer`
+alone (`contracts/src/IssuanceGate.sol:297`); it never sees a holder signature. The Gate
+binds the holder only at `issue`, where the request digest must carry that signature. So a
+compromised or mistaken issuer client can open a reservation the holder never authorized —
+it cannot mint from one, but it can move local and on-chain pending accounting. Treat this
+package's `reserve` as an issuer-authority operation and separate the capability accordingly.
+
 `setBackingCap({ issuerId, token, milligrams })` sets the local pool cap. A missing
 pool has zero capacity. Aggregate pending plus outstanding exposure cannot exceed
 the cap, and cap reductions cannot go below exposure. Accounting uses exact

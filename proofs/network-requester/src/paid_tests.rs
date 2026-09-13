@@ -61,7 +61,12 @@ impl PaidSigner for Signer {
 }
 
 fn plan(requester: &str, budget_id: &str) -> Plan {
-    let public_values = vec![0x55; 224];
+    // The committed words must carry the profile version and the request
+    // digest, exactly as a real preparation does; the schema now checks both.
+    let mut public_values = vec![0x55; 224];
+    public_values[..32].fill(0);
+    public_values[31] = 2;
+    public_values[32..64].fill(0x44);
     let preparation = Preparation {
         schema_version: 1,
         status: "prepared_no_upload".into(),

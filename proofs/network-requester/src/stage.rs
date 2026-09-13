@@ -716,6 +716,23 @@ mod tests {
         preparation
             .request_digest
             .clone_from(&review.request_digest);
+        // The committed words carry the reviewed request digest, signer and
+        // source, which the schema now requires of any reviewed preparation.
+        let mut words = vec![0_u8; 224];
+        words[31] = 2;
+        for (index, value) in [
+            &review.request_digest,
+            &review.signer_fingerprint,
+            &review.source_id,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let bytes = hex::decode(value.trim_start_matches("0x")).unwrap();
+            words[(index + 1) * 32..(index + 2) * 32].copy_from_slice(&bytes);
+        }
+        preparation.public_values = format!("0x{}", hex::encode(&words));
+        preparation.public_values_sha256 = sha256_hex(&words);
         preparation.reviewed_synthetic = Some(review);
         preparation.review_manifest_sha256 = Some(review_hash.clone());
         preparation = preparation.seal();

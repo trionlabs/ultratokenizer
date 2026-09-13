@@ -270,13 +270,29 @@ try {
           .locator('.stage-action')
           .getByRole('button', { name: 'Connect wallet', exact: true })
           .click();
+        // Connecting grants account access and nothing else: `connect()` in
+        // packages/issuance/src/client.ts checks the wallet's chain and stops.
+        // The deployment is authenticated by the operations that act on it —
+        // `deploymentMatches()` runs from `activeAccount()` and from
+        // `readIssuanceState()` — so the imported RPC has to be reached by one
+        // of those. Verifying the evidence is the first such operation, and it
+        // is what must prove the transport is the operator's RPC.
+        await expect(page.locator('.header-wallet')).toContainText('0x');
+        assert.equal(calls.length, 0);
+        await page
+          .locator('.stage-action')
+          .getByRole('button', { name: 'Verify evidence', exact: true })
+          .click();
+        await expect
+          .poll(() =>
+            calls.some(
+              (call) => call.url === rpc && call.method === 'eth_getCode',
+            ),
+          )
+          .toBe(true);
+        // The mocked RPC answers eth_getCode with empty code, so the deployment
+        // check fails and the page has to say so rather than proceed.
         await expect(page.locator('.stage-action .inline-error')).toBeVisible();
-        assert(
-          calls.some(
-            (call) => call.url === rpc && call.method === 'eth_getCode',
-          ),
-          'Explicit imported RPC must reach the transport',
-        );
         await page.getByRole('link', { name: 'Transfer', exact: true }).click();
         await page
           .getByLabel('Transfer recipient', { exact: true })

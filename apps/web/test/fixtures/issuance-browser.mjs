@@ -28,6 +28,17 @@ export async function exerciseIssuanceRecovery({
     viewport: { width: 1280, height: 900 },
     reducedMotion: 'reduce',
   });
+
+  // Screenshots resolve against the caller's base directory. An absolute
+  // /private/tmp path only exists on macOS and would fail the Linux CI job;
+  // a caller that passes no base simply captures nothing.
+  const shoot = async (name, options = {}) => {
+    if (!screenshots) return;
+    await page.screenshot({
+      path: new URL(name, screenshots).pathname,
+      ...options,
+    });
+  };
   const { bundle, holderSignature } = fixture;
   const { request } = bundle;
   const policy = fixture.deployment.auditPolicy;
@@ -471,9 +482,9 @@ export async function exerciseIssuanceRecovery({
             fits,
             `${loaded ? 'loaded' : 'initial'} document flow fits ${width}x${height}`,
           );
-          await page.screenshot({
-            path: `/private/tmp/document-journey-${loaded ? 'loaded' : 'initial'}-${width}.png`,
-          });
+          await shoot(
+            `document-journey-${loaded ? 'loaded' : 'initial'}-${width}.png`,
+          );
         }
         if (loaded) {
           for (const width of [390, 320]) {
@@ -485,8 +496,7 @@ export async function exerciseIssuanceRecovery({
               ),
               `loaded review panel has no horizontal overflow at ${width}px`,
             );
-            await page.screenshot({
-              path: `/private/tmp/document-journey-loaded-${width}.png`,
+            await shoot(`document-journey-loaded-${width}.png`, {
               fullPage: true,
             });
           }

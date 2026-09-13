@@ -16,8 +16,18 @@ fn admission() -> OriginAdmission {
     }
 }
 
+/// The committed words a preparation and its returned proof must share: the
+/// profile version, then the request digest, then filler for the rest.
+fn committed_values() -> Vec<u8> {
+    let mut values = vec![0x55; 224];
+    values[..32].fill(0);
+    values[31] = 2;
+    values[32..64].fill(0x44);
+    values
+}
+
 fn proof_fixture() -> SP1ProofWithPublicValues {
-    let values = sp1_sdk::SP1PublicValues::from(&vec![0x55; 224]);
+    let values = sp1_sdk::SP1PublicValues::from(&committed_values());
     let mut proof = SP1ProofWithPublicValues::new(
         SP1Proof::Groth16(Default::default()),
         values,
@@ -45,7 +55,7 @@ fn proof_fixture() -> SP1ProofWithPublicValues {
 }
 
 fn normalize_fixture(bytes: &[u8]) -> Result<(Vec<u8>, &'static str), &'static str> {
-    let values = vec![0x55; 224];
+    let values = committed_values();
     normalize(
         bytes,
         &format!("0x{}", hex::encode(&values)),
@@ -239,7 +249,8 @@ fn artifact_decoder_rejects_trailing_data_wrong_mode_tee_and_wrong_commitments()
         }
         assert!(normalize_fixture(&codec().serialize(&proof).unwrap()).is_err());
     }
-    let values = vec![0x55; 224];
+    // A different commitment than the fixture's: this must not normalize.
+    let values = vec![0x56; 224];
     assert!(normalize(
         &valid,
         &format!("0x{}", hex::encode(&values)),
@@ -339,7 +350,7 @@ async fn recovered_fixture(directory: &Directory) -> (std::path::PathBuf, String
     let signer =
         sp1_sdk::network::signer::NetworkSigner::local(&format!("0x{}", "11".repeat(32))).unwrap();
     let requester = PaidSigner::address(&signer);
-    let values = vec![0x55; 224];
+    let values = committed_values();
     let preparation = Preparation {
         schema_version: 1,
         status: "prepared_no_upload".into(),

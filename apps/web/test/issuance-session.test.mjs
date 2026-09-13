@@ -261,11 +261,13 @@ test('explicit Hedera testnet switch adds an unknown chain, switches again and r
         return [fixture.bundle.request.recipient];
       if (method === 'eth_chainId') return chain;
       if (method === 'wallet_addEthereumChain') {
+        // The chain the wallet is asked to add carries the endpoint the
+        // operator configured, so the wallet reads the chain this app reads.
         assert.deepEqual(params[0], {
           chainId: '0x128',
           chainName: 'Hedera Testnet',
           nativeCurrency: { name: 'HBAR', symbol: 'HBAR', decimals: 18 },
-          rpcUrls: ['https://testnet.hashio.io/api'],
+          rpcUrls: [fixture.deployment.rpcUrl],
           blockExplorerUrls: ['https://hashscan.io/testnet'],
         });
         known = true;

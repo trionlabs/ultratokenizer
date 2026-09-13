@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -21,7 +21,7 @@ import {
   ISSUANCE_GATE_ABI,
   IssuanceClientError,
 } from '../../issuance/dist/index.js';
-import { issuerProvider } from '../src/issuer-provider.mjs';
+import { credential, issuerProvider } from '../src/issuer-provider.mjs';
 import { RuntimeAdapter, reservationFailure } from '../src/runtime.mjs';
 
 const testKey = `0x${'11'.repeat(32)}`;
@@ -220,4 +220,31 @@ await test('any other reservation failure latches the nonce stream', () => {
     undefined,
   ])
     assert.equal(reservationFailure(error), 'reservation_uncertain');
+});
+
+// The credential path comes from configuration, so it must not be able to walk
+// out of the service root and read an arbitrary file as an issuer key.
+await test('the issuer credential path cannot escape the service root', async (t) => {
+  const folder = await mkdtemp(join(tmpdir(), 'ut-demo-confined-'));
+  t.after(() => rm(folder, { recursive: true, force: true }));
+  await writeFile(join(folder, 'test.env'), `TEST_ISSUER_KEY=${testKey}\n`, {
+    mode: 0o600,
+  });
+  const outside = join(folder, 'outside.env');
+  await writeFile(outside, `TEST_ISSUER_KEY=${testKey}\n`, { mode: 0o600 });
+  const inner = join(folder, 'root');
+  await mkdir(inner, { recursive: true });
+  await writeFile(join(inner, 'test.env'), `TEST_ISSUER_KEY=${testKey}\n`, {
+    mode: 0o600,
+  });
+
+  assert.equal(
+    await credential(inner, { path: 'test.env', variable: 'TEST_ISSUER_KEY' }),
+    testKey,
+  );
+  for (const path of ['../outside.env', outside, './../outside.env'])
+    await assert.rejects(
+      credential(inner, { path, variable: 'TEST_ISSUER_KEY' }),
+      `escaped the root with ${path}`,
+    );
 });

@@ -39,6 +39,10 @@ next-env.d.ts
 /work/
 /proofs/enpara-evidence/target/
 /proofs/enpara-evidence/fixtures/private/
+# Deliberately unscoped. This project does not authenticate email — no DKIM, no
+# zkEmail — so a .eml anywhere in the tree is a private message someone dropped
+# in while testing, never an input. Narrowing the pattern would only create a
+# directory where one could be committed by accident.
 *.eml
 
 *.tsbuildinfo

@@ -110,6 +110,11 @@ remove that generated static file and rebuild/redeploy; an already served build 
 until it is replaced.
 The command validates format, not live contract admission. Do not use illustrative test addresses.
 
+The explicit testnet switch derives its wallet chain id from the loaded deployment rather than
+repeating a literal, and when the wallet does not know the chain it asks to add it with that
+deployment's own `rpcUrl` (falling back to the public endpoint only if it is not HTTPS). So the
+chain the wallet ends up on reads from the same endpoint this app does.
+
 **The static configuration is public**, served at `/deployment.json` and copied into the web build.
 Git-ignore only excludes it from source control. Never put keys, access tokens, source documents,
 private witnesses or journals in the static directory. Serve the file with `application/json` on the
@@ -215,15 +220,28 @@ page reload.
 
 ## Institution and Trust workspaces
 
-`/demo/` teaches the protocol as a stepped walkthrough: four parts — Claim, Proof, Permission and
-Check — over ten steps. Each step pairs one illustration with one conclusion, the evidence behind
-it, the distinction it is most often confused with, and a link to the source a reader can open
-independently. `Show everything` opens all ten at once for a reader who would rather scan.
+`/demo/` teaches the protocol in four steps — Prove, Authorise, Mint, Evidence — named after who
+acts: you, the issuer, the chain, then anyone. A step rail on the left moves between them, and one
+SVG stage beside it accumulates rather than resets: each step lights the next part of the same
+picture and everything already lit stays lit, so the diagram a reader ends with is the one they
+have been building all along. `?step=N` opens a step directly, and browser Back walks the steps
+instead of leaving the site.
 
-Below the walkthrough, three reference blocks stay visible in both modes: the current deployment
-addresses with their HashScan and Sourcify links, an honest mapping against the Hedera track
-requirements including the items that are not met, and links to the live workspaces. Keeping them
-outside the stepper means evidence never costs ten clicks to reach.
+Above the steps, a standing disclosure states what is deployed and what has not happened, and a
+thesis band names the three questions the system answers separately — is the document real
+(zkPDF, inside SP1), who is the issuer (the ERC-8004 registry), may this mint happen (the Gate).
+Under each step, two to three collapsed items carry the detail: one line, the reason it exists, an
+illustration, and a link to the source a reader can open independently. They start closed so the
+step reads in one screen.
+
+The last step holds the evidence that must not cost four clicks to reach: the deployment addresses
+with their HashScan links, and an honest mapping against the Hedera track requirements including
+the two only partly met.
+
+`test/demo-claims.test.mjs` pins the page's hard numbers to the files that define them — the
+ordered guard count in `IssuanceGate.issue()`, the request field count in `packages/domain`, and
+the capsule and public-value sizes in `proofs/claim-evidence` — so a change to any of those fails
+rather than leaving the page asserting a stale figure.
 
 It does not report completed transactions. Source document signing and private ledger operations
 remain institution tooling outside the browser. The holder imports the institution's public
@@ -233,9 +251,11 @@ The walkthrough makes no chain calls and fetches no third-party resource. It rea
 same-origin `deployment.json` this host publishes, to render addresses and their outbound links;
 without that file it still teaches the protocol and says the configuration is absent. Live chain
 values belong to `/trust/`. Illustrations rest in their completed state rather than waiting on a
-scroll observer, steps outside the open part are removed with `hidden` rather than faded, and every
-animation stops under `prefers-reduced-motion`. `test/demo-browser.mjs` asserts these properties at
-1440, 768, 390 and 320 pixels, and checks that each step cites a source.
+scroll observer, only the open step's panel is in the DOM, and every animation stops under
+`prefers-reduced-motion`. Below 760 pixels the wide stage would set its labels at about three
+pixels, so a text list carries the same progression instead. `test/demo-browser.mjs` asserts these
+properties at 1440, 768, 390 and 320 pixels, checks that an opened item cites an `https://` source,
+and checks that no source is ever fetched.
 
 `/institution/` loads the same site-managed deployment as the holder. It offers two wallet roles:
 

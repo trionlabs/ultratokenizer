@@ -15,6 +15,11 @@ pub const EXPECTED_FIXTURE_PDF_SHA256: &str =
 pub const EXPECTED_FIXTURE_REQUEST_SHA256: &str =
     "707757f3ffb9808da6bf1707103b336e29f54f31b0cf2e720fcbe95d390f2f81";
 pub const EXPECTED_OUTER_CIRCUIT_VERSION: &str = "v6.1.0";
+/// The first committed word: `claim-evidence::PROFILE_VERSION` as a big-endian
+/// u64 in a 32-byte word. Held here so this crate can check the commitment
+/// layout without depending on the evidence crate.
+pub const EXPECTED_PROFILE_VERSION_WORD: &str =
+    "0000000000000000000000000000000000000000000000000000000000000002";
 pub const REVIEWED_PREPARATION_SCHEMA_VERSION: u32 = 2;
 pub const REVIEWED_SYNTHETIC_KIND: &str = "reviewed-synthetic-deployment-v2";
 /// An explicitly authorized, locally generated test PDF; this is not a generic upload route.
@@ -243,6 +248,20 @@ impl Preparation {
         }
     }
 
+    /// One 32-byte word of the committed public values, without the `0x`.
+    ///
+    /// The guest commits seven words in a fixed order — profile version,
+    /// request digest, signer fingerprint, source id, claim usage id, claim
+    /// commitment, expiry (`claim-evidence::VerifiedClaim::public_values`).
+    /// Three of them are fixed by the review, so checking them here stops a
+    /// hand-written preparation from relabelling an already-staged witness
+    /// under another identity and slipping past the per-witness dedup.
+    fn public_value_word(&self, index: usize) -> Option<&str> {
+        self.public_values
+            .strip_prefix("0x")?
+            .get(index * 64..(index + 1) * 64)
+    }
+
     pub fn validate_synthetic(&self) -> Result<(), &'static str> {
         let valid_input = match (&self.reviewed_synthetic, &self.review_manifest_sha256) {
             (None, None) => {
@@ -259,6 +278,8 @@ impl Preparation {
                     && self.pdf_sha256 == review.pdf_sha256
                     && self.request_json_sha256 == review.request_json_sha256
                     && self.request_digest == review.request_digest
+                    && self.public_value_word(2) == Some(review.signer_fingerprint.as_str())
+                    && self.public_value_word(3) == review.source_id.strip_prefix("0x")
             }
             _ => false,
         };
@@ -273,6 +294,8 @@ impl Preparation {
             || !is_lower_hex(&self.public_values_sha256, 32, false)
             || !is_lower_hex(&self.request_digest, 32, true)
             || !is_lower_hex(&self.public_values, 224, true)
+            || self.public_value_word(0) != Some(EXPECTED_PROFILE_VERSION_WORD)
+            || self.public_value_word(1) != self.request_digest.strip_prefix("0x")
             || self.sp1_sdk_version != "6.2.4"
             || self.outer_circuit_version != EXPECTED_OUTER_CIRCUIT_VERSION
             || self.network_upload_occurred
@@ -539,6 +562,21 @@ mod tests {
 
     use super::*;
 
+    /// Seven committed words in the guest's order, so fixtures satisfy the same
+    /// layout a real preparation does instead of a placeholder byte pattern.
+    fn public_values(digest: &str, signer: &str, source: &str) -> String {
+        let trim = |value: &str| value.trim_start_matches("0x").to_owned();
+        format!(
+            "0x{EXPECTED_PROFILE_VERSION_WORD}{}{}{}{}{}{}",
+            trim(digest),
+            trim(signer),
+            trim(source),
+            "77".repeat(32),
+            "88".repeat(32),
+            "99".repeat(32),
+        )
+    }
+
     fn preparation() -> Preparation {
         Preparation {
             schema_version: PREPARATION_SCHEMA_VERSION,
@@ -557,7 +595,7 @@ mod tests {
             request_json_sha256: EXPECTED_FIXTURE_REQUEST_SHA256.into(),
             pdf_sha256: EXPECTED_FIXTURE_PDF_SHA256.into(),
             request_digest: format!("0x{}", "44".repeat(32)),
-            public_values: format!("0x{}", "55".repeat(224)),
+            public_values: public_values(&"44".repeat(32), &"55".repeat(32), &"66".repeat(32)),
             public_values_sha256: "66".repeat(32),
             cycle_limit: 300,
             gas_limit_pgu: 400,
@@ -600,6 +638,60 @@ mod tests {
         }
     }
 
+    /// The dedup that stops paying twice for one witness keys on the preparation,
+    /// so a hand-written journal must not be able to relabel a staged witness
+    /// under another identity. The committed words are the tie back to the review.
+    #[test]
+    fn committed_words_must_carry_the_reviewed_identity() {
+        let review = reviewed();
+        let mut value = preparation();
+        value.schema_version = REVIEWED_PREPARATION_SCHEMA_VERSION;
+        value.fixture_kind = REVIEWED_SYNTHETIC_KIND.into();
+        value.pdf_sha256.clone_from(&review.pdf_sha256);
+        value
+            .request_json_sha256
+            .clone_from(&review.request_json_sha256);
+        value.request_digest.clone_from(&review.request_digest);
+        value.public_values = public_values(
+            &review.request_digest,
+            &review.signer_fingerprint,
+            &review.source_id,
+        );
+        value.reviewed_synthetic = Some(review.clone());
+        value.review_manifest_sha256 = Some("88".repeat(32));
+        assert!(value.clone().seal().validate_synthetic().is_ok());
+
+        // Each substituted word is a different staged witness wearing this label.
+        let other = "ab".repeat(32);
+        for words in [
+            public_values(
+                &format!("0x{other}"),
+                &review.signer_fingerprint,
+                &review.source_id,
+            ),
+            public_values(&review.request_digest, &other, &review.source_id),
+            public_values(
+                &review.request_digest,
+                &review.signer_fingerprint,
+                &format!("0x{other}"),
+            ),
+        ] {
+            let mut changed = value.clone();
+            changed.public_values = words;
+            assert!(changed.seal().validate_synthetic().is_err());
+        }
+
+        // A wrong profile version word is a different commitment layout entirely.
+        let mut version = value.clone();
+        version.public_values = format!("0x{}{}", "00".repeat(32), &value.public_values[66..]);
+        assert!(version.seal().validate_synthetic().is_err());
+
+        // And a truncated commitment cannot pass by having no readable words.
+        let mut short = value;
+        short.public_values = format!("0x{}", "11".repeat(223));
+        assert!(short.seal().validate_synthetic().is_err());
+    }
+
     #[test]
     fn reviewed_preparation_is_distinct_and_cannot_admit_other_documents() {
         let review = reviewed();
@@ -613,6 +705,12 @@ mod tests {
             .request_json_sha256
             .clone_from(&review.request_json_sha256);
         value.request_digest.clone_from(&review.request_digest);
+        // The committed words carry the reviewed identity, as a real one does.
+        value.public_values = public_values(
+            &review.request_digest,
+            &review.signer_fingerprint,
+            &review.source_id,
+        );
         value.reviewed_synthetic = Some(review.clone());
         value.review_manifest_sha256 = Some("88".repeat(32));
         value = value.seal();

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { keccak256, toHex } from 'viem';
 import { loadModule } from './helpers.mjs';
@@ -232,4 +233,24 @@ test('response stream size is bounded even with a dishonest content length', asy
     ).configuration(signal()),
   );
   assert.equal(cancelled, true);
+});
+
+// The browser rejects an oversized file before uploading and the service rejects
+// it again on arrival, so the same limit is written in two packages that cannot
+// import each other: apps/web loads only packages/domain by relative path, and
+// demo-service is Node-only. Read the other one and require them to agree,
+// otherwise the client would offer a file the service always refuses.
+test('the upload limit matches the one the service enforces', async () => {
+  const source = await readFile(
+    new URL('../../../packages/demo-service/src/service.mjs', import.meta.url),
+    'utf8',
+  );
+  const declared = source.match(
+    /export const MAX_PDF_BYTES = ([\d\s*]+);/,
+  )?.[1];
+  assert.ok(declared, 'demo-service no longer declares MAX_PDF_BYTES');
+  const bytes = declared
+    .split('*')
+    .reduce((total, part) => total * Number(part.trim()), 1);
+  assert.equal(bytes, MAX_PDF_BYTES);
 });

@@ -5,7 +5,9 @@
   // One stage for the whole engine. Nothing is ever removed: each step lights
   // the next part and everything already lit stays lit, so the picture the
   // reader ends with is the picture they have been building all along.
-  let { step = 0 }: { step?: number } = $props();
+  // `asOf` dates the deployment counts below. The page makes no chain call, so
+  // these are a recorded reading, not a live one, and the band says which.
+  let { step = 0, asOf = '' }: { step?: number; asOf?: string } = $props();
 
   const on = (from: number) => (step >= from ? 'on' : 'off');
 
@@ -37,7 +39,7 @@
     (_, index) => 72 + (index * 153) / (CHECKS - 1),
   );
 
-  const summary = [
+  const summary = $derived([
     { at: 0, text: 'Signed document, 196-byte capsule' },
     { at: 0, text: 'zkPDF inside the SP1 guest' },
     { at: 0, text: '224 bytes of public values' },
@@ -45,8 +47,11 @@
     { at: 1, text: 'Issuer permit, expires in minutes' },
     { at: 2, text: `${CHECKS} ordered checks, one transaction` },
     { at: 2, text: 'Token: not minted yet' },
-    { at: 3, text: '20 contracts deployed, 3 ERC-8004 records' },
-  ];
+    {
+      at: 3,
+      text: `20 contracts deployed, 3 ERC-8004 records${asOf ? `, read ${asOf}` : ''}`,
+    },
+  ]);
   const label = $derived(
     `The engine, step ${step + 1} of 4. ` +
       summary
@@ -181,6 +186,11 @@
     <text class="micro" x="756" y="69">ERC-8004 · 3 RECORDS</text>
     <rect class="soft-box" x="744" y="84" width="196" height="26" rx="8" />
     <text class="micro" x="756" y="101">20 CONTRACTS DEPLOYED</text>
+    {#if asOf}
+      <text class="micro" x="940" y="128" text-anchor="end"
+        >READ {asOf.toUpperCase()}</text
+      >
+    {/if}
   </g>
 </svg>
 

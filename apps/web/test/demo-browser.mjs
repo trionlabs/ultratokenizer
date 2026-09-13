@@ -98,7 +98,9 @@ try {
     await page.setViewportSize({ width: 1440, height: 950 });
     await page.goto(demo, { waitUntil: 'networkidle' });
     await expect(page.locator('.items details[open]')).toHaveCount(0);
-    await expect(page.locator('.items > li')).toHaveCount(3);
+    await expect(page.locator('.items > li')).toHaveCount(4);
+    // The proof's disclosure boundary is stated, not implied by "never leaves".
+    await expect(page.locator('.items')).toContainText('What stays hidden');
     // The three names a reader would otherwise conflate are told apart.
     const aside = page.locator('.aside');
     await expect(aside).toContainText('zkPDF reads the signature');
@@ -134,6 +136,13 @@ try {
       await expect(
         page.locator(`a[href="https://hashscan.io/testnet/contract/${gate}"]`),
       ).toHaveCount(1);
+    } else {
+      // static/deployment.json is Git-ignored, so a fresh checkout cannot check
+      // the rendered addresses. It must still say the configuration is absent
+      // rather than render nothing, and the summary reports the narrower run.
+      await expect(page.locator('.item-body')).toContainText(
+        'has not published a configuration',
+      );
     }
     await page.getByText('Track requirements').click();
     await expect(page.locator('.criteria li')).toHaveCount(4);
@@ -212,7 +221,10 @@ try {
   }
 
   console.log(
-    'Walkthrough: four steps over one accumulating stage, addressable by ?step, detail on demand, evidence and limit on the last step, reduced motion stationary, no external requests.',
+    'Walkthrough: four steps over one accumulating stage, addressable by ?step, detail on demand, evidence and limit on the last step, reduced motion stationary, no external requests.' +
+      (published
+        ? ' Deployment addresses checked against static/deployment.json.'
+        : ' No static/deployment.json present: the rendered addresses were NOT checked, only the absent-configuration message.'),
   );
 } finally {
   await browser.close();

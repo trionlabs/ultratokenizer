@@ -1,3 +1,4 @@
+import { mkdir } from 'node:fs/promises';
 import { chromium } from '@playwright/test';
 import { loadModule } from './helpers.mjs';
 import { exerciseIssuanceRecovery } from './fixtures/issuance-browser.mjs';
@@ -13,6 +14,8 @@ const { ISSUANCE_GATE_ABI: gateAbi, toIssueArgs } = await loadModule(
   '../../../packages/issuance/src/abi.ts',
 );
 const fixture = await createFixture();
+const screenshots = new URL('../../../.scratch/web-qa/', import.meta.url);
+await mkdir(screenshots, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
   await exerciseIssuanceRecovery({
@@ -25,6 +28,7 @@ try {
       fixture.bundle.request,
       fixture.bundle.permit,
     ),
+    screenshots,
     start: 'unknown',
     outcome: 'confirmed',
     documentFlow: true,

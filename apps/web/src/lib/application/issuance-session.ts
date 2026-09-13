@@ -658,7 +658,9 @@ export function createIssuanceSession(
           !expected
         )
           throw new IssuanceClientError('wrong_chain');
-        const chainId = '0x128';
+        // Derived, not written twice: the guard above already fixed the chain to
+        // the deployment's, so a literal here could only ever drift from it.
+        const chainId = `0x${Number(deployment.auditPolicy.chainId).toString(16)}`;
         const switchChain = () =>
           currentProvider.request({
             method: 'wallet_switchEthereumChain',
@@ -683,7 +685,13 @@ export function createIssuanceSession(
                     symbol: 'HBAR',
                     decimals: 18,
                   },
-                  rpcUrls: ['https://testnet.hashio.io/api'],
+                  // Prefer the endpoint the operator actually configured, so
+                  // the chain the wallet adds is the chain this app reads.
+                  rpcUrls: [
+                    deployment.rpcUrl.startsWith('https://')
+                      ? deployment.rpcUrl
+                      : 'https://testnet.hashio.io/api',
+                  ],
                   blockExplorerUrls: ['https://hashscan.io/testnet'],
                 },
               ],
