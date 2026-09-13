@@ -13,8 +13,7 @@
         'Use the Asset Tokenization Studio to issue or manage a tokenised asset',
       status: 'Met',
       met: true,
-      evidence:
-        'The Gate mint adapter holds the only issuance role, so minting is gated by a contract, not a key holder.',
+      evidence: 'The mint adapter holds the only issuance role on the token.',
       href: '/trust/',
       label: 'Inspect the token graph',
     },
@@ -23,7 +22,7 @@
       status: 'Met',
       met: true,
       evidence:
-        'Gate, verifier, adapter and the full ATS facet graph are live on chain ID 296, read from chain on every visit.',
+        'Gate, verifier, adapter and the ATS graph, live on chain ID 296.',
       href: '/trust/',
       label: 'Read live chain state',
     },
@@ -31,8 +30,7 @@
       requirement: 'Public GitHub repo, contracts verified where applicable',
       status: 'Met',
       met: true,
-      evidence:
-        'Public repo. Gate, verifier and ATS graph are exact Sourcify matches, each pinned by runtime code hash.',
+      evidence: 'Exact Sourcify matches, each pinned by runtime code hash.',
       href: 'https://github.com/trionlabs/ultratokenizer',
       label: 'Open the repository',
     },
@@ -221,15 +219,6 @@
       <h2 id="truth-title">What the demo establishes</h2>
     </div>
     <div class="truth-grid">
-      <p>
-        <strong>Enforcement</strong> The checks are the proof, the holder signature,
-        the issuer permit, the reservation and a single-use claim. One failure reverts
-        the whole transaction.
-      </p>
-      <p>
-        <strong>Identity</strong> An ERC-8004 record is attribution, never a licence
-        or a mint authority.
-      </p>
       <p>
         <strong>Asset</strong> The PDF and institution are synthetic. No backing,
         custody or redemption is claimed.

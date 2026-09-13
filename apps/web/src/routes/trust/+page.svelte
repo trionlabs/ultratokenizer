@@ -209,10 +209,6 @@
               </dd>
             </div>
             <div>
-              <dt>Issuer ID</dt>
-              <dd class="mono">{policy.issuerId}</dd>
-            </div>
-            <div>
               <dt>Permit signer · version {policy.issuerKeyVersion}</dt>
               <dd class="mono">
                 {@render chainAddress(snapshot.issuer.signer, 'account')}
@@ -238,6 +234,10 @@
               </dd>
             </div>
           </dl>
+          <details>
+            <summary>Issuer identifier</summary>
+            <p class="mono hash">{policy.issuerId}</p>
+          </details>
         </section>
       </div>
       <div>
@@ -389,11 +389,11 @@
                     {@render chainAddress(entry.wallet, 'account')}
                   </dd>
                 </div>
-                <div>
-                  <dt>Declaration hash</dt>
-                  <dd class="mono">{entry.metadataHash}</dd>
-                </div>
               </dl>
+              <details>
+                <summary>Declaration hash</summary>
+                <p class="mono hash">{entry.metadataHash}</p>
+              </details>
               {#if entry.role === 'auditor'}
                 {@const accounts = [
                   entry.owner.toLowerCase(),
@@ -468,6 +468,13 @@
 </PortalShell>
 
 <style>
+  .hash {
+    margin: 8px 0 0;
+    overflow-wrap: anywhere;
+    color: var(--p-muted);
+    font-size: 0.7rem;
+  }
+
   /* Rank one. No card, no border: the figures carry themselves, and the space
      around them is what says they matter. */
   .standing {

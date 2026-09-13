@@ -320,7 +320,6 @@
     </div>
   </div>
   {#if !provider && !loading}<p class="notice">
-      Open this console in the browser containing your EVM wallet extension.
       Private keys are never entered here.
     </p>{/if}
   {#if walletState.error}<p class="notice" role="alert">
@@ -351,8 +350,6 @@
             <h2>One right. Its full quantity.</h2>
             <p class="muted">
               Import the public claim-proof export prepared by your prover.
-              Source PDFs and private witnesses stay in the institution's local
-              workflow.
             </p>
             <JsonFileInput
               id="institution-proof"
@@ -406,8 +403,8 @@
               ></label
             >
             <p class="muted">
-              This acknowledgement stays in this page. It is not a verified
-              ledger bridge or an on-chain attestation.
+              Stays in this page. Not a ledger bridge or an on-chain
+              attestation.
             </p>
             <div class="actions">
               <button
@@ -699,8 +696,7 @@
             Issuer authority and physical custody are separate claims.
           </p>
           <p class="muted">
-            ERC-8004 may index issuer and audit references. Registry records
-            cannot authorize this Gate or raise its backing cap.
+            Registry records cannot authorize this Gate or raise its cap.
           </p>
         </section>
       </aside>
