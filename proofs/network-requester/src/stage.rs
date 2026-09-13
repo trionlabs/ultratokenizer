@@ -13,7 +13,7 @@ use sp1_sdk::{
         signer::NetworkSigner,
         NetworkClient, NetworkMode, B256,
     },
-    Elf, HashableKey, Prover, ProverClient, ProvingKey, SP1Stdin,
+    Elf, Prover, ProverClient, ProvingKey, SP1Stdin,
 };
 use std::{env, path::Path};
 use ultratokenizer_claim_evidence::{
@@ -22,7 +22,7 @@ use ultratokenizer_claim_evidence::{
 };
 use ultratokenizer_network_request_schema::{
     normalize_address, read_private_bounded, require_suffix, Preparation, ReviewedSynthetic,
-    EXPECTED_PROGRAM_VKEY,
+    EXPECTED_NETWORK_VK_HASH, EXPECTED_PROGRAM_VKEY,
 };
 
 const FIXTURE_PDF: &[u8] =
@@ -93,9 +93,7 @@ pub async fn run(args: &[String]) -> Result<(), &'static str> {
         .setup(Elf::from(elf_bytes.clone()))
         .await
         .map_err(|_| "Synthetic guest setup failed.")?;
-    if key.verifying_key().bytes32() != EXPECTED_PROGRAM_VKEY {
-        return Err("ELF program key does not match the synthetic V2 pin.");
-    }
+    let vk_hash = crate::network_identity::verify_key(key.verifying_key())?;
 
     let private_key = env::var("NETWORK_PRIVATE_KEY")
         .ok()
@@ -108,10 +106,11 @@ pub async fn run(args: &[String]) -> Result<(), &'static str> {
         return Err("Requester key does not match the explicitly authorized address.");
     }
 
-    let operation_id = disclosure::operation_id(
+    let operation_id = crate::network_identity::operation_id(
         &preparation.preparation_id,
         &requester,
         public_disclosure.as_ref(),
+        Some(EXPECTED_NETWORK_VK_HASH),
     )?;
     let journal_path = Path::new(&args[4]);
     journal::create(
@@ -125,6 +124,7 @@ pub async fn run(args: &[String]) -> Result<(), &'static str> {
                 witness_sha256: preparation.witness_sha256.clone(),
                 proof_request_allowed: false,
                 public_disclosure: public_disclosure.clone(),
+                network_vk_hash: Some(EXPECTED_NETWORK_VK_HASH.into()),
             },
         )?,
     )?;
@@ -132,7 +132,6 @@ pub async fn run(args: &[String]) -> Result<(), &'static str> {
     let rpc_url = sp1_sdk::network::get_default_rpc_url_for_mode(NetworkMode::Mainnet);
     let read_client = NetworkClient::new(signer.clone(), rpc_url.clone(), NetworkMode::Mainnet);
     let direct = DirectNetwork::connect(signer, &rpc_url).await?;
-    let vk_hash = program_hash()?;
     let observed = read_client
         .get_program(vk_hash)
         .await
@@ -545,17 +544,6 @@ fn event(operation_id: &str, body: StageEventBody) -> Result<StageEvent, &'stati
         operation_id: operation_id.into(),
         body,
     })
-}
-
-fn program_hash() -> Result<B256, &'static str> {
-    let raw = EXPECTED_PROGRAM_VKEY
-        .strip_prefix("0x")
-        .ok_or("Pinned program key is malformed.")?;
-    let bytes = hex::decode(raw).map_err(|_| "Pinned program key is malformed.")?;
-    if bytes.len() != 32 {
-        return Err("Pinned program key is malformed.");
-    }
-    Ok(B256::from_slice(&bytes))
 }
 
 #[cfg(test)]

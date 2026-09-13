@@ -45,6 +45,8 @@ pub struct Plan {
     pub stdin_uri: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub public_disclosure: Option<crate::disclosure::PublicDisclosure>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network_vk_hash: Option<String>,
 }
 
 impl Plan {
@@ -73,6 +75,9 @@ impl Plan {
     pub fn validate(&self) -> Result<(), &'static str> {
         self.preparation.validate_synthetic()?;
         self.quote.validate(&self.preparation)?;
+        if self.network_vk_hash != self.quote.network_vk_hash {
+            return Err("Request plan and quote disagree on network program identity.");
+        }
         if self.clone().seal()?.plan_id != self.plan_id || self.identity()? != self.request_identity
         {
             return Err("Request plan integrity failed.");
@@ -166,7 +171,12 @@ impl Plan {
     pub fn body(&self, nonce: u64) -> Result<rpc::RequestProofRequestBody, &'static str> {
         Ok(rpc::RequestProofRequestBody {
             nonce,
-            vk_hash: decode_prefixed(&self.preparation.program_v_key)?,
+            // Omitted identity belongs only to immutable historical requests.
+            vk_hash: decode_prefixed(
+                self.network_vk_hash
+                    .as_deref()
+                    .unwrap_or(&self.preparation.program_v_key),
+            )?,
             version: format!("sp1-{}", self.preparation.outer_circuit_version),
             mode: rpc::ProofMode::Groth16.into(),
             strategy: rpc::FulfillmentStrategy::Auction.into(),

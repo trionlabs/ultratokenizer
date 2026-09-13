@@ -67,6 +67,7 @@ pub fn prepare(args: &[String]) -> Result<(), &'static str> {
         elf_sha256,
         witness_sha256,
         public_disclosure,
+        network_vk_hash,
         ..
     } = &first.body
     else {
@@ -77,14 +78,17 @@ pub fn prepare(args: &[String]) -> Result<(), &'static str> {
         || elf_sha256 != &preparation.elf_sha256
         || witness_sha256 != &preparation.witness_sha256
         || first.operation_id
-            != crate::disclosure::operation_id(
+            != crate::network_identity::operation_id(
                 preparation_id,
                 requester,
                 public_disclosure.as_ref(),
+                network_vk_hash.as_deref(),
             )?
+        || network_vk_hash != &quote.network_vk_hash
     {
         return Err("Staged program and witness do not match this preparation and requester.");
     }
+    crate::network_identity::require_current(network_vk_hash.as_deref())?;
     let last = stages.last().ok_or("Missing staging completion.")?;
     if first.at_unix < preparation.created_at_unix || last.at_unix > quote.observed_at_unix {
         return Err("A fresh quote after the completed stage is required.");
@@ -111,6 +115,7 @@ pub fn prepare(args: &[String]) -> Result<(), &'static str> {
         program_uri: program_uri.clone(),
         stdin_uri: stdin_uri.clone(),
         public_disclosure: public_disclosure.clone(),
+        network_vk_hash: network_vk_hash.clone(),
     }
     .seal()?;
     plan.validate()?;
@@ -150,6 +155,7 @@ pub async fn submit(args: &[String]) -> Result<(), &'static str> {
     let budget = Budget::read(budget_log.events())?;
     let mut request_log = Journal::<RequestEvent>::open(Path::new(&args[1]))?;
     let state = RequestState::read(request_log.events())?;
+    crate::network_identity::require_current(state.plan.network_vk_hash.as_deref())?;
     budget.require_reservation(&state.plan, budget_log.events())?;
     if state.nonce.is_some() {
         return Err(
@@ -188,6 +194,7 @@ pub async fn submit_once<L: RequestLog, R: PaidRpc, S: PaidSigner>(
     clock: impl Fn() -> Result<u64, &'static str>,
 ) -> Result<(String, String), &'static str> {
     let state = RequestState::read(log.events())?;
+    crate::network_identity::require_current(state.plan.network_vk_hash.as_deref())?;
     if state.nonce.is_some() {
         return Err("Signing already began; an automatic resend or nonce refresh is forbidden.");
     }

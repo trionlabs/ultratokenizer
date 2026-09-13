@@ -123,6 +123,9 @@ fn plan(requester: &str, budget_id: &str) -> Plan {
         treasury: format!("0x{}", "24".repeat(20)),
         network_upload_occurred: false,
         proof_request_submitted: false,
+        network_vk_hash: Some(
+            ultratokenizer_network_request_schema::EXPECTED_NETWORK_VK_HASH.into(),
+        ),
     }
     .seal();
     Plan {
@@ -143,6 +146,9 @@ fn plan(requester: &str, budget_id: &str) -> Plan {
         program_uri: "s3://fixture/programs/1".into(),
         stdin_uri: "s3://fixture/private-stdins/1".into(),
         public_disclosure: None,
+        network_vk_hash: Some(
+            ultratokenizer_network_request_schema::EXPECTED_NETWORK_VK_HASH.into(),
+        ),
     }
     .seal()
     .unwrap()
@@ -496,6 +502,18 @@ async fn exact_signed_protobuf_is_durable_before_one_send_and_restart_cannot_res
         Some(hex::decode(&value.preparation.public_values_sha256).unwrap())
     );
     assert_eq!(body.mode, i32::from(rpc::ProofMode::Groth16));
+    assert_eq!(
+        body.vk_hash,
+        hex::decode(
+            ultratokenizer_network_request_schema::EXPECTED_NETWORK_VK_HASH
+                .trim_start_matches("0x")
+        )
+        .unwrap()
+    );
+    assert_ne!(
+        body.vk_hash,
+        decode_prefixed(&value.preparation.program_v_key).unwrap()
+    );
     assert_eq!(body.version, "sp1-v6.1.0");
     assert!(body.stdin_private);
     drop(log);
@@ -885,6 +903,7 @@ fn staged_events(plan: &Plan) -> Vec<crate::journal::StageEvent> {
             witness_sha256: plan.preparation.witness_sha256.clone(),
             proof_request_allowed: false,
             public_disclosure: plan.public_disclosure.clone(),
+            network_vk_hash: plan.network_vk_hash.clone(),
         },
         StageEventBody::ProgramObserved {
             registered: true,
@@ -922,10 +941,11 @@ fn staged_events(plan: &Plan) -> Vec<crate::journal::StageEvent> {
         .map(|body| crate::journal::StageEvent {
             schema_version: 1,
             at_unix: plan.quote.observed_at_unix,
-            operation_id: crate::disclosure::operation_id(
+            operation_id: crate::network_identity::operation_id(
                 &plan.preparation.preparation_id,
                 &plan.quote.requester,
                 plan.public_disclosure.as_ref(),
+                plan.network_vk_hash.as_deref(),
             )
             .unwrap(),
             body,
@@ -1211,4 +1231,210 @@ async fn public_paid_request_sends_once_and_unsigned_recovery_binds_visibility()
     assert_eq!(network.sends.len(), 1);
     assert_eq!(network.nonce_calls, 1);
     assert_eq!(signer.calls.get(), 1);
+}
+
+fn legacy_network_plan(requester: &str, budget_id: &str) -> Plan {
+    let mut legacy = plan(requester, budget_id);
+    legacy.network_vk_hash = None;
+    legacy.quote.network_vk_hash = None;
+    legacy.quote = legacy.quote.seal();
+    legacy.settings.quote_id.clone_from(&legacy.quote.quote_id);
+    legacy.seal().unwrap()
+}
+
+#[test]
+fn network_identity_is_bound_across_quote_plan_stage_and_does_not_reset_budget_identity() {
+    let signer = Signer::fixture();
+    let current = plan(&signer.address(), &"bb".repeat(32));
+    let legacy = legacy_network_plan(&signer.address(), &"bb".repeat(32));
+    legacy.validate().unwrap();
+    assert_eq!(current.request_identity, legacy.request_identity);
+    assert_ne!(current.plan_id, legacy.plan_id);
+    assert_ne!(current.quote.quote_id, legacy.quote.quote_id);
+    let encoded = serde_json::to_vec(&legacy).unwrap();
+    assert!(!String::from_utf8(encoded.clone())
+        .unwrap()
+        .contains("networkVkHash"));
+    let restored: Plan = serde_json::from_slice(&encoded).unwrap();
+    assert_eq!(restored.clone().seal().unwrap().plan_id, legacy.plan_id);
+    assert_eq!(
+        restored.body(7).unwrap().vk_hash,
+        decode_prefixed(EXPECTED_PROGRAM_VKEY).unwrap()
+    );
+    for variant in 0..3 {
+        let mut changed = current.clone();
+        match variant {
+            0 => changed.network_vk_hash = None,
+            1 => changed.quote.network_vk_hash = None,
+            _ => {
+                changed.network_vk_hash = Some(EXPECTED_PROGRAM_VKEY.into());
+                changed.quote.network_vk_hash = Some(EXPECTED_PROGRAM_VKEY.into());
+            }
+        }
+        changed.quote = changed.quote.seal();
+        changed
+            .settings
+            .quote_id
+            .clone_from(&changed.quote.quote_id);
+        assert!(changed.seal().unwrap().validate().is_err());
+    }
+    let events = staged_events(&current);
+    let old_events = staged_events(&legacy);
+    assert_ne!(events[0].operation_id, old_events[0].operation_id);
+    let mut changed = events;
+    if let StageEventBody::Intent {
+        network_vk_hash, ..
+    } = &mut changed[0].body
+    {
+        *network_vk_hash = Some(EXPECTED_PROGRAM_VKEY.into());
+    }
+    let bytes = changed
+        .iter()
+        .map(|event| format!("{}\n", serde_json::to_string(event).unwrap()))
+        .collect::<String>();
+    assert!(crate::journal::parse(bytes.as_bytes()).is_err());
+    let directory = Directory::new();
+    let mut budget_log = budget(&directory, &signer.address(), "500", "2000");
+    let id = Budget::read(budget_log.events()).unwrap().id;
+    reserve(
+        &mut budget_log,
+        &legacy_network_plan(&signer.address(), &id),
+    );
+    assert!(Budget::read(budget_log.events())
+        .unwrap()
+        .can_reserve(&plan(&signer.address(), &id))
+        .is_err());
+}
+
+#[tokio::test]
+async fn legacy_signed_network_request_remains_recoverable_but_new_legacy_signing_is_forbidden() {
+    let directory = Directory::new();
+    let signer = Signer::fixture();
+    let value = legacy_network_plan(&signer.address(), &"bb".repeat(32));
+    let path = directory.path("legacy.jsonl");
+    let mut log = Journal::create(
+        &path,
+        RequestEvent::Prepared {
+            plan: Box::new(value.clone()),
+        },
+        NOW,
+    )
+    .unwrap();
+    let mut network = Network::fixture(&value, path.clone());
+    assert!(submit_once(&mut log, &mut network, &signer, || Ok(NOW))
+        .await
+        .is_err());
+    assert_eq!(signer.calls.get(), 0);
+    assert_eq!(network.nonce_calls, 0);
+    assert!(network.sends.is_empty());
+    assert_eq!(log.events().len(), 1);
+    // Recreate an already-signed historical fixture without invoking the submit path.
+    let body = value.body(7).unwrap();
+    let body_bytes = body.encode_to_vec();
+    let signed = rpc::RequestProofRequest {
+        format: rpc::MessageFormat::Binary.into(),
+        signature: signer.sign(&body_bytes).await.unwrap(),
+        body: Some(body),
+    };
+    let bytes = signed.encode_to_vec();
+    log.append(
+        RequestEvent::SigningIntent {
+            nonce: 7,
+            body_hex: hex::encode(&body_bytes),
+            body_sha256: sha256_hex(&body_bytes),
+        },
+        NOW,
+    )
+    .unwrap();
+    log.append(
+        RequestEvent::Signed {
+            request_hex: hex::encode(&bytes),
+            request_sha256: sha256_hex(&bytes),
+        },
+        NOW,
+    )
+    .unwrap();
+    log.append(
+        RequestEvent::DispatchAttempted {
+            request_sha256: sha256_hex(&bytes),
+        },
+        NOW,
+    )
+    .unwrap();
+    network.sends.push(signed);
+    network.index_sent();
+    drop(log);
+    let mut reopened = Journal::<RequestEvent>::open(&path).unwrap();
+    RequestState::read(reopened.events()).unwrap();
+    let recovered = recover_once(&mut reopened, &mut network, || Ok(NOW + 1))
+        .await
+        .unwrap();
+    assert_eq!(recovered["status"], "exact_signed_request_observed");
+    assert_eq!(
+        network.filters[0].vk_hash,
+        Some(decode_prefixed(EXPECTED_PROGRAM_VKEY).unwrap())
+    );
+    assert_eq!(network.sends.len(), 1);
+    assert_eq!(signer.calls.get(), 1);
+    assert_eq!(network.nonce_calls, 0);
+}
+
+/// Operator-only compatibility check against copied, private archival records. Never pass live
+/// journals: opening a journal takes its writer lock even though this test never appends.
+#[test]
+#[ignore = "requires explicitly supplied copies of private archived journals"]
+fn archived_legacy_snapshot_preserves_hashes_signed_bytes_and_budget() {
+    let directory = PathBuf::from(std::env::var_os("UT_SP1_LEGACY_SNAPSHOT_DIR").unwrap());
+    let request_path = directory.join("request.jsonl");
+    let budget_path = directory.join("budget.jsonl");
+    let stage_path = directory.join("stage.jsonl");
+    let quote_path = directory.join("quote.json");
+    let before = [&request_path, &budget_path, &stage_path, &quote_path]
+        .map(|path| std::fs::read(path).unwrap());
+    let log = Journal::<RequestEvent>::open(&request_path).unwrap();
+    let budget_log = Journal::<BudgetEvent>::open(&budget_path).unwrap();
+    let state = RequestState::read(log.events()).unwrap();
+    assert!(state.plan.network_vk_hash.is_none());
+    assert!(state.plan.quote.network_vk_hash.is_none());
+    assert!(state.dispatched && state.signed.is_some());
+    assert!(
+        crate::network_identity::require_current(state.plan.network_vk_hash.as_deref()).is_err()
+    );
+    let body = state.plan.body(state.nonce.unwrap()).unwrap();
+    assert!(body.vk_hash == decode_prefixed(EXPECTED_PROGRAM_VKEY).unwrap());
+    assert!(state.signed.as_ref().unwrap().body.as_ref() == Some(&body));
+    Budget::read(budget_log.events())
+        .unwrap()
+        .require_reservation(&state.plan, budget_log.events())
+        .unwrap();
+    let quote: Quote = serde_json::from_slice(&before[3]).unwrap();
+    quote.validate(&state.plan.preparation).unwrap();
+    assert!(quote.quote_id == state.plan.quote.quote_id);
+    let stage = crate::journal::read(&stage_path).unwrap();
+    assert!(matches!(
+        &stage[0].body,
+        StageEventBody::Intent {
+            network_vk_hash: None,
+            ..
+        }
+    ));
+    // Exact re-serialization proves optional fields preserve archived event hashes and bytes.
+    for (event, line) in log
+        .events()
+        .iter()
+        .zip(std::str::from_utf8(&before[0]).unwrap().lines())
+    {
+        assert!(serde_json::to_string(event).unwrap() == line);
+    }
+    for (event, line) in stage
+        .iter()
+        .zip(std::str::from_utf8(&before[2]).unwrap().lines())
+    {
+        assert!(serde_json::to_string(event).unwrap() == line);
+    }
+    drop(log);
+    drop(budget_log);
+    let after = [&request_path, &budget_path, &stage_path, &quote_path]
+        .map(|path| std::fs::read(path).unwrap());
+    assert!(before == after);
 }

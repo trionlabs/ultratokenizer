@@ -72,6 +72,23 @@ The completed 2026-09-11 staging run is summarized in the tracked
 the requester balance did not change between the adjacent quotes, and no proof request was submitted.
 The receipt records hashes rather than artifact URIs and marks the source, bank authority and backing
 claims as false.
+That historical run used the EVM key encoding as its network identifier. Its receipt remains a
+staging observation; it does not establish admission under the corrected network identifier.
+
+## Network identity and archived requests
+
+SP1 uses two encodings of the program key. The Gate accepts `vk.bytes32()`, a BN254-packed value;
+Succinct's network uses `NetworkClient::get_vk_hash(&vk)` / `vk.hash_bytes()`. Staging derives both
+from the pinned ELF and checks their separate compiled pins before loading credentials. Registration,
+quotes and paid requests use the network encoding. The Gate key and public-values SHA-256 stay unchanged.
+
+New stage intents bind `network_vk_hash`; quotes and plans bind `networkVkHash`. Their sealed IDs
+also bind this identity. Archived records omit these fields and retain their original serialization,
+hash chains and signed protobuf bytes. They remain readable for recovery and retrieval, but cannot
+authorize a new preparation or submission. Never edit an archived journal to correct its key.
+The underlying witness spending identity is unchanged: correcting the encoding cannot bypass an
+existing budget reservation. Any separately approved attempt needs its own reviewed artifacts and
+must retain every earlier liability within the aggregate budget.
 
 Preparation, quote, staging, submission and proof artifacts use mandatory ignored suffixes. New
 journals are created with mode `0600` on Unix. Never commit `.env` files, requester keys, witnesses,

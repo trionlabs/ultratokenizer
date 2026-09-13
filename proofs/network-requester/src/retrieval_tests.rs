@@ -407,6 +407,9 @@ async fn recovered_fixture(directory: &Directory) -> (std::path::PathBuf, String
         treasury: format!("0x{}", "24".repeat(20)),
         network_upload_occurred: false,
         proof_request_submitted: false,
+        network_vk_hash: Some(
+            ultratokenizer_network_request_schema::EXPECTED_NETWORK_VK_HASH.into(),
+        ),
     }
     .seal();
     let plan = Plan {
@@ -427,6 +430,9 @@ async fn recovered_fixture(directory: &Directory) -> (std::path::PathBuf, String
         program_uri: "s3://fixture/programs/1".into(),
         stdin_uri: "s3://fixture/private-stdins/1".into(),
         public_disclosure: None,
+        network_vk_hash: Some(
+            ultratokenizer_network_request_schema::EXPECTED_NETWORK_VK_HASH.into(),
+        ),
     }
     .seal()
     .unwrap();

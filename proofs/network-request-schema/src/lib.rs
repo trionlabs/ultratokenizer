@@ -10,6 +10,10 @@ pub const QUOTE_SUFFIX: &str = ".sp1-network-quote.json";
 pub const MAX_JOURNAL_BYTES: usize = 128 * 1024;
 pub const EXPECTED_PROGRAM_VKEY: &str =
     "0x00f5835ca3afad96f154badb88e8586c108ff97e13785796696c674121c79b75";
+/// Succinct's `NetworkClient::get_vk_hash`: eight big-endian u32 limbs.
+/// This differs from the BN254-packed `EXPECTED_PROGRAM_VKEY` used onchain.
+pub const EXPECTED_NETWORK_VK_HASH: &str =
+    "0x7ac1ae516beb65bc2a975b710e8586c1047fcbf04de15e5952d8ce8221c79b75";
 pub const EXPECTED_FIXTURE_PDF_SHA256: &str =
     "42d19a36134e2864b64568bffc230c74f10f7329d30a2bfb75ef8634cee07f66";
 pub const EXPECTED_FIXTURE_REQUEST_SHA256: &str =
@@ -341,6 +345,8 @@ pub struct Quote {
     pub treasury: String,
     pub network_upload_occurred: bool,
     pub proof_request_submitted: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network_vk_hash: Option<String>,
 }
 
 impl Quote {
@@ -352,7 +358,7 @@ impl Quote {
 
     #[must_use]
     pub fn computed_id(&self) -> String {
-        hash_fields(
+        let legacy_id = hash_fields(
             b"ultratokenizer-sp1-network-quote-v1",
             &[
                 &self.schema_version.to_be_bytes(),
@@ -396,7 +402,14 @@ impl Quote {
                     b"0"
                 },
             ],
-        )
+        );
+        match &self.network_vk_hash {
+            None => legacy_id,
+            Some(network_vk_hash) => hash_fields(
+                b"ultratokenizer-sp1-network-quote-identity-v2",
+                &[legacy_id.as_bytes(), network_vk_hash.as_bytes()],
+            ),
+        }
     }
 
     pub fn validate(&self, preparation: &Preparation) -> Result<(), &'static str> {
@@ -426,6 +439,10 @@ impl Quote {
             || normalize_address(&self.treasury).is_err()
             || self.network_upload_occurred
             || self.proof_request_submitted
+            || self
+                .network_vk_hash
+                .as_deref()
+                .is_some_and(|value| value != EXPECTED_NETWORK_VK_HASH)
             || self.quote_id != self.computed_id()
         {
             return Err("SP1 Network quote journal failed integrity checks.");

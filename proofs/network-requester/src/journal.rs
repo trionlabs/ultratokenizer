@@ -34,6 +34,8 @@ pub enum StageEventBody {
         proof_request_allowed: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         public_disclosure: Option<crate::disclosure::PublicDisclosure>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network_vk_hash: Option<String>,
     },
     ProgramObserved {
         registered: bool,
@@ -145,6 +147,7 @@ fn validate(events: &[StageEvent]) -> Result<(), &'static str> {
         witness_sha256,
         proof_request_allowed,
         public_disclosure,
+        network_vk_hash,
         ..
     } = &events[0].body
     else {
@@ -161,6 +164,19 @@ fn validate(events: &[StageEvent]) -> Result<(), &'static str> {
     }
     let stdin_kind = crate::disclosure::artifact_kind(public_disclosure.as_ref());
     let operation_id = &events[0].operation_id;
+    if let Some(network_hash) = network_vk_hash {
+        crate::network_identity::require_current(Some(network_hash))?;
+        if operation_id
+            != &crate::network_identity::operation_id(
+                preparation_id,
+                requester,
+                public_disclosure.as_ref(),
+                Some(network_hash),
+            )?
+        {
+            return Err("Staging network identity does not bind its operation.");
+        }
+    }
     if !is_prefixed_hash(operation_id) {
         return Err("Staging operation identity is malformed.");
     }
@@ -417,6 +433,7 @@ mod tests {
                 witness_sha256: "33".repeat(32),
                 proof_request_allowed: true,
                 public_disclosure: None,
+                network_vk_hash: None,
             },
         };
         assert!(validate(&[event]).is_err());
@@ -441,6 +458,7 @@ mod tests {
                     witness_sha256: "33".repeat(32),
                     proof_request_allowed: false,
                     public_disclosure: None,
+                    network_vk_hash: None,
                 },
             ),
             wrap(

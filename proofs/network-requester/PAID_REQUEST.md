@@ -48,12 +48,14 @@ working advisory locks and `fsync` semantics.
 
 ## Exact quote and stage admission
 
-This workflow always requests private stdin. Succinct documents this as a
+The default staging workflow requests private stdin. Succinct documents this as a
 [gated account feature](https://docs.succinct.xyz/docs/sp1/prover-network/advanced-usage#private-stdin).
 Confirm enablement for the selected requester with Succinct before a new paid dispatch.
 A successful upload, quote, execution or assignment does not establish that the winning prover
 can retrieve private inputs. The requester cannot verify account enablement through its current
 read-only RPC checks. Do not switch existing artifacts to public visibility as an automatic fallback.
+The [explicit public synthetic control](README.md#explicit-public-synthetic-control) uses a separate
+reviewed disclosure and attempt directory; the paid plan preserves that exact visibility.
 
 Obtain a new quote after staging has definitively completed. The quote must report the program
 registered and sufficient balance. A reviewed settings file with suffix
@@ -72,7 +74,11 @@ registered and sufficient balance. A reviewed settings file with suffix
 There are no authority overrides or automatic prover-list lookups. Quote parameters supply the
 auction domain, auctioneer, executor, verifier, treasury, base fee and PGU price. The preparation
 supplies the pinned VKey, `sp1-v6.1.0`, Groth16 mode, exact cycle and gas limits and SHA-256 of the
-224 public values. The completed, hash-reviewed stage supplies the program and private-stdin URIs.
+224 public values. The completed, hash-reviewed stage supplies the program and stdin URIs.
+New quotes, stages and plans must agree on the separately pinned network key (`vk.hash_bytes()`),
+which differs from the preparation's EVM verifier key (`vk.bytes32()`). Legacy records retain their
+original sealed IDs and signed bodies for unsigned recovery/retrieval; new paid dispatch under the
+legacy encoding is forbidden. Correcting the encoding does not clear a prior budget reservation.
 The quote ID and exact byte hash both have to match. At preparation, signing and dispatch the quote
 must still be in its review window of no more than 300 seconds and at least 300 seconds must remain
 before the proof deadline. The request may finish after the short quote review window.

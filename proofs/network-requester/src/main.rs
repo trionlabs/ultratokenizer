@@ -3,6 +3,7 @@
 mod direct;
 mod disclosure;
 mod journal;
+mod network_identity;
 mod paid;
 mod paid_journal;
 mod paid_rpc;
@@ -27,7 +28,7 @@ use std::{
 };
 use ultratokenizer_network_request_schema::{
     decimal_gte, format_prove, maximum_cost, normalize_address, parse_canonical_u64,
-    require_suffix, Preparation, Quote, EXPECTED_PROGRAM_VKEY, MAX_JOURNAL_BYTES,
+    require_suffix, Preparation, Quote, EXPECTED_NETWORK_VK_HASH, MAX_JOURNAL_BYTES,
     PREPARATION_SUFFIX, QUOTE_SCHEMA_VERSION, QUOTE_SUFFIX,
 };
 
@@ -100,14 +101,7 @@ fn validate_network_params(
 }
 
 fn program_hash() -> Result<B256, &'static str> {
-    let raw = EXPECTED_PROGRAM_VKEY
-        .strip_prefix("0x")
-        .ok_or("Pinned program key is malformed.")?;
-    let bytes = hex::decode(raw).map_err(|_| "Pinned program key is malformed.")?;
-    if bytes.len() != 32 {
-        return Err("Pinned program key is malformed.");
-    }
-    Ok(B256::from_slice(&bytes))
+    network_identity::program_hash()
 }
 
 pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
@@ -225,6 +219,7 @@ async fn quote(args: &[String]) -> Result<(), &'static str> {
         treasury: address_hex(&params.treasury)?,
         network_upload_occurred: false,
         proof_request_submitted: false,
+        network_vk_hash: Some(EXPECTED_NETWORK_VK_HASH.into()),
     }
     .seal();
     quote.validate(&preparation)?;
