@@ -111,6 +111,12 @@ private-input readiness and the explicit dispatch switch must also pass. The pro
 leaves time for a permit before the approval expires. A successful document upload does not mean a
 proof exists or that minting is ready.
 
+Before starting a new job, the remaining budget must cover the entire single-request cap. Only one
+unfinished document may enter reservation/proof dispatch at a time, including interrupted jobs
+after a restart. This prevents a second document from reserving backing while the first has not
+yet reserved its proving fee. Polling and same-proof permit refresh remain available when the
+remaining budget cannot cover another proof.
+
 ## Validation
 
 ```sh

@@ -228,15 +228,21 @@ export class RuntimeAdapter {
       });
     }
   }
-  async readiness() {
+  async readiness({ newJob = true } = {}) {
     if (!this.config.budgetReviewPath)
       return { canStart: false, blocker: 'proof_provider_unresolved' };
     try {
-      await checkBudgetReview(
+      const budget = await checkBudgetReview(
         this.root,
         this.config,
         Math.floor(Date.now() / 1000),
       );
+      if (
+        newJob &&
+        BigInt(budget.remainingActiveWei) < BigInt(budget.activeSingleCapWei)
+      ) {
+        return { canStart: false, blocker: 'proof_budget_unavailable' };
+      }
     } catch {
       return { canStart: false, blocker: 'operations_disabled' };
     }
@@ -251,7 +257,7 @@ export class RuntimeAdapter {
       return { canStart: false, blocker: 'operations_disabled' };
     return { canStart: true };
   }
-  async configuration() {
+  async configuration({ newJob = true } = {}) {
     let checked = false;
     let blockNumber;
     try {
@@ -292,7 +298,7 @@ export class RuntimeAdapter {
     } catch {
       /* Never claim chain-checked terms during an RPC outage. */
     }
-    let readiness = await this.readiness();
+    let readiness = await this.readiness({ newJob });
     if (!checked && readiness.canStart)
       readiness = { canStart: false, blocker: 'deployment_unavailable' };
     return {
@@ -305,8 +311,8 @@ export class RuntimeAdapter {
       readiness,
     };
   }
-  async assertOperationsEnabled() {
-    const state = await this.configuration();
+  async assertOperationsEnabled({ newJob = false } = {}) {
+    const state = await this.configuration({ newJob });
     check(state.readiness.canStart, state.readiness.blocker);
   }
   async source(id) {
@@ -437,7 +443,7 @@ export class RuntimeAdapter {
   }
   async reserveOnce(job, folder) {
     check(!this.reservationUncertain, 'reservation_uncertain');
-    await this.assertOperationsEnabled();
+    await this.assertOperationsEnabled({ newJob: true });
     const source = this.sources.get(job.documentId);
     const ledger = openInstitutionLedger({ path: this.path('ledgerPath') });
     try {

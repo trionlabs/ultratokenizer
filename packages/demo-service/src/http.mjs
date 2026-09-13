@@ -15,6 +15,8 @@ const ERRORS = {
   job_conflict: 'This document already has a different or expired preparation.',
   proof_provider_unresolved:
     'The earlier proof request still needs provider reconciliation.',
+  proof_budget_unavailable:
+    'The current proof run must finish or receive budget approval before another can start.',
   operations_disabled: 'The operator has not enabled this proof run.',
   source_not_admitted:
     'This document signer is not admitted for this deployment.',

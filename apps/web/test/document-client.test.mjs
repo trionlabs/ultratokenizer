@@ -3,9 +3,8 @@ import { test } from 'node:test';
 import { keccak256, toHex } from 'viem';
 import { loadModule } from './helpers.mjs';
 
-const { createDocumentClient, MAX_PDF_BYTES } = await loadModule(
-  '../src/lib/application/document-client.ts',
-);
+const { createDocumentClient, MAX_PDF_BYTES, documentBlocker } =
+  await loadModule('../src/lib/application/document-client.ts');
 const hash = `0x${'11'.repeat(32)}`;
 const address = `0x${'11'.repeat(20)}`;
 const config = () => ({
@@ -119,6 +118,32 @@ test('an unchecked Gate observation keeps document inspection available and veri
   ).configuration(signal());
   assert.equal(result.terms.checked, false);
   assert.equal(result.readiness.canStart, false);
+});
+
+test('an unavailable proof budget blocks new verification while document upload remains available', async () => {
+  const value = config();
+  value.readiness = { canStart: false, blocker: 'proof_budget_unavailable' };
+  const client = createDocumentClient(async (url) =>
+    json(
+      url === '/api/config'
+        ? value
+        : { ...uploaded(), readiness: value.readiness },
+    ),
+  );
+  const configuration = await client.configuration(signal());
+  assert.equal(configuration.readiness.canStart, false);
+  assert.equal(configuration.readiness.blocker, 'proof_budget_unavailable');
+  assert.equal(
+    documentBlocker(configuration.readiness.blocker),
+    'The approved proof budget is unavailable. New verification requests are paused.',
+  );
+  const document = await client.upload(
+    new File(['%PDF-1.7\nexample\n%%EOF'], 'gold.pdf'),
+    signal(),
+  );
+  assert.equal(document.documentId, 'doc_123');
+  assert.equal(document.readiness.canStart, false);
+  assert.equal(document.readiness.blocker, 'proof_budget_unavailable');
 });
 
 test('status cannot claim mint readiness without a bundle or switch job binding', async () => {

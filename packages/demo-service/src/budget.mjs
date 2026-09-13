@@ -112,6 +112,7 @@ export async function checkBudgetReview(root, config, now) {
   );
   return {
     aggregateMaximumWei: maximum.toString(),
+    activeSingleCapWei: review.activeSingleCapWei,
     remainingActiveWei: (
       integer(review.activeTotalCapWei) - reserved
     ).toString(),

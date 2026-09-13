@@ -37,6 +37,17 @@ export class DemoService {
         readiness: { canStart: false, blocker: 'reservation_uncertain' },
       };
     }
+    if (
+      this.running.size > 0 ||
+      [...this.store.jobs.values()].some(
+        (job) => job.holderSignature && !job.proof,
+      )
+    ) {
+      return {
+        ...config,
+        readiness: { canStart: false, blocker: 'proof_budget_unavailable' },
+      };
+    }
     return config;
   }
   async document(bytes) {

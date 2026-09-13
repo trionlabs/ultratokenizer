@@ -314,3 +314,69 @@ await test('one issuer nonce stream serializes reservations across distinct jobs
   );
   assert.deepEqual(order, ['first', 'second']);
 });
+
+await test('concurrent distinct documents acquire only one dispatch slot before chain reservation', async (t) => {
+  const f = await fixture(t);
+  const secondId = 'bb'.repeat(32);
+  const source = await f.runtime.source(id);
+  const draft = f.runtime.draft;
+  f.runtime.source = async (documentId) => ({ ...source, documentId });
+  f.runtime.draft = async (input, fields) => ({
+    ...(await draft(input, fields)),
+    claimUsageId: `0x${input.documentId}`,
+  });
+  const first = await f.prepare();
+  const second = await f.service.prepare({
+    documentId: secondId,
+    recipient: holder.address,
+  });
+  let release;
+  const held = new Promise((resolve) => {
+    release = resolve;
+  });
+  const reserve = f.runtime.reserve;
+  f.runtime.reserve = async (...args) => {
+    const result = await reserve(...args);
+    await held;
+    return result;
+  };
+  const signatures = await Promise.all([f.sign(first), f.sign(second)]);
+  try {
+    const results = await Promise.all([
+      f.service.start(first.jobId, signatures[0]),
+      f.service.start(second.jobId, signatures[1]),
+    ]);
+    assert.equal(results[1].status, 'blocked');
+    assert.equal(results[1].detailCode, 'proof_budget_unavailable');
+    assert.equal(f.counts.reserve, 1);
+    assert.equal(f.store.get(second.jobId).holderSignature, undefined);
+  } finally {
+    release();
+  }
+  await f.settle();
+  assert.equal((await f.service.status(first.jobId)).status, 'ready_to_mint');
+});
+
+await test('a durable interrupted dispatch blocks a new document after process restart', async (t) => {
+  const f = await fixture(t);
+  const first = await f.prepare();
+  await f.store.update(f.store.get(first.jobId), {
+    status: 'staging',
+    ...(await f.sign(first)),
+  });
+  await f.store.close();
+  const reopened = await new JobStore(f.directory).open();
+  try {
+    const restarted = new DemoService(f.runtime, reopened);
+    const ready = await restarted.config();
+    assert.equal(ready.readiness.canStart, false);
+    assert.equal(ready.readiness.blocker, 'proof_budget_unavailable');
+    assert.equal(
+      (await restarted.status(first.jobId)).status,
+      'attention_required',
+    );
+    assert.equal(f.counts.reserve, 0);
+  } finally {
+    await reopened.close();
+  }
+});

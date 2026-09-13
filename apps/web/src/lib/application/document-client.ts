@@ -29,6 +29,8 @@ const messages = {
     'This document already has an active request. Check its existing status before retrying.',
   proof_provider_unresolved:
     'The proof service is not ready. Your document can be uploaded, but verification cannot start yet.',
+  proof_budget_unavailable:
+    'The approved proof budget is unavailable. New verification requests are paused.',
   operations_disabled: 'The issuer has paused new verification requests.',
   source_not_admitted:
     'This document signer is not currently admitted by the issuer.',
