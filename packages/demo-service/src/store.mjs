@@ -1,5 +1,6 @@
-import { open, readdir, unlink } from 'node:fs/promises';
+import { open, readdir, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import {
   getIssuanceRequestDigest,
   parseIssuanceRequest,
@@ -103,6 +104,52 @@ export class JobStore {
   }
   forDocument(id) {
     return [...this.jobs.values()].find((job) => job.documentId === id);
+  }
+  /** Retire only an expired draft that has never crossed the signature boundary. */
+  async retireExpiredUnsigned(job, now) {
+    const initialFields = [
+      'jobId',
+      'documentId',
+      'request',
+      'requestDigest',
+      'prepared',
+      'status',
+      'phase',
+      'detailCode',
+      'createdAt',
+      'updatedAt',
+    ];
+    check(
+      this.jobs.get(job.jobId) === job &&
+        !this.updates.has(job.jobId) &&
+        Object.keys(job).length === initialFields.length &&
+        initialFields.every((field) => Object.hasOwn(job, field)) &&
+        job.status === 'awaiting_signature' &&
+        job.phase === 'proof' &&
+        job.detailCode === null &&
+        Number.isSafeInteger(now) &&
+        BigInt(job.request.validUntil) <= BigInt(now),
+      'job_conflict',
+      409,
+    );
+    const directory = this.directory(job.jobId);
+    const entries = await readdir(directory);
+    check(
+      entries.length === 1 &&
+        entries[0] === 'job.json' &&
+        isDeepStrictEqual(
+          await readJson(join(directory, 'job.json'), 512 * 1024),
+          job,
+        ),
+      'job_conflict',
+      409,
+    );
+    const archive = join(this.path, 'expired-unsigned');
+    await privateDirectory(archive);
+    // A crash before replacement leaves the old request archived and expired.
+    // Its files remain available for inspection, outside the active job slots.
+    await rename(directory, join(archive, job.jobId));
+    this.jobs.delete(job.jobId);
   }
   async create(job) {
     check(

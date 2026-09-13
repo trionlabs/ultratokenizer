@@ -91,6 +91,10 @@ export class DemoService {
       const source = await this.runtime.source(input.documentId);
       check(recipient === source.recipient, 'wrong_account', 400);
       let job = this.store.forDocument(input.documentId);
+      if (job && BigInt(job.request.validUntil) <= BigInt(this.now())) {
+        await this.store.retireExpiredUnsigned(job, this.now());
+        job = undefined;
+      }
       if (!job) {
         const request = parseIssuanceRequest(
           await this.runtime.draft(source, {

@@ -94,7 +94,14 @@ The Gate may remain paused during preproof reservation and proving. Final bundle
 requires deliberate Gate activation. A failed or expired permit can be refreshed against the same
 verified proof; this endpoint cannot request a replacement proof.
 
-There is one process lock and at most ten durable jobs. Concurrent updates use per-job queues and
+There is one process lock and at most ten active durable jobs. An expired preparation can be
+replaced only while it remains an untouched `awaiting_signature` draft: no persisted signature,
+state update, extra field or file is allowed. The old directory is retained under
+`expired-unsigned/`; its job ID stops resolving and its signature cannot authorize the fresh
+request. This prevents an unauthenticated preparation from permanently consuming a document.
+Signed jobs and jobs with possible reservation or proof side effects always require reconciliation.
+
+Concurrent updates use per-job queues and
 a hash-linked event log; reopening checks the request digest and journal continuity. A crash during
 an operation becomes `attention_required`, with no automatic redispatch. A leftover process lock
 must be checked against the running process before an operator removes it. Keep signed transaction

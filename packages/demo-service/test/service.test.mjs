@@ -137,7 +137,7 @@ await test('concurrent prepare deduplicates one immutable canonical job', async 
   );
 });
 
-await test('wrong wallet, unknown fields and expired preparations fail closed', async (t) => {
+await test('wrong wallet and unknown preparation fields fail closed', async (t) => {
   const f = await fixture(t);
   await assert.rejects(
     f.service.prepare({ documentId: id, recipient: other.address }),
@@ -151,10 +151,98 @@ await test('wrong wallet, unknown fields and expired preparations fail closed', 
     }),
     { code: 'invalid_request' },
   );
-  await f.prepare();
-  f.advance(3601);
-  await assert.rejects(f.prepare(), { code: 'job_conflict' });
   assert.equal(f.counts.reserve, 0);
+});
+
+await test('expired unsigned preparation rotates once and preserves the archived request', async (t) => {
+  const f = await fixture(t);
+  const old = await f.prepare();
+  const oldSignature = await f.sign(old);
+  assert.equal((await f.prepare()).jobId, old.jobId);
+  f.advance(3600);
+  const replacements = await Promise.all(Array.from({ length: 8 }, f.prepare));
+  const fresh = replacements[0];
+  assert.equal(new Set(replacements.map((job) => job.jobId)).size, 1);
+  for (const field of ['requestId', 'reservationId', 'nonce'])
+    assert.notEqual(fresh.request[field], old.request[field]);
+  assert.notEqual(fresh.jobId, old.jobId);
+  assert.equal(f.store.jobs.size, 1);
+  assert.equal(f.counts.verify, 2);
+  const archived = JSON.parse(
+    await readFile(
+      join(f.directory, 'expired-unsigned', old.jobId, 'job.json'),
+      'utf8',
+    ),
+  );
+  assert.equal(archived.requestDigest, old.requestDigest);
+  assert.equal(archived.holderSignature, undefined);
+  await assert.rejects(f.service.start(old.jobId, oldSignature), {
+    code: 'job_not_found',
+  });
+  await assert.rejects(f.service.start(fresh.jobId, oldSignature), {
+    code: 'invalid_signature',
+  });
+  assert.equal(f.counts.reserve, 0);
+  assert.equal(f.counts.prove, 0);
+  await f.store.close();
+  const reopened = await new JobStore(f.directory).open();
+  try {
+    assert.equal(reopened.jobs.size, 1);
+    assert.equal(reopened.forDocument(id).jobId, fresh.jobId);
+    assert.throws(() => reopened.get(old.jobId), { code: 'job_not_found' });
+  } finally {
+    await reopened.close();
+  }
+});
+
+await test('expired jobs with state changes or possible side effects cannot be replaced', async (t) => {
+  for (const patch of [
+    { holderSignature: '0x00' },
+    { holderSignature: null },
+    { reservation: { transactionHash: hash } },
+    { proof: {} },
+    { bundle: {} },
+    { status: 'blocked' },
+    { status: 'reserving' },
+    { status: 'attention_required' },
+    { detailCode: 'reservation_uncertain' },
+    { unrecognizedDispatchEvidence: true },
+  ]) {
+    await t.test(JSON.stringify(patch), async (subtest) => {
+      const f = await fixture(subtest);
+      const prepared = await f.prepare();
+      const job = f.store.get(prepared.jobId);
+      await f.store.update(job, patch);
+      f.advance(3601);
+      await assert.rejects(f.prepare(), { code: 'job_conflict' });
+      assert.equal(f.store.forDocument(id).jobId, prepared.jobId);
+      assert.equal(f.counts.reserve, 0);
+      assert.equal(f.counts.prove, 0);
+    });
+  }
+});
+
+await test('expired unsigned jobs retain unexpected disk artifacts or changed snapshots', async (t) => {
+  for (const changedSnapshot of [false, true]) {
+    await t.test(String(changedSnapshot), async (subtest) => {
+      const f = await fixture(subtest);
+      const prepared = await f.prepare();
+      const path = join(
+        f.directory,
+        prepared.jobId,
+        changedSnapshot ? 'job.json' : 'network-dispatch.json',
+      );
+      const value = changedSnapshot
+        ? { ...f.store.get(prepared.jobId), holderSignature: '0x00' }
+        : { dispatched: true };
+      await writeFile(path, JSON.stringify(value), { mode: 0o600 });
+      f.advance(3601);
+      await assert.rejects(f.prepare(), { code: 'job_conflict' });
+      assert.equal(f.store.forDocument(id).jobId, prepared.jobId);
+      assert.equal(f.counts.reserve, 0);
+      assert.equal(f.counts.prove, 0);
+    });
+  }
 });
 
 await test('PDF type, content and byte ceiling are checked before inspection', async (t) => {
