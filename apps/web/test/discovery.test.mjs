@@ -39,7 +39,16 @@ async function harness(t) {
     rightsVersion: '1',
     blockNumber: '100',
     blockHash: `0x${'aa'.repeat(32)}`,
-    source: { id: policy.sourceId },
+    source: {
+      id: policy.sourceId,
+      version: '2',
+      fingerprint: policy.sourceSignerFingerprint,
+    },
+    policy: { termsHash: keccak256(toHex('Synthetic shared terms')) },
+    rights: {
+      token: policy.token,
+      termsHash: keccak256(toHex('Synthetic shared terms')),
+    },
     issuer: { signer: policy.issuerAddress },
     program: {
       vkey: policy.programVKey,
@@ -61,6 +70,10 @@ async function harness(t) {
       gate: policy.gate,
       gateRuntimeHash: fixture.deployment.gateCodeHash,
       sourceId: policy.sourceId,
+      sourceKeyVersion: snapshot.source.version,
+      sourceSignerFingerprint: snapshot.source.fingerprint,
+      token: snapshot.rights.token,
+      termsHash: snapshot.policy.termsHash,
       issuerId: policy.issuerId,
       policyVersion: '1',
       rightsVersion: '1',
@@ -379,6 +392,42 @@ test('a freshly rehashed but wrong program declaration still loses to Gate state
   uris[1] = `data:application/json;base64,${Buffer.from(text).toString('base64')}`;
   index.entries[1].metadataHash = keccak256(toHex(text));
   await assert.rejects(read(), /declared program differs/);
+});
+
+for (const [field, value, message] of [
+  ['sourceKeyVersion', '1', /declared source key differs/],
+  [
+    'sourceSignerFingerprint',
+    `0x${'ee'.repeat(32)}`,
+    /declared source key differs/,
+  ],
+  [
+    'token',
+    '0x9999999999999999999999999999999999999999',
+    /declared token differs/,
+  ],
+  ['termsHash', `0x${'ee'.repeat(32)}`, /declared terms differ/],
+]) {
+  test(`reviewed metadata cannot conceal a stale ${field} in any role`, async (t) => {
+    for (const offset of [0, 1, 2]) {
+      await t.test(['issuer', 'deployment', 'auditor'][offset], async (t) => {
+        const { read, index, metadata, uris, calls } = await harness(t);
+        metadata[offset].ultratokenizer[field] = value;
+        const text = JSON.stringify(metadata[offset]);
+        uris[offset] =
+          `data:application/json;base64,${Buffer.from(text).toString('base64')}`;
+        index.entries[offset].metadataHash = keccak256(toHex(text));
+        await assert.rejects(read(), message);
+        assert(calls.every((call) => !/send|sign/.test(call.method)));
+      });
+    }
+  });
+}
+
+test('a shared dossier terms hash cannot attest to different rights terms', async (t) => {
+  const { read, snapshot } = await harness(t);
+  snapshot.rights.termsHash = `0x${'ee'.repeat(32)}`;
+  await assert.rejects(read(), /declared terms differ/);
 });
 
 test('an attribution snapshot is not returned after a canonical block changes', async (t) => {

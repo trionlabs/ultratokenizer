@@ -274,6 +274,26 @@ function compareDossier(
     throw new DiscoveryError(
       'The declared rights version differs from this deployment.',
     );
+  if (
+    dossier.sourceKeyVersion !== snapshot.source.version ||
+    hash(dossier.sourceSignerFingerprint) !== snapshot.source.fingerprint
+  )
+    throw new DiscoveryError(
+      'The declared source key differs from the current Gate policy.',
+    );
+  if (address(dossier.token) !== getAddress(snapshot.rights.token))
+    throw new DiscoveryError(
+      'The declared token differs from the current Gate rights.',
+    );
+  // Dossier v1 declares one shared hash for the policy and rights terms.
+  const termsHash = hash(dossier.termsHash);
+  if (
+    termsHash !== snapshot.policy.termsHash ||
+    termsHash !== snapshot.rights.termsHash
+  )
+    throw new DiscoveryError(
+      'The declared terms differ from the current Gate policy or rights.',
+    );
   if (entry.role === 'issuer') {
     if (
       entry.wallet !== snapshot.issuer.signer ||
