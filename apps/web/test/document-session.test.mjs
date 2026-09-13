@@ -5,7 +5,9 @@ import { loadModule } from './helpers.mjs';
 const { createDocumentSession } = await loadModule(
   '../src/lib/application/document-session.ts',
 );
-const { createIssuanceSession } = await loadModule('./fixtures/session.ts');
+const { createIssuanceSession, IssuanceClientError } = await loadModule(
+  './fixtures/session.ts',
+);
 const { createFixture } = await loadModule('./fixtures/issuance.ts');
 const hash = (text) => keccak256(toHex(text));
 const file = () => new File(['%PDF-1.7\nexample\n%%EOF'], 'signed.pdf');
@@ -139,18 +141,144 @@ async function harness(overrides = {}) {
   };
 }
 
+async function completedDocument(outcome = 'confirmed') {
+  const mintHash = hash('confirmed document mint');
+  const values = new Map();
+  let failRemoval = false;
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: (key) => {
+      if (failRemoval) throw new Error('Storage unavailable');
+      values.delete(key);
+    },
+  };
+  const h = await harness({
+    holder: {
+      simulate: async () => {},
+      submit: async () => mintHash,
+      wait: async () => {
+        if (outcome !== 'confirmed')
+          throw new IssuanceClientError(
+            outcome === 'reverted'
+              ? 'transaction_reverted'
+              : 'transaction_uncertain',
+          );
+        return {
+          ...h.fixture.receipt,
+          transaction: { ...h.fixture.receipt.transaction, hash: mintHash },
+        };
+      },
+    },
+  });
+  h.session.restoreStorage(storage);
+  await h.session.upload(file());
+  h.session.disclose(true);
+  await h.session.verifyAndMint();
+  h.setStatus({
+    status: 'ready_to_mint',
+    phase: 'issuance',
+    bundleReady: true,
+  });
+  await h.session.checkStatus();
+  await h.holder.simulate();
+  await h.holder.submit();
+  if (outcome !== 'pending') await h.holder.confirm();
+  assert.equal(h.holder.read().transaction.outcome, outcome);
+  return { ...h, values, failRemoval: () => (failRemoval = true) };
+}
+
+test('a confirmed document can finish and accept a new PDF without reusing approval or proof', async () => {
+  const h = await completedDocument();
+  try {
+    const { wallet, deployment } = h.holder.read();
+    const uploads = h.calls.filter((call) => call === 'upload').length;
+    assert.equal(h.values.size, 1);
+    assert.equal(h.session.startAnotherDocument(), true);
+    assert.equal(h.values.size, 0);
+    assert.equal(h.session.read().started, false);
+    assert.equal(h.session.read().document, undefined);
+    assert.equal(h.session.read().job, undefined);
+    assert.equal(h.session.read().reviewed, false);
+    assert.equal(h.holder.read().wallet, wallet);
+    assert.equal(h.holder.read().deployment, deployment);
+    for (const key of [
+      'receipt',
+      'transaction',
+      'signature',
+      'preparedRequest',
+      'bundle',
+      'tokenIntent',
+    ])
+      assert.equal(h.holder.read()[key], undefined, key);
+    assert.equal(h.holder.read().sourceProof, 'unchecked');
+    await h.session.upload(file());
+    assert.equal(
+      h.calls.filter((call) => call === 'upload').length,
+      uploads + 1,
+    );
+    assert.equal(h.calls.filter((call) => call === 'start').length, 1);
+  } finally {
+    h.session.dispose();
+    h.holder.dispose();
+  }
+});
+
+test('failure to remove a completed browser record preserves its receipt and blocks a new document', async () => {
+  const h = await completedDocument();
+  try {
+    h.failRemoval();
+    const receipt = h.holder.read().receipt;
+    assert.equal(h.session.startAnotherDocument(), false);
+    assert.equal(h.holder.read().receipt, receipt);
+    assert.equal(h.session.read().started, true);
+    assert.equal(h.values.size, 1);
+    assert.match(h.session.read().error, /browser/i);
+  } finally {
+    h.session.dispose();
+    h.holder.dispose();
+  }
+});
+
+test('starting another document cannot discard an active signed proof job', async () => {
+  const h = await harness();
+  try {
+    await h.session.upload(file());
+    h.session.disclose(true);
+    await h.session.verifyAndMint();
+    const job = h.session.read().job;
+    assert.equal(h.session.startAnotherDocument(), false);
+    assert.equal(h.session.read().job, job);
+    assert.equal(h.session.read().started, true);
+  } finally {
+    h.session.dispose();
+    h.holder.dispose();
+  }
+});
+
+for (const outcome of ['pending', 'unresolved', 'reverted']) {
+  test(`starting another document cannot discard a ${outcome} wallet outcome`, async () => {
+    const h = await completedDocument(outcome);
+    try {
+      const transaction = h.holder.read().transaction;
+      const job = h.session.read().job;
+      assert.equal(h.session.startAnotherDocument(), false);
+      assert.equal(h.holder.read().transaction, transaction);
+      assert.equal(h.session.read().job, job);
+      assert.equal(h.values.size, 1);
+    } finally {
+      h.session.dispose();
+      h.holder.dispose();
+    }
+  });
+}
+
 test('document-to-proof sequence signs once before start and accepts proof only after explicit ready response', async () => {
   const h = await harness();
   await h.session.upload(file());
   h.session.disclose(true);
   await h.session.verifyAndMint();
-  assert.deepEqual(h.calls, [
-    'upload',
-    'prepare-api',
-    'prepare-holder',
-    'sign',
-    'start',
-  ]);
+  assert.deepEqual(h.calls, ['upload', 'prepare-api', 'sign', 'start']);
   assert.equal(h.holder.read().sourceProof, 'unchecked');
   assert.equal(h.holder.read().transaction, undefined);
   h.setStatus({
@@ -195,9 +323,9 @@ test('wallet change while preparing clears consent and cannot start proof with t
   let release;
   const h = await harness({
     holder: {
-      prepareRequest: (prepared) =>
+      signRequest: () =>
         new Promise((resolve) => {
-          release = () => resolve({ prepared, gatePaused: false });
+          release = () => resolve('0x');
         }),
     },
   });

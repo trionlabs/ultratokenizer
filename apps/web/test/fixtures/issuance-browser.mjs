@@ -143,6 +143,16 @@ export async function exerciseIssuanceRecovery({
   const rpcCalls = [];
   let failNextPreflight = false;
   let originalAvailable = false;
+  let authorizationBarrier;
+  let releaseAuthorization = () => {};
+  const pauseAuthorization = () => {
+    authorizationBarrier = new Promise((resolve) => {
+      releaseAuthorization = () => {
+        authorizationBarrier = undefined;
+        resolve();
+      };
+    });
+  };
   page.on('pageerror', (error) => errors.push(error.message));
   await page.route('**/*', async (route) => {
     const rpcRequest = route.request();
@@ -219,6 +229,7 @@ export async function exerciseIssuanceRecovery({
       url.href === fixture.deployment.rpcUrl &&
       rpcRequest.method() === 'POST'
     ) {
+      if (authorizationBarrier) await authorizationBarrier;
       const call = rpcRequest.postDataJSON();
       rpcCalls.push(call);
       let result;
@@ -423,7 +434,13 @@ export async function exerciseIssuanceRecovery({
           }
           if (method === 'eth_accounts' || method === 'eth_requestAccounts')
             return [window.issuanceWallet.account];
-          if (method === 'eth_signTypedData_v4') return signature;
+          if (method === 'eth_signTypedData_v4') {
+            if (documentFlow)
+              await new Promise((resolve) => {
+                window.grantIssuanceSignature = resolve;
+              });
+            return signature;
+          }
           if (method === 'eth_sendTransaction') {
             window.issuanceWallet.sends.push(params[0]);
             if (start === 'unknown')
@@ -555,9 +572,50 @@ export async function exerciseIssuanceRecovery({
       );
       await page.getByRole('checkbox').check();
       await checkViewport(true);
+      pauseAuthorization();
       await page
         .getByRole('button', { name: 'Verify & mint', exact: true })
         .click();
+      const approvalStatus = page.locator('.request-signing-status');
+      const checkingAuthorization = page.getByRole('button', {
+        name: 'Checking Hedera authorization…',
+        exact: true,
+      });
+      await expect(checkingAuthorization).toBeDisabled();
+      await expect(checkingAuthorization).toHaveAttribute('aria-busy', 'true');
+      await expect(approvalStatus).toContainText(
+        'No SP1 proof request has been submitted yet.',
+      );
+      await expect(page.locator('.change-document')).toHaveCount(0);
+      assert.equal(proofStarts, 0);
+      releaseAuthorization();
+      const awaitingSignature = page.getByRole('button', {
+        name: 'Awaiting wallet request signature…',
+        exact: true,
+      });
+      await expect(awaitingSignature).toBeDisabled({ timeout: 15000 });
+      await expect(awaitingSignature).toHaveAttribute('aria-busy', 'true');
+      await expect(approvalStatus).toContainText(
+        'Awaiting wallet request signature…',
+      );
+      assert.equal(proofStarts, 0, 'a pending signature cannot dispatch SP1');
+      pauseAuthorization();
+      await page.evaluate(() => window.grantIssuanceSignature());
+      const checkingSignature = page.getByRole('button', {
+        name: 'Checking signed request…',
+        exact: true,
+      });
+      await expect(checkingSignature).toBeDisabled();
+      await expect(checkingSignature).toHaveAttribute('aria-busy', 'true');
+      await expect(approvalStatus).toContainText(
+        'No SP1 proof request has been submitted yet.',
+      );
+      assert.equal(
+        proofStarts,
+        0,
+        'signature validation precedes SP1 dispatch',
+      );
+      releaseAuthorization();
       await expect(page.locator('.document-phases')).toContainText(
         'Generating the SP1 proof',
         { timeout: 15000 },
@@ -565,6 +623,7 @@ export async function exerciseIssuanceRecovery({
       await expect(page.locator('.artifact-caption')).toHaveText(
         'SP1 proof in progress',
       );
+      await expect(approvalStatus).toHaveCount(0);
       await expect(page.locator('.artifact-caption')).not.toContainText(
         'Ready to verify',
       );
@@ -862,6 +921,7 @@ export async function exerciseIssuanceRecovery({
     );
     throw error;
   } finally {
+    releaseAuthorization();
     await page.close();
   }
 }

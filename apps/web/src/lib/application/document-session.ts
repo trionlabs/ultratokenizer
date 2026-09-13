@@ -59,6 +59,7 @@ export function createDocumentSession(
   let retainedBundle: IssuanceBundle | undefined;
   let retainedHash: Hex | undefined;
   let retainedUnknown = false;
+  let retiring = false;
   const storageKey = 'ultratokenizer.document-job.v1';
   const unsubscribe = holder.subscribe((value) => {
     const key = `${value.wallet?.address.toLowerCase() ?? ''}/${value.wallet?.chainId ?? ''}`;
@@ -67,6 +68,7 @@ export function createDocumentSession(
       update({ reviewed: false });
     }
     if (
+      !retiring &&
       state.job &&
       value.bundle &&
       getIssuanceRequestDigest(value.bundle.request) === state.job.requestDigest
@@ -286,16 +288,9 @@ export function createDocumentSession(
           throw new DocumentClientError(
             job.readiness.blocker ?? 'operations_disabled',
           );
-        await holder.prepareRequest(job.prepared);
-        if (
-          !current() ||
-          !holder.read().preparedRequest ||
-          holder.read().error ||
-          !state.reviewed
-        )
-          return;
+        if (!current() || !state.reviewed) return;
         holder.disclose(true);
-        await holder.signPreparedRequest();
+        await holder.approvePreparedRequest(job.prepared);
         const signature = holder.read().signature;
         if (!current() || !signature || holder.read().error || !state.reviewed)
           return;
@@ -418,6 +413,60 @@ export function createDocumentSession(
       });
       if (!state.error) schedule();
     },
+    startAnotherDocument() {
+      const h = holder.read();
+      if (
+        disposed ||
+        state.pending ||
+        !state.started ||
+        !state.job ||
+        h.busy ||
+        h.pendingOperation ||
+        h.unknownSubmission ||
+        h.tokenTransaction?.outcome === 'pending' ||
+        h.tokenTransaction?.outcome === 'unresolved' ||
+        h.transaction?.outcome !== 'confirmed' ||
+        !h.receipt ||
+        h.receipt.transaction?.hash !== h.transaction.hash ||
+        h.receipt.requestDigest !== state.job.requestDigest ||
+        getIssuanceRequestDigest(h.receipt.request) !== state.job.requestDigest
+      )
+        return false;
+      try {
+        storage?.removeItem(storageKey);
+      } catch {
+        update({
+          error:
+            'The browser could not remove the completed request. Save its receipt and try again.',
+        });
+        return false;
+      }
+      // Holder updates must not write the completed job back during retirement.
+      retiring = true;
+      let cleared = false;
+      try {
+        cleared = holder.clearCompletedIssuance();
+      } finally {
+        retiring = false;
+        if (!cleared) persist();
+      }
+      if (!cleared) return false;
+      version++;
+      controller?.abort();
+      clearTimeout(timer);
+      retainedSignature = undefined;
+      retainedBundle = undefined;
+      retainedHash = undefined;
+      retainedUnknown = false;
+      state = Object.freeze({
+        configuration: state.configuration,
+        reviewed: false,
+        started: false,
+        unreadable: false,
+      });
+      for (const listener of listeners) listener(state);
+      return true;
+    },
     dispose() {
       disposed = true;
       version++;
@@ -435,7 +484,7 @@ export const documentStatusLabel: Record<DocumentJobStatus['status'], string> =
     blocked: 'Verification cannot start',
     reserving: 'Reserving the document amount',
     preparing_proof: 'Preparing the signed document for proof',
-    staging: 'Submitting the proof request',
+    staging: 'Preparing the Succinct submission',
     queued: 'Proof request queued',
     proving: 'Generating the SP1 proof',
     proof_ready: 'Checking the returned proof',

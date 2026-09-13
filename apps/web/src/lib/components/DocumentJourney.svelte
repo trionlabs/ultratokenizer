@@ -78,7 +78,24 @@
   );
   let currentStep = $derived(snapshot.receipt ? 2 : document ? 1 : 0);
   let busy = $derived(
-    !!snapshot.busy || (!!flow.pending && flow.pending !== 'configuration'),
+    !!snapshot.busy ||
+      !!snapshot.pendingOperation ||
+      (!!flow.pending && flow.pending !== 'configuration'),
+  );
+  let preparingApproval = $derived(
+    !flow.started &&
+      (flow.pending === 'preparing' ||
+        snapshot.busy === 'signing' ||
+        snapshot.pendingOperation === 'signing'),
+  );
+  let requestSigningLabel = $derived(
+    snapshot.pendingOperation === 'signing'
+      ? 'Request verification still pending…'
+      : snapshot.requestSigningPhase === 'awaiting_signature'
+        ? 'Awaiting wallet request signature…'
+        : snapshot.requestSigningPhase === 'checking_signature'
+          ? 'Checking signed request…'
+          : 'Checking Hedera authorization…',
   );
   let connecting = $derived(
     snapshot.busy === 'connecting' ||
@@ -328,6 +345,15 @@
                 )}>Save receipt</button
             ><a class="secondary-button" href="/verify/">Verify evidence</a>
           </div>
+          <button
+            class="text-link"
+            disabled={busy || unresolved || !!flow.pending}
+            onclick={() => journey.startAnotherDocument()}
+            >Start another document</button
+          >
+          <p class="field-hint">
+            Save this receipt before starting another document.
+          </p>
           <details>
             <summary>Receipt details</summary>
             <dl class="data-list">
@@ -553,13 +579,21 @@
               unresolved ||
               !snapshot.deployment ||
               !flow.document?.readiness.canStart}
+            aria-busy={preparingApproval}
             onclick={() => journey.verifyAndMint()}
-            >Verify & mint <Glyph name="arrow" size={15} /></button
+            >{preparingApproval ? requestSigningLabel : 'Verify & mint'}
+            <Glyph name="arrow" size={15} /></button
           >
-          <p class="field-hint">
-            First sign the exact request. After proof verification, confirm a
-            separate mint transaction.
-          </p>
+          {#if preparingApproval}
+            <p class="field-hint request-signing-status" role="status">
+              {requestSigningLabel} No SP1 proof request has been submitted yet.
+            </p>
+          {:else}
+            <p class="field-hint">
+              First sign the exact request. After proof verification, confirm a
+              separate mint transaction.
+            </p>
+          {/if}
         {/if}
         {#if snapshot.preparedGatePaused}<p class="field-hint">
             Proof preparation is available. Minting is paused by the Gate.
@@ -587,7 +621,7 @@
               ? 'Loading the testnet configuration…'
               : 'The testnet configuration is unavailable. Your document has been inspected; verification cannot start yet.'}
           </p>{/if}
-        {#if !flow.started}<details class="change-document">
+        {#if !flow.started && !busy}<details class="change-document">
             <summary>Use another document</summary><DocumentUpload
               label="Change document"
               disabled={busy || unresolved}
@@ -598,7 +632,7 @@
       {/if}
     {/if}
 
-    {#if flow.pending && flow.pending !== 'configuration'}<p
+    {#if flow.pending && flow.pending !== 'configuration' && !preparingApproval}<p
         class="status-line"
         role="status"
       >
@@ -614,7 +648,10 @@
                   ? 'Approve the request in your wallet…'
                   : 'Checking the exact issuance request…'}
       </p>{/if}
-    {#if snapshot.busy && !flow.pending}<p class="status-line" role="status">
+    {#if snapshot.busy && !flow.pending && !preparingApproval}<p
+        class="status-line"
+        role="status"
+      >
         {snapshot.busy === 'connecting'
           ? 'Connecting to your wallet…'
           : snapshot.busy === 'confirming'
@@ -632,6 +669,9 @@
       </p>{/if}
     {#if snapshot.error}<p class="inline-error" role="alert">
         {snapshot.error}
+        {#if flow.job && !flow.started}
+          The SP1 request has not been submitted.
+        {/if}
       </p>{/if}
     {#if !issuer && !flow.pending}<button
         class="text-link"
@@ -639,7 +679,8 @@
         >Reload issuer details</button
       >{/if}
     {#if snapshot.pendingOperation}<p class="stage-notice" role="status">
-        Finish or close the open wallet prompt. New wallet actions are paused.
+        Wait for the current check to finish. If your wallet has an open prompt,
+        finish or close it before starting another action.
       </p>{/if}
   </section>
 </div>

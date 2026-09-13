@@ -30,6 +30,12 @@ type Operation =
   | 'refreshing'
   | 'transferring';
 const OPERATION_DEADLINE_MS = 120_000;
+const REQUEST_SIGNING_PHASES = [
+  'checking_request',
+  'awaiting_signature',
+  'checking_signature',
+] as const;
+type RequestSigningPhase = (typeof REQUEST_SIGNING_PHASES)[number];
 type Outcome = 'pending' | 'confirmed' | 'unresolved' | 'reverted';
 export type IssuanceSnapshot = Readonly<{
   deployment?: DeploymentConfig;
@@ -43,6 +49,7 @@ export type IssuanceSnapshot = Readonly<{
   simulation: 'unchecked' | 'passed';
   disclosed: boolean;
   busy?: Operation;
+  requestSigningPhase?: RequestSigningPhase;
   pendingOperation?: Operation;
   error?: string;
   unknownSubmission?: 'issuance' | 'association' | 'transfer';
@@ -148,6 +155,7 @@ export function createIssuanceSession(
     update({
       sourceProof: 'unchecked',
       signature: undefined,
+      requestSigningPhase: undefined,
       simulation: 'unchecked',
       disclosed: false,
       transaction: undefined,
@@ -224,7 +232,11 @@ export function createIssuanceSession(
   }
   async function run(
     operation: Operation,
-    task: (revision: number, current: () => boolean) => Promise<void>,
+    task: (
+      revision: number,
+      current: () => boolean,
+      signingProgress: (phase: RequestSigningPhase) => void,
+    ) => Promise<void>,
   ) {
     // A deadline does not cancel the original call. Only reconciliation may
     // overlap a delayed send; it cannot start another wallet action.
@@ -243,10 +255,31 @@ export function createIssuanceSession(
     foreground = id;
     let expired = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let resetDeadline: (() => void) | undefined;
+    let signingPhase = -1;
     update({ busy: operation, error: undefined });
     const completion = (async () => {
       try {
-        await task(revision, () => !expired && unchanged(revision));
+        await task(
+          revision,
+          () => !expired && unchanged(revision),
+          (phase) => {
+            if (
+              operation !== 'signing' ||
+              expired ||
+              foreground !== id ||
+              !unchanged(revision)
+            )
+              return;
+            const next = REQUEST_SIGNING_PHASES.indexOf(phase);
+            // Only the exact next phase gets a fresh window. Duplicate, skipped
+            // or reversed callbacks cannot prolong a wallet operation.
+            if (next !== signingPhase + 1) return;
+            signingPhase = next;
+            resetDeadline?.();
+            update({ requestSigningPhase: phase });
+          },
+        );
         if (expired && !readOnly && !submissionKind(operation))
           update({
             error:
@@ -306,7 +339,7 @@ export function createIssuanceSession(
         }
         if (foreground === id) {
           foreground = undefined;
-          update({ busy: undefined });
+          update({ busy: undefined, requestSigningPhase: undefined });
         }
       }
     })();
@@ -317,7 +350,7 @@ export function createIssuanceSession(
       await Promise.race([
         completion,
         new Promise<void>((resolve) => {
-          timer = setTimeout(() => {
+          const expire = () => {
             expired = true;
             // These three client methods never sign, prompt or send. Their
             // expired results are ignored, so they need not lock a new action.
@@ -326,6 +359,7 @@ export function createIssuanceSession(
             const kind = submissionKind(operation);
             update({
               busy: undefined,
+              requestSigningPhase: undefined,
               pendingOperation: readOnly ? undefined : operation,
               ...(kind ? { unknownSubmission: kind } : {}),
               error: readOnly
@@ -335,10 +369,16 @@ export function createIssuanceSession(
                   : 'The check is still pending. A timeout does not cancel a wallet prompt. Wait for its response before starting another action.',
             });
             resolve();
-          }, OPERATION_DEADLINE_MS);
+          };
+          resetDeadline = () => {
+            clearTimeout(timer);
+            timer = setTimeout(expire, OPERATION_DEADLINE_MS);
+          };
+          resetDeadline();
         }),
       ]);
     } finally {
+      resetDeadline = undefined;
       clearTimeout(timer);
     }
   }
@@ -417,6 +457,7 @@ export function createIssuanceSession(
           wallet: undefined,
           sourceProof: 'unchecked',
           signature: undefined,
+          requestSigningPhase: undefined,
           simulation: 'unchecked',
           balanceMg: undefined,
           preparedRequest: undefined,
@@ -433,6 +474,7 @@ export function createIssuanceSession(
         wallet: undefined,
         sourceProof: 'unchecked',
         signature: undefined,
+        requestSigningPhase: undefined,
         simulation: 'unchecked',
         balanceMg: undefined,
         preparedRequest: undefined,
@@ -476,6 +518,30 @@ export function createIssuanceSession(
       resetChecks();
       update({ bundle: undefined });
     },
+    clearCompletedIssuance() {
+      if (
+        state.busy ||
+        state.pendingOperation ||
+        state.unknownSubmission ||
+        state.transaction?.outcome !== 'confirmed' ||
+        !state.receipt ||
+        state.receipt.transaction?.hash !== state.transaction.hash ||
+        ['pending', 'unresolved'].includes(
+          state.tokenTransaction?.outcome ?? '',
+        )
+      )
+        return false;
+      canReplace();
+      tokenAttempted = undefined;
+      resetChecks();
+      update({
+        bundle: undefined,
+        tokenIntent: undefined,
+        tokenTransaction: undefined,
+        balanceMg: undefined,
+      });
+      return true;
+    },
     prepareRequest(value: unknown) {
       canReplace();
       const prepared = parsePreparedIssuanceRequest(value);
@@ -490,9 +556,32 @@ export function createIssuanceSession(
           });
       });
     },
+    approvePreparedRequest(value: unknown) {
+      canReplace();
+      const prepared = parsePreparedIssuanceRequest(value);
+      return run('signing', async (_revision, current, signingProgress) => {
+        if (
+          !state.disclosed ||
+          !state.wallet ||
+          state.transaction ||
+          state.unknownSubmission
+        )
+          throw new Error();
+        // Selection is local only. signRequest authenticates the complete request
+        // before the prompt and again after approval; do not repeat that scan here.
+        resetChecks();
+        update({ bundle: undefined, disclosed: true });
+        const signature = await requireClient().signRequest(
+          prepared,
+          signingProgress,
+        );
+        if (current() && state.disclosed)
+          update({ preparedRequest: prepared, signature });
+      });
+    },
     signPreparedRequest() {
       canReplace();
-      return run('signing', async (revision) => {
+      return run('signing', async (_revision, current, signingProgress) => {
         const prepared = state.preparedRequest;
         if (
           !prepared ||
@@ -503,9 +592,20 @@ export function createIssuanceSession(
         )
           throw new Error();
         update({ signature: undefined, simulation: 'unchecked' });
-        const signature = await requireClient().signRequest(prepared);
-        if (unchanged(revision) && state.preparedRequest === prepared)
-          update({ signature });
+        let active = true;
+        try {
+          const signature = await requireClient().signRequest(
+            prepared,
+            (phase) => {
+              if (active && current() && state.preparedRequest === prepared)
+                signingProgress(phase);
+            },
+          );
+          if (current() && state.preparedRequest === prepared)
+            update({ signature });
+        } finally {
+          active = false;
+        }
       });
     },
     restorePreparedRequest(value: unknown, holderSignature: Hex) {

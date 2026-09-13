@@ -1603,6 +1603,199 @@ function preparedFrom(fixture) {
   };
 }
 
+test('document signing progress follows client checks and clears after success or rejection', async () => {
+  for (const outcome of ['success', 'rejection']) {
+    const fixture = await createFixture();
+    const reply = deferred();
+    let progress;
+    const { session } = harness(fixture, {
+      signRequest: (_prepared, onProgress) => {
+        progress = onProgress;
+        return reply.promise;
+      },
+    });
+    await session.connect();
+    await session.prepareRequest(preparedFrom(fixture));
+    session.disclose(true);
+    const signing = session.signPreparedRequest();
+    assert.equal(typeof progress, 'function');
+    for (const phase of [
+      'checking_request',
+      'awaiting_signature',
+      'checking_signature',
+    ]) {
+      progress(phase);
+      assert.equal(session.read().requestSigningPhase, phase);
+      assert.equal(session.read().busy, 'signing');
+      assert.equal(session.read().sourceProof, 'unchecked');
+      assert.equal(session.read().signature, undefined);
+    }
+    if (outcome === 'success') reply.resolve(fixture.holderSignature);
+    else reply.reject(new Error('Synthetic signature rejection'));
+    await signing;
+    assert.equal(session.read().requestSigningPhase, undefined);
+    const completed = session.read();
+    progress('awaiting_signature');
+    assert.deepEqual(
+      session.read(),
+      completed,
+      'completed callbacks cannot revive progress',
+    );
+    assert.equal(
+      session.read().signature,
+      outcome === 'success' ? fixture.holderSignature : undefined,
+    );
+    session.dispose();
+  }
+});
+
+test('wallet changes and expired document signing ignore late progress and signatures', async (t) => {
+  for (const invalidation of ['wallet', 'provider', 'deadline']) {
+    const fixture = await createFixture();
+    const reply = deferred();
+    let progress;
+    const { session } = harness(fixture, {
+      signRequest: (_prepared, onProgress) => {
+        progress = onProgress;
+        return reply.promise;
+      },
+    });
+    await session.connect();
+    await session.prepareRequest(preparedFrom(fixture));
+    session.disclose(true);
+    if (invalidation === 'deadline')
+      t.mock.timers.enable({ apis: ['setTimeout'] });
+    const signing = session.signPreparedRequest();
+    assert.equal(typeof progress, 'function');
+    progress('checking_request');
+    if (invalidation === 'wallet') session.walletChanged();
+    if (invalidation === 'provider') session.setProvider({ request() {} });
+    if (invalidation === 'deadline') {
+      t.mock.timers.tick(120_000);
+      await signing;
+    }
+    assert.equal(session.read().requestSigningPhase, undefined, invalidation);
+    progress('awaiting_signature');
+    assert.equal(session.read().requestSigningPhase, undefined, invalidation);
+    reply.resolve(fixture.holderSignature);
+    await signing;
+    await flushLateReply();
+    assert.equal(session.read().signature, undefined, invalidation);
+    assert.equal(session.read().requestSigningPhase, undefined, invalidation);
+    session.dispose();
+  }
+});
+
+test('each document signing phase receives its own 120 second deadline', async (t) => {
+  const fixture = await createFixture();
+  const reply = deferred();
+  let progress;
+  const { session } = harness(fixture, {
+    signRequest: (_prepared, onProgress) => {
+      progress = onProgress;
+      progress('checking_request');
+      return reply.promise;
+    },
+  });
+  t.after(async () => {
+    reply.resolve(fixture.holderSignature);
+    await flushLateReply();
+    session.dispose();
+  });
+  await session.connect();
+  await session.prepareRequest(preparedFrom(fixture));
+  session.disclose(true);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const signing = session.signPreparedRequest();
+  for (const next of ['awaiting_signature', 'checking_signature']) {
+    t.mock.timers.tick(119_999);
+    assert.equal(session.read().busy, 'signing');
+    assert.equal(session.read().pendingOperation, undefined);
+    progress(next);
+    assert.equal(session.read().requestSigningPhase, next);
+  }
+  t.mock.timers.tick(119_999);
+  assert.equal(session.read().busy, 'signing');
+  reply.resolve(fixture.holderSignature);
+  await signing;
+  assert.equal(session.read().signature, fixture.holderSignature);
+  assert.equal(session.read().pendingOperation, undefined);
+  assert.equal(session.read().requestSigningPhase, undefined);
+});
+
+test('duplicate and out-of-order signing progress cannot extend a phase or unlock a timed-out prompt', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const phases of [
+    ['checking_request'],
+    ['checking_request', 'awaiting_signature'],
+    ['checking_request', 'awaiting_signature', 'checking_signature'],
+  ]) {
+    const fixture = await createFixture();
+    const reply = deferred();
+    let progress;
+    let prompts = 0;
+    const { session } = harness(fixture, {
+      signRequest: (_prepared, onProgress) => {
+        prompts++;
+        progress = onProgress;
+        return reply.promise;
+      },
+    });
+    await session.connect();
+    await session.prepareRequest(preparedFrom(fixture));
+    session.disclose(true);
+    const signing = session.signPreparedRequest();
+    phases.forEach((phase) => progress(phase));
+    t.mock.timers.tick(119_999);
+    progress(phases.at(-1));
+    progress(phases.length === 1 ? 'checking_signature' : 'checking_request');
+    assert.equal(session.read().requestSigningPhase, phases.at(-1));
+    t.mock.timers.tick(1);
+    await signing;
+    assert.equal(session.read().pendingOperation, 'signing');
+    assert.equal(session.read().requestSigningPhase, undefined);
+    progress('checking_signature');
+    assert.throws(() => session.signPreparedRequest(), /Reconcile/);
+    assert.equal(prompts, 1);
+    reply.resolve(fixture.holderSignature);
+    await flushLateReply();
+    assert.equal(session.read().signature, undefined);
+    assert.equal(session.read().pendingOperation, undefined);
+    session.dispose();
+  }
+});
+
+test('a completed signing callback cannot extend a later signing deadline', async (t) => {
+  const fixture = await createFixture();
+  const replies = [deferred(), deferred()];
+  const progress = [];
+  const { session } = harness(fixture, {
+    signRequest: (_prepared, onProgress) => {
+      progress.push(onProgress);
+      onProgress('checking_request');
+      return replies[progress.length - 1].promise;
+    },
+  });
+  await session.connect();
+  await session.prepareRequest(preparedFrom(fixture));
+  session.disclose(true);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const first = session.signPreparedRequest();
+  replies[0].resolve(fixture.holderSignature);
+  await first;
+  const second = session.signPreparedRequest();
+  t.mock.timers.tick(119_999);
+  progress[0]('awaiting_signature');
+  assert.equal(session.read().requestSigningPhase, 'checking_request');
+  t.mock.timers.tick(1);
+  await second;
+  assert.equal(session.read().pendingOperation, 'signing');
+  replies[1].resolve(fixture.holderSignature);
+  await flushLateReply();
+  assert.equal(session.read().signature, undefined);
+  session.dispose();
+});
+
 test('document request approval is reused after proof acceptance without a second signing prompt', async () => {
   const fixture = await createFixture();
   const { session, calls } = harness(fixture);
@@ -1886,3 +2079,62 @@ test('submitted restoration rejects malformed public inputs before a historical 
   assert.deepEqual(calls, []);
   assert.equal(session.read().transaction, undefined);
 });
+
+test('document approval validates through signing once and only publishes an accepted request after success', async () => {
+  const fixture = await createFixture();
+  const reply = deferred();
+  let signs = 0;
+  const { session } = harness(fixture, {
+    prepareRequest: async () => {
+      throw new Error('Redundant request validation');
+    },
+    signRequest: (prepared, progress) => {
+      signs++;
+      assert.equal(
+        prepared.request.requestId,
+        fixture.bundle.request.requestId,
+      );
+      progress('checking_request');
+      return reply.promise;
+    },
+  });
+  await session.connect();
+  session.disclose(true);
+  const operation = session.approvePreparedRequest(preparedFrom(fixture));
+  assert.equal(session.read().preparedRequest, undefined);
+  assert.equal(session.read().signature, undefined);
+  assert.equal(session.read().sourceProof, 'unchecked');
+  reply.resolve(fixture.holderSignature);
+  await operation;
+  assert.equal(signs, 1);
+  assert.deepEqual(session.read().preparedRequest, preparedFrom(fixture));
+  assert.equal(session.read().signature, fixture.holderSignature);
+  assert.equal(session.read().sourceProof, 'unchecked');
+  session.dispose();
+});
+
+for (const outcome of ['rejected', 'wallet_changed', 'not_disclosed']) {
+  test(`document approval never admits a candidate when ${outcome}`, async () => {
+    const fixture = await createFixture();
+    const reply = deferred();
+    let signs = 0;
+    const { session } = harness(fixture, {
+      signRequest: () => {
+        signs++;
+        return reply.promise;
+      },
+    });
+    await session.connect();
+    if (outcome !== 'not_disclosed') session.disclose(true);
+    const operation = session.approvePreparedRequest(preparedFrom(fixture));
+    if (outcome === 'wallet_changed') session.walletChanged();
+    if (outcome === 'rejected')
+      reply.reject(new Error('Signature unavailable'));
+    else reply.resolve(fixture.holderSignature);
+    await operation;
+    assert.equal(session.read().preparedRequest, undefined);
+    assert.equal(session.read().signature, undefined);
+    if (outcome === 'not_disclosed') assert.equal(signs, 0);
+    session.dispose();
+  });
+}
